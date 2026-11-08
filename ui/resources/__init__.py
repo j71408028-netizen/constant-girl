@@ -7,7 +7,7 @@
 ``resource_settings.json``（经 :meth:`SettingsRepo.save_resource_keys`，只动
 资源域键）并同步生成上下文；世界包的启用/停用/删除同样即时执行。
 
-功能边界：风格条目编辑在「文本管理」、副本方案编辑在「副本编辑」、挑战包
+功能边界：风格条目编辑在「文本管理」、副本方案编辑在「剧本编辑」、挑战包
 创建与启动在「挑战模式」，本页只做状态总览与深跳，不重复实现。
 """
 import os
@@ -616,7 +616,7 @@ class ResourceHubPanel(ctk.CTkFrame):
         self._refresh_challenge_rows()
 
     def on_page_shown(self):
-        """切回本页时刷新：拾取挑战模式 / 副本编辑页的外部增删。"""
+        """切回本页时刷新：拾取挑战模式 / 剧本编辑页的外部增删。"""
         self._refresh_scenario_rows()
         self._refresh_challenge_rows()
         self._refresh_material_options()
@@ -634,8 +634,8 @@ class ResourceHubPanel(ctk.CTkFrame):
             self.gui_ref.show_page(page_key)
 
     def _goto_scenario_editor(self, scenario_id):
-        """深跳到副本编辑页并载入指定方案（世界包锁定时行按钮不可用）。"""
-        self._goto_page("dungeon")
+        """深跳到剧本编辑页并载入指定方案（世界包锁定时行按钮不可用）。"""
+        self._goto_page("scenario")
         editor = getattr(self.gui_ref, "scenario_editor", None) if self.gui_ref else None
         if editor is not None and scenario_id:
             editor._load_scenario(scenario_id)

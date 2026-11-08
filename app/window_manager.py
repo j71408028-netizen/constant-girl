@@ -105,7 +105,7 @@ class MainWindowManager:
 
         # 创建各页面框架
         self.pages = {}
-        for key in ["generator", "text_mgmt", "dungeon", "challenge",
+        for key in ["generator", "text_mgmt", "scenario", "challenge",
                     "resources", "settings"]:
             frame = ctk.CTkFrame(self.content_frame, corner_radius=0,
                                   fg_color=APP_BG)
@@ -208,7 +208,7 @@ class MainWindowManager:
         """返回被世界包锁定而不可进入的管理页及其提示。"""
         locked = {}
         if self._world_locks_resource("scenarios"):
-            locked["dungeon"] = "世界包附带了副本方案，编辑器已锁定"
+            locked["scenario"] = "世界包附带了副本方案，编辑器已锁定"
         return locked
 
     def show_page(self, page_key):
@@ -271,8 +271,8 @@ class MainWindowManager:
     def sync_landmark_styles_state(self):
         pass
 
-    # ==================== 副本编辑标签页 ====================
-    def create_dungeon_tab(self, parent):
+    # ==================== 剧本编辑标签页 ====================
+    def create_scenario_tab(self, parent):
         self.scenario_editor = ScenarioEditor(
             parent, self._scenario_repo, self,
             challenge_mgr=ChallengeService(self._settings_repo, self._character_repo,

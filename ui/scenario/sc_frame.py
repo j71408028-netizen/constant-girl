@@ -39,9 +39,9 @@ def _format_optional_number(value):
     return f"{float(value):g}"
 
 
-# ==================== 副本编辑器 ====================
+# ==================== 剧本编辑器 ====================
 class ScenarioEditor(ctk.CTkFrame):
-    """副本编辑器：通用区域 + 两个 TreeviewManager 子面板（属性/触发器）"""
+    """剧本编辑器：通用区域 + 两个 TreeviewManager 子面板（属性/触发器）"""
 
     def __init__(self, parent, scenario_repo, gui_ref, challenge_mgr=None):
         super().__init__(parent, fg_color="transparent")

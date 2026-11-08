@@ -41,7 +41,7 @@ class NavigationBar(ctk.CTkFrame):
             ("  🎯  挑战模式", "challenge"),
             ("  📑  文本管理", "text_mgmt"),
             ("  📦  资源中心", "resources"),
-            ("  🎭  剧本编辑", "dungeon"),
+            ("  🎭  剧本编辑", "scenario"),
             ("  ⚙️  设置", "settings"),
         ]
 
