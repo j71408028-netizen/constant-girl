@@ -457,7 +457,7 @@ class ResourceHubPanel(ctk.CTkFrame):
     # ───────────────── 分区：副本方案 ─────────────────
     def _build_scenarios_section(self):
         self._scenario_rows_frame, _ = self._add_section(
-            "副本方案", note="方案在「副本编辑」页创建与编辑")
+            "副本方案", note="方案在「剧本编辑」页创建与编辑")
         self._refresh_scenario_rows()
 
     def _refresh_scenario_rows(self):
@@ -471,7 +471,7 @@ class ResourceHubPanel(ctk.CTkFrame):
         ordered = ([s for s in scenarios if s in bundled]
                    + [s for s in scenarios if s not in bundled])
         if not ordered:
-            self._note_row(frame, "暂无副本方案，可在「副本编辑」页创建")
+            self._note_row(frame, "暂无副本方案，可在「剧本编辑」页创建")
             return
         editor_locked = (self.world_state is not None
                          and self.world_state.active

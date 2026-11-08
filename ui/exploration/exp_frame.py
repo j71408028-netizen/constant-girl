@@ -574,7 +574,7 @@ class ExplorationPanel(ctk.CTkFrame):
 
         dungeons = self.app._scenario_repo.list_all()
         if not dungeons:
-            ui.ctk.dialogs.showerror("错误", "请先到“副本编辑”创建副本方案")
+            ui.ctk.dialogs.showerror("错误", "请先到“剧本编辑”创建副本方案")
             return
 
         # 副本会话在独立子进程里跑：DPG/GLFW 独占子进程，不再与 Tk 主程序
