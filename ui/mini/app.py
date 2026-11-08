@@ -34,6 +34,9 @@ from ui.mini.state_card import MiniStateCard
 
 DEFAULT_GEOMETRY = "360x620"
 MIN_SIZE = (330, 470)
+# 副本窗口启动的基准客户区：与专业模式主窗口的默认尺寸一致（app.window_manager
+# 的 1280x720）。挂件本体只有 360x620，副本窗口不能按本体尺寸原位替换启动。
+DUNGEON_CLIENT_SIZE = (1280, 720)
 
 
 def default_preset() -> BodyPreset:
@@ -876,6 +879,8 @@ class MiniApp:
         result = launch_dungeon_subprocess(
             host_window=self.root, app=self,
             dialogs=MiniDialogs(self.root),
+            # 挂件尺寸不作为视口基准：副本窗口与专业模式启动同尺寸
+            client_size=DUNGEON_CLIENT_SIZE,
             name=payload["name"], nick=payload.get("nick", ""),
             height=payload["height"], personality=payload["personality_obj"],
             preset=payload.get("preset_obj"), greed=payload.get("greed", 0),

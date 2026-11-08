@@ -111,7 +111,7 @@ def _parent_dpi_aware() -> bool:
 
 
 def launch_dungeon_subprocess(host_window, *, dialogs, app=None,
-                              **window_kwargs) -> SessionResult:
+                              client_size=None, **window_kwargs) -> SessionResult:
     """在独立子进程里跑一局副本，返回与窗口 ``run()`` 同形的结果。
 
     ``host_window``：主窗口（Tk/CTk 根）——spawn 前量视口尺寸并藏起、等待期
@@ -120,6 +120,10 @@ def launch_dungeon_subprocess(host_window, *, dialogs, app=None,
     ``ui.ctk.dialogs``，挂件传 ``ui.mini.dialogs.MiniDialogs``；本模块因此
     不 import 任何 CTk 组件。``app``：持有 ``_active_dungeon_window`` 的主控
     对象（``MainWindowManager`` / ``MiniApp``），仅用于会话期登记，可省略。
+    ``client_size``：视口基准客户区覆盖 ``(宽, 高)``（与专业模式主窗口同口径）。
+    缺省量 ``host_window`` 的客户区（专业模式的原位替换）；挂件宿主（ME 模式）
+    本体只有挂件大小，必须传入与专业模式启动一致的尺寸，否则副本窗口会按
+    挂件的比例启动。缩放系数仍取宿主实测值。
     其余关键字参数与 ``DungeonSessionWindow`` 构造参数一致（``parent`` /
     ``host`` / ``gui`` / 两个仓库会被序列化剔除，子进程自行提供）。
     """
@@ -132,6 +136,8 @@ def launch_dungeon_subprocess(host_window, *, dialogs, app=None,
     from ui.hosting.tk_host import TkHost
 
     viewport_w, _vh, scale, main_cw, main_ch = TkHost(host_window).viewport_metrics()
+    if client_size is not None:
+        main_cw, main_ch = int(client_size[0]), int(client_size[1])
     payload = {
         "window": serialize_launch(window_kwargs),
         "viewport": {"scale": scale, "main_cw": main_cw, "main_ch": main_ch},
