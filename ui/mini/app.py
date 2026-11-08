@@ -820,7 +820,7 @@ class MiniApp:
         if payload is None:
             return
 
-        # 挑战模式没有角色地址，只按挑战角色身高检查体型准入。
+        # 挑战模式没有角色地址，进入准入只按身高检查。
         from dungeon.admission import check_entry_requirements
         admission_error = check_entry_requirements(
             config, position="", height=payload.get("height"))

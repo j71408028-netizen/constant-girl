@@ -69,7 +69,7 @@ class ChallengeModePanel(ctk.CTkFrame):
         three_col.grid_columnconfigure(0, weight=1)
         three_col.grid_columnconfigure(1, weight=1)
 
-        # 左列：角色 + 副本方案
+        # 左列：角色 + 剧本（外部入口短标签按术语表用「剧本」）
         left_col = ctk.CTkFrame(three_col, fg_color="transparent")
         left_col.grid(row=0, column=0, sticky='nsew', padx=(0, 10))
 
@@ -98,7 +98,7 @@ class ChallengeModePanel(ctk.CTkFrame):
                                              text_color=CHAL_PLACEHOLDER)
         self.char_info_label.pack(anchor='w')
 
-        ctk.CTkLabel(left_col, text="副本方案", font=ui_fonts.ui_font(11, "bold"),
+        ctk.CTkLabel(left_col, text="剧本", font=ui_fonts.ui_font(11, "bold"),
                      text_color=CHAL_TEXT_SOFT).pack(anchor='w', pady=2)
         dungeons = self.gui._scenario_repo.list_all()
         self.dungeon_combo = ctk.CTkComboBox(left_col, values=dungeons, state="readonly",
@@ -496,7 +496,7 @@ class ChallengeModePanel(ctk.CTkFrame):
         scenario_config = scenario_config_of(data)
         scenario_id = scenario_id_of(data)
 
-        # 挑战模式没有角色地址，只按挑战角色身高检查体型准入。
+        # 挑战模式没有角色地址，进入准入只按身高检查。
         from dungeon.admission import check_entry_requirements
         admission_error = check_entry_requirements(
             scenario_config, position="", height=height)

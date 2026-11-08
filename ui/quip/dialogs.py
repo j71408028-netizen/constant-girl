@@ -5,7 +5,7 @@ from typing import Optional
 import customtkinter as ctk
 
 import ui.ctk
-from core.logic import SIZE_CATEGORIES
+from core.logic import SIZE_CATEGORIES, size_level_text
 from persistence import QuipRepo
 from ui.ctk.dialogs import BaseDialog
 from ui.ctk.theme import (
@@ -429,16 +429,19 @@ class _TargetSelectDialog(BaseDialog):
         self.result = None
         self.geometry("360x230")
 
-        self.size_var = tk.StringVar(value=src_size)
+        self.size_var = tk.StringVar(value=size_level_text(src_size))
         self.intr_var = tk.StringVar(value=str(src_intr))
         self.dest_var = tk.StringVar(value=str(src_dest))
+        # 下拉显示「档位名（区间）」，存回的仍是英文键
+        self._size_keys = {size_level_text(cat): cat for cat in SIZE_CATEGORIES}
 
         form = ctk.CTkFrame(self, fg_color="transparent")
         form.pack(fill="x", padx=20, pady=(20, 6))
 
-        ctk.CTkLabel(form, text="目标体型:", font=self.UI_FONT).grid(row=0, column=0, pady=6, sticky="e")
-        ctk.CTkOptionMenu(form, variable=self.size_var, values=SIZE_CATEGORIES,
-                          width=120, height=28, font=self.UI_FONT,
+        ctk.CTkLabel(form, text="目标观测等级:", font=self.UI_FONT).grid(row=0, column=0, pady=6, sticky="e")
+        ctk.CTkOptionMenu(form, variable=self.size_var,
+                          values=list(self._size_keys),
+                          width=170, height=28, font=self.UI_FONT,
                           dropdown_font=self.UI_FONT).grid(row=0, column=1, pady=6, padx=8)
 
         ctk.CTkLabel(form, text="介入度:", font=self.UI_FONT).grid(row=1, column=0, pady=6, sticky="e")
@@ -462,7 +465,7 @@ class _TargetSelectDialog(BaseDialog):
 
     def _ok(self):
         self.result = (
-            self.size_var.get(),
+            self._size_keys.get(self.size_var.get(), self.size_var.get()),
             _to_level(self.intr_var.get(), 1),
             _to_level(self.dest_var.get(), 1),
         )

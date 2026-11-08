@@ -6,7 +6,7 @@ import ui.ctk.dialogs
 import customtkinter as ctk
 import re
 
-from core.logic import SIZE_CATEGORIES, SIZE_DISPLAY
+from core.logic import SIZE_CATEGORIES, size_level_text
 from persistence import QuipRepo
 from persistence.quip_repo import DEFAULT_QUIP_STYLE
 from services.challenges import get_challenge_packs, import_quip_challenge_pack
@@ -28,7 +28,6 @@ from ui.ctk import fonts as ui_fonts
 
 class QuipCardManager(CardManager):
     SIZE_CATEGORIES = SIZE_CATEGORIES
-    SIZE_DISPLAY = SIZE_DISPLAY
     SUMMARY_RE = re.compile(r'\s*\[summary:(.*?)\]$')
 
     def __init__(self, parent, quip_repo: QuipRepo, settings_repo, gui_ref):
@@ -294,13 +293,13 @@ class QuipCardManager(CardManager):
 
         dialog._center_dialog(self)
 
-    # ---------- 体型选择 ----------
+    # ---------- 观测等级选择 ----------
     def _create_size_widgets(self):
-        ctk.CTkLabel(self.size_row, text="体型:",
+        ctk.CTkLabel(self.size_row, text="观测等级:",
                      text_color=QUIP_TEXT_SOFT).pack(side='left', padx=5)
         for cat in self.SIZE_CATEGORIES:
             rb = ctk.CTkRadioButton(
-                self.size_row, text=self.SIZE_DISPLAY.get(cat, cat),
+                self.size_row, text=size_level_text(cat),
                 variable=self.size_var, value=cat,
                 command=self.on_size_changed,
                 fg_color=(QUIP_HOVER[1], QUIP_TEXT[1]),

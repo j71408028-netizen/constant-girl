@@ -122,7 +122,7 @@ class ChapterTriggerManager(TreeviewManager):
         不需要另装 networkx / graphviz。
         """
         if not self._chapter_list() and not self._trigger_list():
-            ui.ctk.dialogs.showwarning("检查动态", "当前方案还没有章节与触发器，关系图为空。")
+            ui.ctk.dialogs.showwarning("检查动态", "当前副本方案还没有章节与触发器，关系图为空。")
             return
         from ui.scenario.graph_view import ScenarioGraphDialog
         dialog = ScenarioGraphDialog(self, self._scenario_config(),

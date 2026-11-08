@@ -204,7 +204,7 @@ def read_script_text(scenario_repo, scenario_id, rel_path):
     """
     path = script_text_abs_path(scenario_repo, scenario_id, rel_path)
     if not path:
-        return None, "无法解析方案目录"
+        return None, "无法解析副本方案目录"
     if not os.path.isfile(path):
         return None, "文件不存在"
     for encoding in ("utf-8", "gbk"):
@@ -226,7 +226,7 @@ def write_script_text(scenario_repo, scenario_id, rel_path, text) -> bool:
     """把文本写回方案目录（UTF-8 + LF，自动建目录）；失败弹框并返回 False。"""
     path = script_text_abs_path(scenario_repo, scenario_id, rel_path)
     if not path:
-        ui.ctk.dialogs.showerror("错误", "无法解析方案目录，无法保存文本")
+        ui.ctk.dialogs.showerror("错误", "无法解析副本方案目录，无法保存文本")
         return False
     try:
         parent_dir = os.path.dirname(path)
@@ -253,7 +253,7 @@ def import_script_text(parent, scenario_repo, scenario_id) -> str:
         return ""
     base = _scenario_dir(scenario_repo, scenario_id)
     if not base:
-        ui.ctk.dialogs.showerror("错误", "无法解析方案目录，无法保存文本文件")
+        ui.ctk.dialogs.showerror("错误", "无法解析副本方案目录，无法保存文本文件")
         return ""
     texts_dir = os.path.join(base, "texts")
     try:

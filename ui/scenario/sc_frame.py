@@ -777,7 +777,7 @@ class ScenarioEditor(ctk.CTkFrame):
         diagnostics = getattr(self._scenario_repo, "last_diagnostics", None) or []
         if has_errors(diagnostics):
             ui.ctk.dialogs.showwarning(
-                "方案校验发现问题",
+                "副本方案校验发现问题",
                 format_diagnostics(diagnostics, include_info=False))
 
     def _rename_scenario(self):

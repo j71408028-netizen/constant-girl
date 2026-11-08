@@ -724,7 +724,7 @@ class ScenarioGraphDialog(BaseDialog):
         main.pack(fill="both", expand=True, padx=12, pady=10)
 
         if not self.graph.chapters() and not self.graph.triggers():
-            ctk.CTkLabel(main, text="当前方案还没有章节与触发器，关系图为空。",
+            ctk.CTkLabel(main, text="当前副本方案还没有章节与触发器，关系图为空。",
                          font=self.UI_FONT, text_color=DEPENDENCY_TEXT).pack(pady=40)
             ctk.CTkButton(main, text="关闭", width=88, height=28, font=self.UI_FONT,
                           command=self.destroy).pack(pady=10)
