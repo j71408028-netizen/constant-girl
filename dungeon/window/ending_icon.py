@@ -52,12 +52,30 @@ def resolve_ending_icon(scenario_repo, scenario_id: str, icon_path: str):
     return None
 
 
+def square_icon_canvas(pil, box: int) -> Image.Image:
+    """把图标等比缩放后贴到 ``box×box`` 透明画布上（正方形留白口径）。
+
+    只做像素加工、不触 GL，可离线单测。小于 ``box`` 的图不放大。
+    """
+    pil = pil.convert("RGBA")
+    w, h = pil.size
+    ratio = min(box / w, box / h) if (w and h) else 0.0
+    tw, th = w, h
+    if ratio and ratio < 1.0:
+        tw, th = max(1, round(w * ratio)), max(1, round(h * ratio))
+        pil = pil.resize((tw, th), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", (box, box), (0, 0, 0, 0))
+    canvas.paste(pil, ((box - tw) // 2, (box - th) // 2))
+    return canvas
+
+
 def load_ending_icon_texture(pil, box: int):
     """把已打开的图标上传为正方形留白的 GPU 纹理。
 
     ``pil`` 传 None（无图标）静默返回 ``(None, "")``；加载/上传失败返回
     ``(None, 原因)``，由调用方决定日志与降级表现。``box`` 是目标边长
-    （像素），调用方按 DPI 换算。须在 GL 就绪后调用。
+    （像素），调用方按 DPI 换算。须在 GL 就绪后调用（无上下文直调会在
+    gladLoadGL 段错误而不是抛异常）。
     """
     if pil is None:
         return None, ""
@@ -65,16 +83,9 @@ def load_ending_icon_texture(pil, box: int):
     import numpy as np
 
     try:
-        pil = pil.convert("RGBA")
-        w, h = pil.size
-        ratio = min(box / w, box / h) if (w and h) else 0.0
-        tw, th = w, h
-        if ratio and ratio < 1.0:
-            tw, th = max(1, round(w * ratio)), max(1, round(h * ratio))
-            pil = pil.resize((tw, th), Image.Resampling.LANCZOS)
-        canvas = Image.new("RGBA", (box, box), (0, 0, 0, 0))
-        canvas.paste(pil, ((box - tw) // 2, (box - th) // 2))
-        rgba = np.frombuffer(canvas.tobytes(), dtype=np.uint8).reshape(box, box, 4)
+        canvas = square_icon_canvas(pil, box)
+        rgba = np.frombuffer(canvas.tobytes(), dtype=np.uint8).reshape(
+            canvas.size[1], canvas.size[0], 4)
         return hello_imgui.create_texture_gpu_from_rgba_data(rgba), ""
     except Exception as exc:
         return None, str(exc)
