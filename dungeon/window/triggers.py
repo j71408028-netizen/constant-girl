@@ -676,6 +676,7 @@ class TriggerHandler:
             # 回放时同样显示结局图标（图标路径来自结局动作配置）
             icon_path = (action_data or {}).get("icon_path", "") or ""
             if icon_path:
+                self._ending_name = name
                 self.ending_icon_path = icon_path
                 self._frame.call(self._update_ending_icon)
             if ending_text:

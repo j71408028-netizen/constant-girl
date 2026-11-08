@@ -83,6 +83,7 @@ imgui 没有 DPG 那个"回调派发到工作线程"的坑：所有绘制与输�
 import os
 import time
 
+from PIL import Image
 from imgui_bundle import hello_imgui, imgui
 
 from dungeon import process_log
@@ -91,6 +92,7 @@ from dungeon.window import gl_util
 from dungeon.window import gpu_textures
 from dungeon.window import imgui_util as iu
 from dungeon.window.background import PixelWorker
+from dungeon.window.ending_icon import load_ending_icon_texture, resolve_ending_icon
 from dungeon.window.fonts import (BOLD_FONT_SIZE, TEXT_FONT_SIZE, UI_FONT_SIZE,
                                   resolve_font_files)
 from dungeon.window.glfw_fullscreen import FULLSCREEN
@@ -192,6 +194,10 @@ _ENTRY_ENDING_HEAD = (255, 225, 150, 255)
 _ENTRY_ENDING_TIME = (200, 205, 215, 255)
 _ENTRY_ENDING_FOOT = (160, 170, 185, 255)
 
+# ---------- 实时/回放结局浮层（图标 + 结局名） ----------
+_ENDING_ICON_SIZE = 96      # 图标边长（px @ dpi=1），与入口页轮播同口径
+_ENDING_PANEL_W = 320       # 与入口结局面板同宽
+
 # ---------- imgui 窗口/子窗 ID（不进 ini，仅用于同层去重） ----------
 _ROOT_WINDOW = "##dungeon_root"
 _STORY_CHILD = "##dungeon_story"
@@ -199,6 +205,7 @@ _ENTRY_PANEL = "##dungeon_entry"
 _ENDING_PANEL = "##dungeon_entry_endings"
 _OPTION_DIALOG = "##dungeon_option"
 _TOOLBAR = "##dungeon_toolbar"
+_ENDING_OVERLAY = "##dungeon_ending"
 
 
 def _dim_color(color, factor):
@@ -529,6 +536,7 @@ class DungeonWindowUI:
                 if not self._text_owned_by_component():
                     self._draw_toolbar(w, h)
                 self._draw_option_dialog(w, h)
+            self._draw_ending_overlay(w, h)
             draw_overlay_top = getattr(self, "_draw_overlay_top", None)
             if callable(draw_overlay_top):
                 draw_overlay_top(w, h)
@@ -581,6 +589,7 @@ class DungeonWindowUI:
         ``_bg_blur_texture``  背景缩小模糊副本（毛玻璃卡片采样，随背景一起换）
         ``_toolbar_textures`` 窗口自绘工具条的三张图标
         ``_ending_textures``  入口页结局图标轮播
+        ``_ending_icon_texture``  实时/回放结局浮层图标
         ``_window_fx``        反色 / 色差覆盖层
         ``_mini_game_stage``  小游戏静态贴图
         ``_components``       组件自己的悬浮工具条图标
@@ -608,6 +617,10 @@ class DungeonWindowUI:
         if isinstance(endings, (list, tuple)):
             handles.extend(endings)
         self._ending_textures = []
+
+        texture, self._ending_icon_texture = getattr(self, "_ending_icon_texture", None), None
+        if texture is not None:
+            handles.append(texture)
 
         for owner in (getattr(self, "_window_fx", None),
                       getattr(self, "_mini_game_stage", None)):
@@ -1892,12 +1905,68 @@ class DungeonWindowUI:
             self._bg_pil_original = pil_img
             self._update_bg_blur(pil_img)
 
-    # ==================== 结局图标（P4 占位） ====================
+    # ==================== 结局图标（实时 / 回放共用） ====================
     def _update_ending_icon(self):
-        """把结局图标显示在故事区。
+        """把当前结局图标解析并上传为纹理，供结局浮层显示。
 
-        P4 占位：旧实现走 DPG 的静态纹理 + ``add_image``；imgui 侧改为
-        ``create_texture_gpu_from_rgba_data`` + ``add_image``，与结局图标轮播
-        （P3）一并处理。
+        实时结局（ending.py）与回放（triggers.py）都经 ``_frame.call`` 落到
+        帧线程执行，GL 存活。解析/加载/上传任一步失败只记日志并保持无图标
+        （与入口页轮播的坏图降级同口径）；缩放留白口径统一在
+        :mod:`dungeon.window.ending_icon`。句柄收进 ``_drain_gpu_textures``。
         """
-        process_log.log("[Ending] 结局图标显示待 P4 迁移")
+        icon_path = getattr(self, "ending_icon_path", "") or ""
+        resolved = resolve_ending_icon(
+            getattr(self, "scenario_repo", None),
+            getattr(self, "scenario_id", "") or "", icon_path)
+        if resolved is None:
+            process_log.log(f"[Ending] 结局图标文件不存在: {icon_path}")
+            return
+        try:
+            pil = Image.open(resolved).convert("RGBA")
+        except Exception as exc:
+            process_log.log(f"[Ending] 结局图标加载失败 {resolved}: {exc}")
+            return
+        s = self._dpi_scale
+        box = max(1, round(_ENDING_ICON_SIZE * s))
+        texture, reason = load_ending_icon_texture(pil, box)
+        if texture is None:
+            process_log.log(f"[Ending] 结局图标纹理上传失败 {resolved}: {reason}")
+            return
+        old, self._ending_icon_texture = getattr(self, "_ending_icon_texture", None), texture
+        if old is not None:
+            gpu_textures.release([old])
+
+    def _draw_ending_overlay(self, w: float, h: float):
+        """左上角结局浮层：当前（实时或回放）结局的图标 + 结局名。
+
+        图标由 ``_update_ending_icon`` 上传；无纹理（未配置/缺失/失败）时不
+        绘制，结局正文照常走阅读区。
+        """
+        texture = getattr(self, "_ending_icon_texture", None)
+        if texture is None or getattr(self, "_is_entry_phase", False):
+            return
+        s = self._dpi_scale
+        margin = round(_ENTRY_PANEL_MARGIN * s)
+        pw = float(round(_ENDING_PANEL_W * s))
+        pad = float(round(_ENTRY_PANEL_PAD * s))
+        icon = float(round(_ENDING_ICON_SIZE * s))
+        ph = icon + 2 * pad
+        self._push_entry_panel_style()
+        imgui.set_next_window_pos(iu.v2(float(margin), float(margin)))
+        imgui.set_next_window_size(iu.v2(pw, ph))
+        imgui.begin(_ENDING_OVERLAY, None,
+                    _panel_flags()
+                    | imgui.WindowFlags_.no_scrollbar.value
+                    | imgui.WindowFlags_.no_scroll_with_mouse.value)
+        ref = imgui.ImTextureRef(int(texture.texture_id()))
+        imgui.image(ref, iu.v2(icon, icon))
+        imgui.same_line()
+        inner_w = max(1.0, pw - 2 * pad - icon - float(round(12 * s)))
+        imgui.push_text_wrap_pos(imgui.get_cursor_pos_x() + inner_w)
+        imgui.text("【结局】")
+        imgui.push_style_color(imgui.Col_.text, iu.u32(*_ENTRY_ENDING_HEAD))
+        imgui.text_wrapped(str(getattr(self, "_ending_name", "") or "结局"))
+        imgui.pop_style_color()
+        imgui.pop_text_wrap_pos()
+        imgui.end()
+        self._pop_entry_panel_style()

@@ -165,6 +165,8 @@ class DungeonWindowBase:
         self._pending_exit_position = ""
         # 当前结局触发器信息（图标路径、触发器下标、已写入的索引记录）
         self.ending_icon_path = ""
+        # 实时/回放结局图标的 GPU 纹理句柄（_update_ending_icon 上传，收尾统一释放）
+        self._ending_icon_texture = None
         self._ending_trigger_index = -1
         self._achievement_record = None
         self._replay_saved = False
