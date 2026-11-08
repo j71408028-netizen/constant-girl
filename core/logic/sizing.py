@@ -14,11 +14,24 @@ ALL_PART_NAMES = [
 ]
 
 SIZE_CATEGORIES = ["small", "medium", "large", "huge", "colossal"]
+#: 观测等级档位名（拉丁名，不译；界面与提示词统一用它，区间串只作附注）
+SIZE_LEVEL_NAMES = {
+    "small": "Small", "medium": "Medium", "large": "Large",
+    "huge": "Huge", "colossal": "Colossal",
+}
 SIZE_DISPLAY = {
     "small": "7.5~50m", "medium": "50~300m",
     "large": "300~1800m", "huge": "1800~10000m",
     "colossal": "10~150km",
 }
+
+
+def size_level_text(category: str) -> str:
+    """观测等级的界面文本：档位名 + 区间附注（如 ``Small（7.5~50m）``）。"""
+    name = SIZE_LEVEL_NAMES.get(category)
+    if not name:
+        return category
+    return f"{name}（{SIZE_DISPLAY.get(category, '')}）"
 
 
 @behavior_hook("logic", "format_size")

@@ -24,8 +24,8 @@
 """
 
 from core.logic.sizing import (
-    ALL_PART_NAMES, SIZE_CATEGORIES, SIZE_DISPLAY,
-    format_size, get_size_category, length_unit_label,
+    ALL_PART_NAMES, SIZE_CATEGORIES, SIZE_DISPLAY, SIZE_LEVEL_NAMES,
+    format_size, get_size_category, length_unit_label, size_level_text,
 )
 from core.logic.text import (
     contains_blocked_word, normalize_blocked_words, should_skip_by_part_tags,

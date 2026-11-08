@@ -1,4 +1,4 @@
-"""介入度 / 破坏性 / 体型尺度的分级解释（提示词参考数据）。
+"""介入度 / 破坏性 / 观测等级的分级解释（提示词参考数据）。
 
 内容恢复自历史上的 developer_tools/quip_filler.py（描述填充开发者工具）：
 该工具曾把这三组解释硬编码进提示词，供 AI 把握写作尺度。现拆分为独立的
@@ -8,15 +8,15 @@
 将来副本（dungeon）与外部工具也要读它——core 是能让最多上层合法引用的
 最底层位置（同 ``appearance.py`` 判例）。
 
-体型分类与身高区间以 logic.py 的 SIZE_CATEGORIES / get_size_category 为准，
+观测等级分档与身高区间以 logic.py 的 SIZE_CATEGORIES / get_size_category 为准，
 本模块不重复定义。
 """
 
-from core.logic import SIZE_CATEGORIES, get_size_category
+from core.logic import SIZE_CATEGORIES, SIZE_LEVEL_NAMES, get_size_category
 
 
-# 体型与互动尺度（依据 Events.json 各体型条目与体型区间归纳）
-# 每个体型给出准确描述 + 适合的互动案例 + 不适合（尺寸过大或过小）的互动案例
+# 观测等级与互动尺度（依据 Events.json 各档位条目与身高区间归纳）
+# 每个档位给出准确描述 + 适合的互动案例 + 不适合（尺寸过大或过小）的互动案例
 SIZE_DEFINITIONS = {
     "small": {
         "desc": "她的高度近似于中低层居民楼，但仍低于部分高楼。步幅足以跨过道路，坐下可覆盖公园草坪等区域；可以随意触动路标、广告牌等设施",
@@ -136,12 +136,12 @@ def destruction_level_text(value: float) -> str:
 
 
 def size_definition_text(height: float) -> str:
-    """把身高解释为体型分类及对应的互动尺度说明；无分类（过小/超出）返回空串。"""
+    """把身高解释为观测等级档位及对应的互动尺度说明；无分类（过小/超出）返回空串。"""
     category = get_size_category(height)
     if category not in SIZE_DEFINITIONS:
         return ""
     definition = SIZE_DEFINITIONS[category]
-    return (f"体型类别：{category}（{definition['desc']}）\n"
+    return (f"观测等级：{SIZE_LEVEL_NAMES[category]}（{definition['desc']}）\n"
             f"适合的互动：{definition['suitable']}\n"
             f"不适合的互动：{definition['unsuitable']}")
 
@@ -157,13 +157,13 @@ def destruction_block() -> str:
 
 
 def size_block() -> str:
-    """全部体型与互动尺度说明（提示词用多行文本块）。"""
+    """全部观测等级与互动尺度说明（提示词用多行文本块）。"""
     lines = []
     for category in SIZE_CATEGORIES:
         definition = SIZE_DEFINITIONS.get(category)
         if not definition:
             continue
-        lines.append(f"{category}：{definition['desc']}\n"
+        lines.append(f"{SIZE_LEVEL_NAMES[category]}：{definition['desc']}\n"
                      f"适合：{definition['suitable']}\n"
                      f"不适合：{definition['unsuitable']}")
     return "\n".join(lines)
