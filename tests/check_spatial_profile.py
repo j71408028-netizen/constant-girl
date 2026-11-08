@@ -172,7 +172,7 @@ _snap3 = CharacterSnapshot(giantess_id="g3", name="t",
 _snap3.evolution = _rows_hist
 _snap3.model_tuning = ModelTuning(
     spatial_priors=priors_for_tags(["能躺着不站着"]))
-profile_flat = build_spatial_profile(_snap3)
+profile_flat = build_spatial_profile(_snap3, now=_NOW)
 base_hot = svc.region_factor(_hot)
 flat_hot = profile_flat.region_factor(_hot)
 check("正粘性放大已到访分支偏好", flat_hot > base_hot,
