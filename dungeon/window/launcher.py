@@ -20,13 +20,14 @@ AP 消耗缓存，不再操作 retained 控件。
 import math
 import os
 import random
-import re
 
 from PIL import Image
 
 from dungeon import process_log
 from dungeon.audio.chapters import normalize_chapters
 from dungeon.terms import scenario_id_of
+from dungeon.window.ending_icon import (free_dungeons_root, load_ending_icon_texture,
+                                        resolve_ending_icon)
 
 _IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
 
@@ -51,53 +52,13 @@ _KB_TASK = "entry:ken-burns"
 # 路径与资源收集工具
 # ---------------------------------------------------------------------------
 
-def _free_dungeons_root() -> str:
-    from paths import data_dir
-    return os.path.join(data_dir(), "packs", "scenarios")
-
-
-def _split_rel(icon_path: str) -> list:
-    """把相对路径里的 \\ 与 / 都当作分隔符，并忽略 . / .. 段。"""
-    parts = []
-    for piece in re.split(r"[\\/]+", str(icon_path)):
-        if piece in ("", ".", ".."):
-            continue
-        parts.append(piece)
-    return parts
-
-
-def resolve_ending_icon(scenario_repo, scenario_id: str, icon_path: str):
-    """解析结局图标实际文件路径。
-
-    优先级：绝对路径 → 当前副本根目录 → 自由副本根目录（data/packs/scenarios）。
-    返回 None 表示找不到文件。
-    """
-    icon_path = str(icon_path or "").strip()
-    if not icon_path:
-        return None
-    candidates = []
-    if os.path.isabs(icon_path):
-        candidates.append(os.path.normpath(icon_path))
-    rel_parts = _split_rel(icon_path)
-    scenario_id = (scenario_id or "").strip("/\\")
-    for base in (scenario_repo.root if scenario_repo is not None else None,
-                 _free_dungeons_root()):
-        if not base or not scenario_id:
-            continue
-        candidates.append(os.path.normpath(os.path.join(base, scenario_id, *rel_parts)))
-    for path in dict.fromkeys(candidates):
-        if os.path.isfile(path):
-            return path
-    return None
-
-
 def collect_dungeon_images(scenario_repo) -> list:
     """递归收集各副本目录下的图片文件（含 images 子目录与触发器引用图）。"""
     found = []
     roots = []
     if scenario_repo is not None:
         roots.append(scenario_repo.root)
-    free_root = _free_dungeons_root()
+    free_root = free_dungeons_root()
     if free_root not in roots:
         roots.append(free_root)
     for base in roots:
@@ -202,40 +163,22 @@ class DungeonLaunchStages:
     def _preload_ending_textures(self):
         """把已收集的结局图标上传为 ``TextureGpu``（仅 GL 就绪后调用）。
 
-        与旧 DPG 版 ``_preload_ending_textures`` 相同的缩放/正方形留白口径；
-        区别只是 DPG 静态纹理换成了 hello_imgui 的 RAII 纹理句柄。句柄由
-        ``_ending_textures`` 列表持有，离开入口阶段时清空即可释放。
+        缩放/正方形留白/上传统一走 :mod:`dungeon.window.ending_icon`（与实时
+        结局、回放同口径）。句柄由 ``_ending_textures`` 列表持有，离开入口
+        阶段时清空即可释放。
         """
         self._ending_textures = []
         if not getattr(self, "_ending_items", None):
             return
 
-        from imgui_bundle import hello_imgui
-        import numpy as np
-
         s = getattr(self, "_dpi_scale", 1.0) or 1.0
         box = max(1, round(96 * s))
         textures = []
         for item in self._ending_items:
-            try:
-                pil = item.get("pil")
-                if pil is None:
-                    textures.append(None)
-                    continue
-                w, h = pil.size
-                ratio = min(box / w, box / h) if (w and h) else 0.0
-                tw, th = w, h
-                if ratio and ratio < 1.0:
-                    tw, th = max(1, round(w * ratio)), max(1, round(h * ratio))
-                    pil = pil.resize((tw, th), Image.Resampling.LANCZOS)
-                canvas = Image.new("RGBA", (box, box), (0, 0, 0, 0))
-                canvas.paste(pil, ((box - tw) // 2, (box - th) // 2))
-                rgba = np.frombuffer(canvas.tobytes(), dtype=np.uint8).reshape(box, box, 4)
-                textures.append(
-                    hello_imgui.create_texture_gpu_from_rgba_data(rgba))
-            except Exception as exc:
-                process_log.log(f"结局图标纹理创建失败: {exc}")
-                textures.append(None)
+            texture, reason = load_ending_icon_texture(item.get("pil"), box)
+            if texture is None and reason:
+                process_log.log(f"结局图标纹理创建失败: {reason}")
+            textures.append(texture)
         self._ending_textures = textures
 
     def _destroy_entry_ui(self):
