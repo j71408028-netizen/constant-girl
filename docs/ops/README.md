@@ -8,11 +8,12 @@
 |---|---|---|
 | [release.md](release.md) | 发版 / 规划里程碑的人 | 现状 |
 | [../releases/changelog-v1.0.0.md](../releases/changelog-v1.0.0.md) | 想知道某版本改了什么的人 | 快照（append-only） |
+| [../releases/changelog-v2.0.0.md](../releases/changelog-v2.0.0.md) | 想溯源 v1.0.0 之后整段改动的人 | 快照（append-only，**未发布版**：所有中间号无标签） |
 
 ## 推荐阅读顺序
 
 1. 首次发版：[release.md](release.md) §1–§7。
-2. 规划下一个里程碑：[release.md](release.md) §9（v1.0.0 之后的过渡点建议）。
+2. 规划下一个里程碑：[release.md](release.md) §9（v1.0.0 之后直接进 2.0 线）。
 3. 查历史版本变更：[../releases/](../releases/) 目录。
 
 ## 约定
