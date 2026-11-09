@@ -125,9 +125,8 @@ PY
 
 ## 已迁出的东西
 
-`dpg_probe/`（DPG 原生崩溃的一次性调查留档，17 个文件——15 个 `_probe_*` 探针外加 `_outdir.py` / `_veh_filter.py`）2026-10-08 起搬到
+`dpg_probe/`（DPG 原生崩溃的一次性调查留档）2026-10-08 起搬到
 [`scripts/dpg_probe/`](../scripts/dpg_probe)——它自述「只存档不复用」，既不是资源 / 行为改动
 的入口、也不会反复拿来"看"，不符合本目录的判据。其产物随之落 `scripts/_out/dpg_probe/`，
-说明见 [`scripts/README.md`](../scripts/README.md)。2026-10 的 imgui 迁移（P8）把
-`dearpygui` 从 `requirements.txt` 移除后，这些探针**不再能直接运行**——需要时先临时
-`pip install dearpygui` 再跑。
+说明见 [`scripts/README.md`](../scripts/README.md)。DPG 专属的 5 支探针已在 2026-11-09
+随 `dearpygui` 依赖移除一并删除，只留通用的 Windows 原生崩溃工具。

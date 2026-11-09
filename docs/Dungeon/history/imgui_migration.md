@@ -55,9 +55,11 @@
 **保留（档案，不再演进）**：
 
 - `scripts/dpg_probe/`——2026-10-08 归档的 DPG 原生崩溃探针（部分 ctypes/dbghelp
-  工具对 imgui 崩溃同样可用）。依赖已从 `requirements.txt` 移除，因此这些脚本
-  **当前不可直接运行**；`tests/check_entrypoints.py` 为其在 `UNDECLARED_ALLOWED`
-  里开了一处例外（`dearpygui`）。
+  工具对 imgui 崩溃同样可用）。依赖已从 `requirements.txt` 移除，因此当时这些脚本
+  **不可直接运行**，`tests/check_entrypoints.py` 为其在 `UNDECLARED_ALLOWED` 里开了
+  一处例外（`dearpygui`）。2026-11-09 清理：DPG 专属的 5 支探针删除，
+  `_veh_filter.py` 剥掉 dpg 打桩，该例外随之撤掉，详见
+  [`scripts/README.md`](../../../scripts/README.md) 附录。
 
 **新增的小接口**：
 
@@ -102,7 +104,8 @@ Windows 侧复核（2026-10-17）：真窗口 7 个场景收尾全部走 `releas
 
 ## 5. 已知遗留
 
-- `scripts/dpg_probe/` 的探针不能直接跑（依赖已移除），需要时先临时装 `dearpygui`。
+- `scripts/dpg_probe/` 里 DPG 专属的探针已随依赖移除删掉（2026-11-09），留下的通用
+  原生崩溃工具不再需要临时装 `dearpygui`。
 - Linux/X11 上 `text-components` 场景在 CI 仍被跳过（历史已知崩溃，见
   [linux 兼容记录](../../users/platforms/linux-history.md) 附录A §5）；imgui 迁移后
   预期消失，但尚未在 Linux 复测，留到打包/CI 阶段确认。

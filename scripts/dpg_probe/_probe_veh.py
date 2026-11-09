@@ -18,6 +18,8 @@ from ctypes import wintypes
 import _outdir  # 同目录探针共享的产物目录（_out/dpg_probe/）
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+#: 仓库根：探针在 ``scripts/dpg_probe/``，被探测的目标在 ``developer_tools/``。
+ROOT = os.path.dirname(os.path.dirname(HERE))
 OUT = _outdir.out("_probe_veh.txt")
 
 k32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -293,7 +295,7 @@ def main():
     sys.argv = ["minigame_preview.py", game] + (["--target", target] if target else [])
     try:
         import runpy
-        runpy.run_path(os.path.join(HERE, "developer_tools", "minigame_preview.py"),
+        runpy.run_path(os.path.join(ROOT, "developer_tools", "minigame_preview.py"),
                        run_name="__main__")
     finally:
         with open(OUT, "a", encoding="utf-8") as f:

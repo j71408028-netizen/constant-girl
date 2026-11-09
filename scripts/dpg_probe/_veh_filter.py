@@ -7,17 +7,21 @@ UnhandledExceptionFilter 只在进程注定要死时调用，不影响正常运�
 完整 minidump（供事后离线分析）。
 
 用法：python _veh_filter.py escape_giantess --target 1
-输出：_out/dpg_probe/ 下的 _veh_filter_report.txt + crash.dmp + stdout 面包屑
+输出：_out/dpg_probe/ 下的 _veh_filter_report.txt + crash.dmp（跑完在 stdout 打起止标记）
 """
 import ctypes
+import msvcrt
 import os
 import runpy
 import sys
+import time
 from ctypes import wintypes
 
 import _outdir  # 同目录探针共享的产物目录（_out/dpg_probe/）
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+#: 仓库根：探针在 ``scripts/dpg_probe/``，被探测的目标在 ``developer_tools/``。
+ROOT = os.path.dirname(os.path.dirname(HERE))
 OUT = _outdir.out("_veh_filter_report.txt")
 DMP = _outdir.out("crash.dmp")
 
@@ -66,6 +70,8 @@ psapi.GetModuleInformation.argtypes = [wintypes.HANDLE, ctypes.c_void_p,
 psapi.GetModuleInformation.restype = wintypes.BOOL
 k32.SetUnhandledExceptionFilter.restype = ctypes.c_void_p
 k32.SetUnhandledExceptionFilter.argtypes = [ctypes.c_void_p]
+k32.GetCurrentThreadId.restype = wintypes.DWORD
+k32.GetCurrentThreadId.argtypes = []
 dbg.MiniDumpWriteDump.argtypes = [wintypes.HANDLE, wintypes.DWORD,
                                   wintypes.HANDLE, ctypes.c_int,
                                   ctypes.c_void_p, ctypes.c_void_p,
@@ -248,34 +254,7 @@ def filter_proc(ep):
                         lines.append("  ... (truncated)")
                         break
         _write(lines)
-        # 读 DPG 全局指针链实况：定位到底是哪个指针为 NULL
-        try:
-            dpg_mod = next((m for m in MODULES if m[2] == "_dearpygui.pyd"), None)
-            if dpg_mod:
-                base = dpg_mod[0]
-                def rd(rva):
-                    a = base + rva
-                    if not _readable(a):
-                        return None
-                    return ctypes.c_ulonglong.from_address(a).value
-                def rda(addr):
-                    if not addr or not _readable(addr, 8):
-                        return None
-                    return ctypes.c_ulonglong.from_address(addr).value
-                gB = rd(0x5BFE38)        # fB 的全局
-                bB = (gB + 0x30) if gB else 0
-                lines.append("--- dpg globals ---")
-                lines.append(f"globalB=0x{gB or 0:x} fB()=0x{bB:x}")
-                if bB:
-                    for off in (0x30, 0x38, 0x78, 0x98, 0xa0, 0xa8, 0xb0,
-                                0xe0, 0xe8):
-                        v = rda(bB + off)
-                        lines.append(f"  fB()+0x{off:x} = 0x{v or 0:x}")
-                _write(lines)
-        except Exception as exc:
-            lines.append(f"global peek failed: {exc!r}")
-            _write(lines)
-        # Python 侧现场：确认崩溃发生在哪个 dpg 调用
+        # Python 侧现场：确认崩溃发生在哪个调用
         try:
             import faulthandler
             import tempfile
@@ -315,149 +294,15 @@ def filter_proc(ep):
     return 1  # EXCEPTION_EXECUTE_HANDLER：正常终止进程
 
 
-def msvcrt_handle(fh):
-    return msvcrt.get_osfhandle(fh.fileno())
-
-
-k32.GetCurrentThreadId.restype = wintypes.DWORD
-k32.GetCurrentThreadId.argtypes = []
-
-import msvcrt  # noqa: E402
-
-_CB = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.POINTER(EXCEPTION_POINTERS))
-CB_REF = _CB(filter_proc)
-
-_T0 = None
-_UPDATES = [0]
-_LAST_BEAT = [0.0]
-_AUTO_CLOSE = float(os.environ.get("AUTO_CLOSE", "0") or 0)
+_T0 = time.monotonic()
 
 
 def _beat(msg):
-    import time
     print(f"[crumb {time.monotonic() - _T0:7.3f}] {msg}", flush=True)
 
 
-def install_breadcrumbs():
-    global _T0
-    import time
-    _T0 = time.monotonic()
-    import dearpygui.dearpygui as dpg
-
-    # --- fB()+0xa8 逐帧轮询：定位该指针何时为空 ---
-    def _pyd_base():
-        k32.GetCurrentProcess.restype = wintypes.HANDLE
-        h = k32.GetCurrentProcess()
-        need = wintypes.DWORD(0)
-        arr = (ctypes.c_void_p * 4096)()
-        if not psapi.EnumProcessModules(h, ctypes.byref(arr),
-                                        ctypes.sizeof(arr), ctypes.byref(need)):
-            return None
-        for i in range(need.value // ctypes.sizeof(ctypes.c_void_p)):
-            hm = arr[i]
-            if not hm:
-                continue
-            buf = ctypes.create_unicode_buffer(1024)
-            psapi.GetModuleFileNameExW(h, ctypes.c_void_p(hm), buf, 1024)
-            if os.path.basename(buf.value) == "_dearpygui.pyd":
-                return hm
-        return None
-
-    _poll = {"base": None, "last": None}
-
-    def _poll_ptr():
-        if _poll["base"] is None:
-            _poll["base"] = _pyd_base()
-            if _poll["base"] is None:
-                return None
-        gB = ctypes.c_ulonglong.from_address(_poll["base"] + 0x5BFE38).value
-        if not gB:
-            return "gB=0"
-        addr = gB + 0x30 + 0xa8
-        v = ctypes.c_ulonglong.from_address(addr).value
-        return v
-
-    def _mark(step):
-        v = _poll_ptr()
-        _beat(f"ptr@{step} = 0x{v:x}" if isinstance(v, int) else f"ptr@{step} = {v}")
-        _poll["last"] = v
-
-    # 宿主差异开关（与副本会话对齐用）：MC=手动回调管理 NOMAX=不最大化
-    # NORESIZE=不设 resize 回调
-    _host = {p.strip() for p in os.environ.get("PROBE_HOST", "").split(",") if p.strip()}
-    _orig_create_context = dpg.create_context
-
-    def create_context(*a, **k):
-        r = _orig_create_context(*a, **k)
-        if "MC" in _host:
-            dpg.configure_app(manual_callback_management=True)
-            _beat("manual callback management ON")
-        _mark("create_context")
-        return r
-
-    dpg.create_context = create_context
-    _orig_setup = dpg.setup_dearpygui
-
-    def setup(*a, **k):
-        r = _orig_setup(*a, **k)
-        _mark("setup_dearpygui")
-        return r
-
-    dpg.setup_dearpygui = setup
-    _orig_show = dpg.show_viewport
-
-    def show(*a, **k):
-        r = _orig_show(*a, **k)
-        _mark("show_viewport")
-        return r
-
-    dpg.show_viewport = show
-    if "NOMAX" in _host:
-        dpg.maximize_viewport = lambda *a, **k: None
-    if "NORESIZE" in _host:
-        dpg.set_viewport_resize_callback = lambda *a, **k: None
-
-    orig_render = dpg.render_dearpygui_frame
-
-    def render():
-        _FRAMES[0] += 1
-        now = time.monotonic()
-        if now - _LAST_BEAT[0] >= 1.0:
-            _LAST_BEAT[0] = now
-            _beat(f"alive frames={_FRAMES[0]} updates={_UPDATES[0]}")
-        v = _poll_ptr()
-        if v != _poll["last"]:
-            _poll["last"] = v
-            _beat(f"ptr changed -> 0x{v:x}" if isinstance(v, int) else f"ptr changed -> {v}")
-        if _AUTO_CLOSE and now - _T0 > _AUTO_CLOSE:
-            _beat("auto-close reached")
-            dpg.stop_dearpygui()
-            return None
-        return orig_render()
-
-    dpg.render_dearpygui_frame = render
-
-    from dungeon.window.minigame import stage as stage_mod
-    orig_build = stage_mod._MiniGameStage.build
-
-    def build(self):
-        _beat(f"stage.build begin ({self._game_cls.__name__})")
-        ok = orig_build(self)
-        _beat(f"stage.build -> {ok}")
-        if ok and self._game is not None:
-            gu = self._game.update
-
-            def upd(dt, _gu=gu):
-                _UPDATES[0] += 1
-                return _gu(dt)
-
-            self._game.update = upd
-        return ok
-
-    stage_mod._MiniGameStage.build = build
-
-
-_FRAMES = [0]
+_CB = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.POINTER(EXCEPTION_POINTERS))
+CB_REF = _CB(filter_proc)
 
 
 def main():
@@ -469,10 +314,9 @@ def main():
     print(f"[filter] installed (prev=0x{prev or 0:x})", flush=True)
     with open(_outdir.out("_veh_pid.txt"), "w") as f:
         f.write(str(os.getpid()))
-    install_breadcrumbs()
     sys.argv = ["minigame_preview.py"] + sys.argv[1:]
     try:
-        runpy.run_path(os.path.join(HERE, "developer_tools", "minigame_preview.py"),
+        runpy.run_path(os.path.join(ROOT, "developer_tools", "minigame_preview.py"),
                        run_name="__main__")
     except SystemExit as exc:
         _beat(f"SystemExit {exc.code}")

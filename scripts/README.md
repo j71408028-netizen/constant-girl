@@ -55,7 +55,7 @@ GUI 冒烟）在 `tests/`，由 `python tests/run_checks.py` 统一驱动；另�
 
 | 脚本 / 目录 | 性质 | 说明 |
 |---|---|---|
-| `dpg_probe/` | 一次性调查留档 | DPG 2.3.1 原生崩溃（首帧 `0xC0000005`）追查的现场工具，**只存档不复用**。原在 `developer_tools/`，2026-10-08 迁来。2026-10 的 imgui 迁移（P8）把 `dearpygui` 移出 `requirements.txt` 后，直接依赖它的探针**不再能直接运行**（需临时 `pip install dearpygui`）；通用原生崩溃工具不依赖 DPG，仍可用。见文末 |
+| `dpg_probe/` | 一次性调查留档 | DPG 2.3.1 原生崩溃（首帧 `0xC0000005`）追查的现场工具，**只存档不复用**。原在 `developer_tools/`，2026-10-08 迁来。DPG 已随 imgui 迁移（P8）移出依赖，因此 2026-11-09 删掉 DPG 专属的 5 支探针，只留对 imgui 崩溃同样可用的通用原生崩溃工具。见文末 |
 
 约定：归档项**完成后不删**（幂等 + 有 `.bak`，可对旧存档重放；探针是下次原生
 崩溃的现场工具），但**不再演进**。需要长期维护的回归请写成 `tests/smoke_*.py` 或
@@ -71,7 +71,7 @@ GUI 冒烟）在 `tests/`，由 `python tests/run_checks.py` 统一驱动；另�
 
 | 子目录 | 来源 |
 |---|---|
-| `_out/dpg_probe/` | `dpg_probe/` 各探针的 `_*.txt` / `*.dmp` / `_dpg_bindings.json`（共享常量 `OUT_DIR` / `out()` 在 `dpg_probe/_outdir.py`） |
+| `_out/dpg_probe/` | `dpg_probe/` 各探针的 `_*.txt` / `*.dmp`（共享常量 `OUT_DIR` / `out()` 在 `dpg_probe/_outdir.py`） |
 
 `dungeon_autopilot.py` / `escape_sim.py` / `migrate_from_v1.py` / 两个探针
 （`child_dpi_probe.py`、`platform_api_report.py`）都不落盘（迁移脚本直写 `data/`，
@@ -82,27 +82,28 @@ GUI 冒烟）在 `tests/`，由 `python tests/run_checks.py` 统一驱动；另�
 DPG 2.3.1 的 Windows wheel 是 ANSI(MBCS) 构建，非 ASCII 标题建窗会**静默失败**，随后
 首帧渲染必现访问违例。这批探针是当时追这一例留下的现场工具，**只存档不复用**——留着
 是因为下次遇到原生崩溃还得靠它们。**脚本留在此目录，产物统一写 `_out/dpg_probe/`**
-（共享常量在 `_outdir.py`），因此探针目录里只有代码。三层结构：
+（共享常量在 `_outdir.py`），因此探针目录里只有代码。
 
-> 依赖说明（2026-10，imgui 迁移 P8）：`dearpygui` 已从 `requirements.txt` 移除。
-> `_probe_dpg_min.py` / `_probe_fabric.py` / `_probe_bindings.py` / `_probe_pyd.py`
-> 直接 import dearpygui，**不能直接跑了**（要跑先临时装回）；而
-> `_probe_native.py` / `_probe_veh.py` / `_veh_filter.py` / `_probe_dbg.py` 是通用
-> 原生崩溃工具链（ctypes + dbghelp + minidump），对 imgui 迁移后的崩溃同样可用。
+> 2026-11-09 清理：DPG 专属的 `_probe_dpg_min.py` / `_probe_fabric.py` /
+> `_probe_bindings.py` / `_probe_pyd.py` / `_probe_trace.py` 已删除——它们 import
+> `dearpygui`，依赖随 P8 移除后连重放都做不到，留着只会让下一个人多花时间分辨哪些
+> 还能跑（git 历史里可随时取回）。`_veh_filter.py` 剥掉了 DPG 全局指针轮询与 dpg
+> 打桩，只保留 `SetUnhandledExceptionFilter` + minidump。因此
+> `check_entrypoints.py::UNDECLARED_ALLOWED` 里的 `dearpygui` 例外也随之撤掉。
+
+剩下的都是**不依赖 DPG** 的通用原生崩溃工具（ctypes + dbghelp + minidump）：
 
 - **抓现场（四条路，按需挑一条）**：`_probe_native.py`（纯 ctypes + dbghelp，进程内装
-  vectored exception handler，打印「模块!符号+偏移」与栈扫描链，也是 `_probe_crash_run` /
-  `_probe_trace` 的后端）、`_probe_veh.py`（VEH 宿主）、`_veh_filter.py`
+  vectored exception handler，打印「模块!符号+偏移」与栈扫描链，也是 `_probe_crash_run`
+  的后端）、`_probe_veh.py`（VEH 宿主）、`_veh_filter.py`
   （`SetUnhandledExceptionFilter` + minidump，不影响 first-chance 分发）、
   `_probe_dbg.py`（进程外迷你调试器，不注入子进程）。
 - **跑 + 出结论**：`_probe_run.py`（带超时跑命令，报告写 `_out/dpg_probe/_probe_last.txt`）→
-  `_probe_report.py`（读同一份给紧凑结论）；`_probe_trace.py` 是带面包屑的启动器。
+  `_probe_report.py`（读同一份给紧凑结论）；`_probe_plain_run.py` 跑指定脚本、不装任何
+  处理器，用来对照「装了探针才崩」。
 - **自检与单点复现**：`_probe_av.py`（故意触发 AV，验收处理器还活着）、
-  `_probe_symtest.py`（验收 dbghelp 能命名地址）、`_probe_veh_selftest.py`、
-  `_probe_dpg_min.py`（最小 DPG 渲染）、`_probe_fabric.py`（织物绘制复现）、
-  `_probe_bindings.py` / `_probe_pyd.py`（导出表 / RVA，给纯地址命名）。
+  `_probe_symtest.py`（验收 dbghelp 能命名地址）、`_probe_veh_selftest.py`。
 
 注意：这些探针依赖 Windows 专有 API（`ctypes.WinDLL`、dbghelp、minidump），**在
 macOS / Linux 上跑不了**。但离线守卫只对源码做 AST 静态解析、**不执行**它们，所以放进
-`scripts/` 后门禁照样过（`dearpygui` 在 `check_entrypoints.py::UNDECLARED_ALLOWED` 里
-留了一处例外）。
+`scripts/` 后门禁照样过。
