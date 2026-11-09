@@ -16,7 +16,7 @@ import sys
 import uuid
 from tkinter import filedialog
 
-from core.ai import resolve_ai_config
+from core.ai import profile_labels, resolve_ai_config
 from core.models import BodyPreset, CharacterSnapshot, Personality
 from core.resource_spec import type_labels
 from services.chat import events as chat_events
@@ -106,7 +106,7 @@ class MiniApp:
         self.root.geometry(self.settings.get("window_geometry") or DEFAULT_GEOMETRY)
         self.root.minsize(*MIN_SIZE)
         px.bind_colors(self.root, {'bg': 'ink'})
-        appearance.set_mode(self.theme_mode())
+        appearance.set_mode(appearance.MODE_DARK)
         self._apply_titlebar_theme()
         # 主窗口尚在映射前，DWM 会在窗口真正显示时把标题栏恢复成系统配色，
         # 因此映射后必须再刷一次（与对话框走的是同一条路）。
@@ -157,11 +157,9 @@ class MiniApp:
         except Exception:
             return 0
 
-    def theme_mode(self) -> str:
-        return "Dark" if self.settings.get("theme_mode", "Dark") == "Dark" else "Light"
-
     def is_dark(self) -> bool:
-        return self.theme_mode() == "Dark"
+        """挂件固定暗色像素主题，不提供亮 / 暗切换。"""
+        return True
 
     # ==================== 主界面布局 ====================
     def _build_main(self):
@@ -986,17 +984,6 @@ class MiniApp:
         self._refresh_investigation_ui()
 
     # ==================== 设置（由设置屏调用） ====================
-    def toggle_theme(self):
-        theme = "Light" if self.is_dark() else "Dark"
-        self.settings["theme_mode"] = theme
-        # 纯 tkinter 不会自己重刷：切模式后由 appearance 广播，pixel 按登记表重绘。
-        appearance.set_mode(theme)
-        self._apply_titlebar_theme()
-        self.report_view.refresh_theme()
-        self.state_card.refresh_theme()
-        self.params_panel.refresh_theme()
-        self._save_settings()
-
     def set_topmost(self, enabled: bool):
         """切换置顶。桌面环境写不进置顶时**如实处理并提示**，不假装成功。
 
@@ -1036,14 +1023,19 @@ class MiniApp:
         return self.settings.get("ai_configs") or {}
 
     def ai_provider_names(self):
-        return [cfg.get("name", pid) for pid, cfg in self.ai_configs().items()]
+        """下拉框候选：配置的显示标签（重名时带数字后缀）。"""
+        return list(profile_labels(self.ai_configs()).values())
+
+    def ai_provider_label(self, provider_id: str) -> str:
+        return profile_labels(self.ai_configs()).get(provider_id, provider_id or "")
 
     def ai_provider_name(self, provider_id: str) -> str:
         return (self.ai_configs().get(provider_id) or {}).get("name", provider_id or "")
 
-    def set_ai_provider(self, name: str):
-        for pid, cfg in self.ai_configs().items():
-            if cfg.get("name", pid) == name:
+    def set_ai_provider(self, label: str):
+        """按显示标签选中配置；真正落盘的是配置 id。"""
+        for pid, candidate in profile_labels(self.ai_configs()).items():
+            if candidate == label:
                 self.settings["ai_provider"] = pid
                 break
         self._save_settings()

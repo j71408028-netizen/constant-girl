@@ -21,6 +21,12 @@ import sys
 import tempfile
 import traceback
 
+# Windows 控制台常是 GBK，输出 ░ 之类的像素字符会直接抛 UnicodeEncodeError；
+# 与 run_checks.py 一致，把本脚本的 IO 钉在 UTF-8 上。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Linux/X11：必须在 tkinter（以及副本窗口的 GL 栈）建立 X 连接**之前**调 XInitThreads。
@@ -126,7 +132,7 @@ def main():
             world_state=ws,
         )
 
-        appearance.set_mode(settings.get("theme_mode", "Dark"))
+        appearance.set_mode(appearance.MODE_DARK)
 
         import tkinter as tk  # 延迟到 boot_x11() 之后，保证 XInitThreads 先执行
         root = tk.Tk()
@@ -450,10 +456,7 @@ def _check_screens(app, settings):
 
     app.push_screen("settings")
     check("设置屏已打开", type(app._screen).__name__ == "SettingsScreen")
-    dark_before = app.is_dark()
-    app.toggle_theme()
-    check("主题可切换", app.is_dark() != dark_before,
-          f"dark {dark_before} -> {app.is_dark()}")
+    check("挂件固定暗色主题", app.is_dark())
     app.set_topmost(True)
     if sys.platform.startswith("linux"):
         # X11/GNOME 下 Tk 的 -topmost 写不进 _NET_WM_STATE_ABOVE（xprop 实测无该状态），
@@ -523,6 +526,8 @@ def _install_dungeon_stub():
 
     real_params = set(inspect.signature(
         dungeon_window.DungeonSessionWindow.__init__).parameters) - {"self"}
+    # spawner 自己消费、不会传进窗口构造的参数：视口基准覆盖 client_size
+    real_params |= {"client_size"}
     _SIGNATURE_PARAMS["names"] = real_params
     _REAL_WINDOW["cls"] = dungeon_window.DungeonSessionWindow
 

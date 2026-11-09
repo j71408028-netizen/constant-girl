@@ -12,6 +12,7 @@ import ui.ctk.dialogs
 if TYPE_CHECKING:
     from persistence.settings_repo import SettingsRepo
 
+from core.ai import profile_labels
 from core.logic import ALL_PART_NAMES, normalize_blocked_words
 from core import netproxy
 from persistence import DungeonSettingsRepo
@@ -585,9 +586,9 @@ class SettingsPanel(ctk.CTkScrollableFrame):
 
         # 第1行：下拉框和新建按钮并排
         _, ai_provider_control = self._make_row(parent, row, "选择配置")
-        self.ai_provider_var = tk.StringVar(value=self._profile_name(self.ai_provider))
+        self.ai_provider_var = tk.StringVar(value=self._profile_label(self.ai_provider))
         self.ai_provider_menu = self._make_option_button(
-            ai_provider_control, self._profile_names(),
+            ai_provider_control, list(self._profile_labels().values()),
             self._on_ai_provider_changed, self.ai_provider_var, expand=False
         )
         ctk.CTkButton(
@@ -627,20 +628,20 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         result = {pid: dict(cfg) for pid, cfg in configs.items()}
         return result
 
-    def _profile_name(self, profile_id):
-        return (self.ai_configs.get(profile_id) or {}).get("name", profile_id)
+    def _profile_labels(self):
+        return profile_labels(self.ai_configs)
 
-    def _profile_names(self):
-        return [cfg.get("name", pid) for pid, cfg in self.ai_configs.items()]
+    def _profile_label(self, profile_id):
+        return self._profile_labels().get(profile_id, profile_id)
 
     def _refresh_ai_menu(self):
-        names = self._profile_names()
-        self.ai_provider_menu.configure(values=names)
-        self.ai_provider_menu.set(self._profile_name(self.ai_provider))
+        labels = self._profile_labels()
+        self.ai_provider_menu.configure(values=list(labels.values()))
+        self.ai_provider_menu.set(labels.get(self.ai_provider, self.ai_provider))
 
     def _on_ai_provider_changed(self, choice):
-        for pid, cfg in self.ai_configs.items():
-            if cfg.get("name", pid) == choice:
+        for pid, label in self._profile_labels().items():
+            if label == choice:
                 self.ai_provider = pid
                 break
 

@@ -262,6 +262,24 @@ try:
           _defaults_loaded.get("net_proxy") == "",
           repr(_defaults_loaded.get("net_proxy")))
 
+    # 初始配置与「新建配置」模板必须同源：任一处改了模型名都不能走样。
+    _fields = ("name", "url", "model")
+    _stored = {pid: {k: cfg.get(k) for k in _fields}
+               for pid, cfg in _defaults_loaded["ai_configs"].items()}
+    _templates = {pid: {k: cfg.get(k) for k in _fields}
+                  for pid, cfg in ai.PROVIDER_DEFAULTS.items()}
+    check("初始 AI 配置与模板字段一致", _stored == _templates,
+          (_stored, _templates))
+
+    _labels = ai.profile_labels({
+        "a": {"name": "同名配置"},
+        "b": {"name": "同名配置"},
+        "c": {"name": "另一份"},
+    })
+    check("重名配置的显示标签互不重复",
+          len(set(_labels.values())) == len(_labels), _labels)
+    check("配置身份始终是 pid", set(_labels) == {"a", "b", "c"}, _labels)
+
     check("设置页连接测试用可读原因",
           _uses("ui/settings/dialogs.py", "describe_ai_error"))
     check("挂件连接测试用可读原因",

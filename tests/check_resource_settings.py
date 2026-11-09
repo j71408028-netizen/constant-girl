@@ -177,5 +177,23 @@ check("无 world_state 时资源键自由落盘",
       _read(os.path.join(_dir, "user", "resource_settings.json"))["material_table"] == "free"
       and _read(os.path.join(_dir, "user", "resource_settings.json"))["active_world"] == "w1")
 
+# ---------------- 7. 界面专属缺省只补用户没写过的键 ----------------
+_interface = {"use_preview_image_as_avatar": True, "always_on_top": True}
+_dir = _fresh_dir()
+_loaded = SettingsRepo(data_dir=_dir).load(interface_defaults=_interface)
+check("界面专属缺省补齐缺失键",
+      _loaded.get("use_preview_image_as_avatar") is True
+      and _loaded.get("always_on_top") is True,
+      {k: _loaded.get(k) for k in _interface})
+
+with open(os.path.join(_dir, "user", "settings.json"), "w", encoding="utf-8") as _f:
+    json.dump({"use_preview_image_as_avatar": False}, _f)
+_loaded = SettingsRepo(data_dir=_dir).load(interface_defaults=_interface)
+check("用户显式写过的 False 不被界面缺省覆盖",
+      _loaded.get("use_preview_image_as_avatar") is False,
+      _loaded.get("use_preview_image_as_avatar"))
+check("未写过的其它键仍补界面缺省",
+      _loaded.get("always_on_top") is True, _loaded.get("always_on_top"))
+
 print(f"PASSED ({_checked} assertions)")
 sys.exit(0)

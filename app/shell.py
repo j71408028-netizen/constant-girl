@@ -48,6 +48,15 @@ _PENDING = {"mode": None}
 #: 一次清场最多派发多少个事件（防某个 <Configure> 处理器无限自续）
 _MAX_EVENT_DRAIN = 2000
 
+#: 挂件专属缺省：只在用户从未写过这些键时补齐（专业模式不受影响）。
+#: 主题不在此列：挂件是固定暗色像素界面（见 main.run_mini），专业模式
+#: 的外观交给 assets/theme/ 配色的 mode 声明。
+MINI_SETTINGS_DEFAULTS = {
+    "always_on_top": True,
+    "use_preview_image_as_avatar": True,
+    "auto_save_report": True,
+}
+
 
 def request_switch(mode: str) -> None:
     """登记一次切换请求（不立即生效，等当前界面的事件循环退出后）。"""
@@ -63,9 +72,10 @@ def take_request():
 
 # ==================== 引导 ====================
 
-def bootstrap():
+def bootstrap(mode: str = None):
     """读出两套界面共用的启动状态：设置、世界包、世界状态。
 
+    ``mode`` 用于选择界面专属缺省（目前只有挂件；见 ``MINI_SETTINGS_DEFAULTS``）。
     每次切换都会重跑一遍——另一套界面可能改过设置或激活了别的世界包，
     重建前重新读取才能保证新界面拿到的是最新数据。
     """
@@ -77,7 +87,8 @@ def bootstrap():
     ensure_cwd()
 
     settings_repo = SettingsRepo()
-    settings = settings_repo.load()
+    settings = settings_repo.load(
+        interface_defaults=(MINI_SETTINGS_DEFAULTS if mode == MODE_MINI else None))
     # 网络代理（可留空）：语音合成与 AI 文本生成共用同一份，见 core/netproxy.py。
     # 启动（含每次切界面）设一次，编辑器预听、挂件聊天与即将启动的副本都用它。
     netproxy.set_override(settings.get("net_proxy"))
@@ -365,7 +376,7 @@ def run_app(initial_mode: str = None, default_mode: str = MODE_PRO) -> None:
     mode = initial_mode or resolve_startup_mode(default_mode)
 
     while True:
-        boot = bootstrap()
+        boot = bootstrap(mode)
         if mode == MODE_MINI:
             from main import run_mini
             request = run_mini(boot)

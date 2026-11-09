@@ -190,23 +190,13 @@ def run_mini(boot):
     world_manager = boot["world_manager"]
     world_state = boot["world_state"]
 
-    # 挂件版的额外默认值：暗色像素主题、常驻置顶、自动用身材预览图当头像
-    # （挂件不提供立绘上传），以及报告自动归档（界面已没有保存键）。
-    # 只在用户没显式设过时补齐，不覆盖专业模式下改过的设置。
-    mini_defaults = {
-        "theme_mode": "Dark",
-        "always_on_top": True,
-        "use_preview_image_as_avatar": True,
-        "auto_save_report": True,
-    }
-
-    for key, value in mini_defaults.items():
-        if key not in settings:
-            settings[key] = value
-
-    # 主题必须在创建任何控件之前确定：纯 tkinter 的配色在控件创建时落地，
+    # 挂件是固定暗色像素界面，不提供亮 / 暗切换；专业模式的外观由配色
+    # （assets/theme/ 的 mode 声明）决定。挂件专属缺省（置顶、预览头像、
+    # 自动归档）由 app.shell.bootstrap 按界面模式交给 SettingsRepo.load 补齐。
+    #
+    # 模式必须在创建任何控件之前确定：纯 tkinter 的配色在控件创建时落地，
     # 首帧之后再翻转会整窗重刷一次，看起来像闪动。
-    appearance.set_mode(settings.get("theme_mode", "Light"))
+    appearance.set_mode(appearance.MODE_DARK)
 
     def _build_repos(world_state):
         return {

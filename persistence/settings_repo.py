@@ -1,6 +1,7 @@
 import json
 import os
 
+from core.ai import PROVIDER_DEFAULTS as _AI_PROVIDER_DEFAULTS
 from dungeon.audio.buses import BUS_VOICE, DEFAULT_BUS_LEVELS
 from dungeon.settings import LEGACY_KEYS as _DUNGEON_SETTINGS_KEYS
 from persistence.dungeon_settings_repo import DungeonSettingsRepo
@@ -26,17 +27,16 @@ class SettingsRepo:
             "world_setting": "appear",
             "world_stance": "coexist",
             "seed": 0,
-            "theme_mode": "Light",
             "color_theme": "blue",
             # 默认配色用于系统浅色；系统深色时改用 theme_dark_palette，
             # 留空表示跟随默认配色（配色即外观，见 ui/ctk/theme.py 的 mode 声明）。
             "theme_palette": "Classic",
             "theme_dark_palette": "Slate",
             "ai_provider": "zhipu",
+            # 初始模板与「新建配置」共用 core.ai 的同一份表，避免两处模型走样。
             "ai_configs": {
-                "zhipu": {"name": "智谱AI", "url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4.7-flash", "api_key": ""},
-                "deepseek": {"name": "DeepSeek", "url": "https://api.deepseek.com", "model": "deepseek-chat", "api_key": ""},
-                "openai": {"name": "ChatGPT", "url": "https://api.openai.com/v1", "model": "gpt-4o", "api_key": ""}
+                pid: {**cfg, "api_key": ""}
+                for pid, cfg in _AI_PROVIDER_DEFAULTS.items()
             },
             "show_casualties": True,
             "auto_save_report": False,
@@ -59,9 +59,15 @@ class SettingsRepo:
             "blocked_words": []
         }
 
-    def load(self) -> dict:
+    def load(self, interface_defaults: dict = None) -> dict:
+        """读取共享设置；``interface_defaults`` 为界面专属缺省。
+
+        界面专属缺省只在用户从未写过该键时补齐——已经落盘的键以用户值为准，
+        即使它与共享缺省相同。传 ``None`` 时只补共享缺省。
+        """
         if not os.path.exists(self._file):
             data = dict(self._defaults)
+            data.update(interface_defaults or {})
             data.update(self._resource_repo.load())
             return data
         try:
@@ -93,6 +99,10 @@ class SettingsRepo:
             if moved:
                 self._resource_repo.absorb_legacy(moved)
             data.update(self._resource_repo.load())
+            explicit = set(data)
+            for k, v in (interface_defaults or {}).items():
+                if k not in explicit:
+                    data[k] = v
             for k, v in self._defaults.items():
                 if k not in data:
                     data[k] = v
@@ -101,6 +111,7 @@ class SettingsRepo:
             return data
         except Exception:
             data = dict(self._defaults)
+            data.update(interface_defaults or {})
             data.update(self._resource_repo.load())
             return data
 

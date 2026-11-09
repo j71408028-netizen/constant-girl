@@ -91,19 +91,12 @@ class CharactersScreen(Screen):
 
 # ==================== 设置 ====================
 class SettingsScreen(Screen):
-    """精简设置：主题、置顶、头像、AI 服务商——每项一行一个控件。"""
+    """精简设置：置顶、头像、世界履历、AI 服务商——每项一行一个控件。"""
 
     TITLE = "设置"
 
     def _build(self, body):
         settings = self.app.settings
-
-        theme = px.CycleRow(
-            body, "主题", ["亮色", "暗色"],
-            on_change=lambda _v: self.app.toggle_theme(),
-            tone="accent", button_width=110)
-        theme.set_value("暗色" if self.app.is_dark() else "亮色")
-        theme.pack(fill='x', pady=3)
 
         topmost = px.CycleRow(
             body, "窗口置顶", ["开", "关"],
@@ -140,7 +133,7 @@ class SettingsScreen(Screen):
             button_width=110)
         provider = self.app.settings.get("ai_provider")
         if self.app.ai_configs():
-            self.provider_row.set_value(self.app.ai_provider_name(provider))
+            self.provider_row.set_value(self.app.ai_provider_label(provider))
         self.provider_row.pack(fill='x', pady=3)
 
         buttons = px.transparent(body)

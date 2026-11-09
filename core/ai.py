@@ -11,16 +11,37 @@ TIMEOUT_SECONDS = 120.0
 
 
 # These are starter profiles, not provider-specific client implementations.
+# 模板取各家当前在售的低价档；模型名会随平台下架变化，用户可在配置里改写。
 PROVIDER_DEFAULTS: Dict[str, dict] = {
-    "zhipu": {"name": "智谱AI", "url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-4.7-flash"},
-    "deepseek": {"name": "DeepSeek", "url": "https://api.deepseek.com", "model": "deepseek-v4-flash"},
-    "openai": {"name": "ChatGPT", "url": "https://api.openai.com/v1", "model": "gpt-4o"},
+    "zhipu": {"name": "智谱AI", "url": "https://open.bigmodel.cn/api/paas/v4/", "model": "glm-5.3-flash"},
+    "deepseek": {"name": "DeepSeek", "url": "https://api.deepseek.com", "model": "deepseek-flash"},
+    "openai": {"name": "ChatGPT", "url": "https://api.openai.com/v1", "model": "gpt-6-luna"},
 }
 PROVIDER_NAMES = {key: value["name"] for key, value in PROVIDER_DEFAULTS.items()}
 
 
 def provider_defaults(provider: str) -> dict:
     return dict(PROVIDER_DEFAULTS.get(provider or "", {}))
+
+
+def profile_labels(configs: dict) -> Dict[str, str]:
+    """把配置表渲染成 ``{profile_id: 显示标签}``。
+
+    配置身份始终是 ``profile_id``，``name`` 只用于显示。重名时用数字后缀
+    消除歧义，保证下拉框的每个选项都能唯一映射回一份配置。
+    """
+    labels: Dict[str, str] = {}
+    used = set()
+    for profile_id, cfg in (configs or {}).items():
+        base = str((cfg or {}).get("name") or profile_id).strip() or str(profile_id)
+        label = base
+        index = 2
+        while label in used:
+            label = f"{base} ({index})"
+            index += 1
+        used.add(label)
+        labels[profile_id] = label
+    return labels
 
 
 def describe_ai_error(exc) -> str:

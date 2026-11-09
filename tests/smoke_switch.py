@@ -46,6 +46,12 @@ import sys
 import tempfile
 import traceback
 
+# Windows 控制台常是 GBK，输出 ⇄ 之类的符号会直接抛 UnicodeEncodeError；
+# 与 run_checks.py 一致，把本脚本的 IO 钉在 UTF-8 上。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from paths import data_dir, ensure_cwd
@@ -161,11 +167,11 @@ def build_mini(boot):
     from ui.mini.app import MiniApp
 
     settings = boot["settings"]
-    for key, value in (("theme_mode", "Dark"), ("always_on_top", True),
+    for key, value in (("always_on_top", True),
                        ("use_preview_image_as_avatar", True),
                        ("auto_save_report", True)):
         settings.setdefault(key, value)
-    appearance.set_mode(settings.get("theme_mode", "Light"))
+    appearance.set_mode(appearance.MODE_DARK)
 
     root = tk.Tk()
 
