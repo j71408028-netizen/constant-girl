@@ -53,7 +53,7 @@ CHAPTERS_AB = [
     {"name": "B"},
 ]
 
-#: effect_override 的章节 A 敏感效果默认（性格缺省时 = 强度 × 客观影响）
+#: effect_override 的章节 A 演化修正默认（性格缺省时 = 强度 × 客观影响）
 SENSITIVITY_A = [{"attr": "介入度", "amount": 1.0}]
 
 

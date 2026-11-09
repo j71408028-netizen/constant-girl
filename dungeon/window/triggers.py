@@ -2,8 +2,8 @@
 
 触发器 = 条件（所在章节 + 前置触发器 + 条件规则） + 一个动作。
 章节自身没有条件：进入/离开都由触发器的 ``goto`` 动作执行，章节只描述
-身处其中时的背景与敏感效果。``effect`` 动作则给这套环境加一层**限时覆盖**
-（背景滤镜 / 音乐音量 / 语音效果 / 敏感效果），走完步数后交还章节默认值，
+身处其中时的背景与演化修正。``effect`` 动作则给这套环境加一层**限时覆盖**
+（背景滤镜 / 音乐音量 / 语音效果 / 演化修正），走完步数后交还章节默认值，
 覆盖项的模型与合成规则见 ``dungeon/overrides.py``。
 """
 
@@ -66,7 +66,7 @@ class TriggerHandler:
 
     # ------------------ 章节 ------------------
     def _build_chapter_effect(self, effect) -> dict:
-        """章节敏感效果：无持续步数，离开章节即失效。"""
+        """章节演化修正：无持续步数，离开章节即失效。"""
         return {
             "attr": effect.get("attr", ""),
             "amount": sensitivity_amount(effect.get("strength", 1.0),
@@ -236,7 +236,7 @@ class TriggerHandler:
         """按当前生效的覆盖集合重算各维度，未覆盖的维度回到章节默认值。
 
         每次覆盖入队/到期都整体重算，而不是「记录旧值、到期抄回去」：中途换章、
-        多条覆盖叠加时都不会把上一章或已失效的值翻出来。敏感效果无副作用需要
+        多条覆盖叠加时都不会把上一章或已失效的值翻出来。演化修正无副作用需要
         落地，读取时按 :meth:`_effective_sensitivity_effects` 现算。
         """
         self._refresh_visual_filter()
@@ -297,7 +297,7 @@ class TriggerHandler:
             speech.set_effect(self.current_voice_fx)
 
     def _effective_sensitivity_effects(self):
-        """当前生效的持续敏感效果：有覆盖用覆盖，否则用章节默认（离开章节即空）。"""
+        """当前生效的持续演化修正：有覆盖用覆盖，否则用章节默认（离开章节即空）。"""
         override = self._active_override("sensitivity")
         if override is None:
             return list(self.chapter_sensitivity_effects)

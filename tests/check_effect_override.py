@@ -109,7 +109,7 @@ check("语音覆盖改写生效值但不动章节默认",
       and host.current_voice_fx == {"others": {"preset": "room_echo", "intensity": 50}}
       and host.chapter_voice_fx == {"her": {"preset": "giant_boom", "intensity": 60}},
       str(host.current_voice_fx))
-# 敏感效果：覆盖替换章节默认
+# 演化修正：覆盖替换章节默认
 host._push_effect_override(parse_overrides(
     {"sensitivity": [{"attr": "破坏性", "strength": 2.0, "objective": 0.5}], "duration": 2}), 2)
 check("敏感覆盖替换章节默认（性格缺省时 = 强度×客观影响）",

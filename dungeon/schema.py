@@ -203,7 +203,7 @@ CHAPTER_FIELDS = (
     FieldSpec("fixed_text", "dict", "固定文本", None,
               note="指向方案目录下的 .txt：本章不走 AI 生成，按逻辑段落逐段推进；"
                    "空配置 = 本章照常由 AI 生成"),
-    FieldSpec("sensitivity", "list", "章节持续敏感效果"),
+    FieldSpec("sensitivity", "list", "章节持续演化修正"),
 )
 
 # 固定文本：只有 ``path``；逻辑段落与指令行的语义见 ``dungeon/script_text``

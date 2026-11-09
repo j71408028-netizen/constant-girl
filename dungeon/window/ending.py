@@ -1,4 +1,4 @@
-"""敏感效果与结局生成。"""
+"""演化修正与结局生成。"""
 
 import threading
 
@@ -7,9 +7,9 @@ from dungeon.splitter import strip_highlight_markers
 
 
 class EndingHandler:
-    # ------------------ 敏感效果汇总 ------------------
+    # ------------------ 演化修正汇总 ------------------
     def _apply_sensitivity_mods(self) -> dict:
-        """汇总当前生效的持续敏感效果（属性名 -> 倍率改变量）。
+        """汇总当前生效的持续演化修正（属性名 -> 倍率改变量）。
 
         归属章节的默认效果，被「章节效果短暂覆盖」改写时以覆盖为准（见
         ``window/triggers.py::_effective_sensitivity_effects``）；离开章节即失效。

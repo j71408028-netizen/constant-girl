@@ -6,7 +6,7 @@
 - ``background``：本章节的特定背景（含平滑切换与滤镜）；
 - ``bgm``：本章节的背景音乐（曲目、音量、循环、淡入淡出）；
 - ``voice_fx``：本章节的对话语音物理效果（她 / 其他人两档）；
-- ``sensitivity``：本章节持续生效的敏感效果；
+- ``sensitivity``：本章节持续生效的演化修正；
 - ``fixed_text``：本章节是否播放**现成文本**（不走 AI 生成，见
   ``dungeon.script_text``）；
 - ``color``：编辑器里该章节的自定义颜色。
@@ -32,7 +32,7 @@ CHAPTER_COLOR_PRESETS = (
     "#0F766E", "#B45309", "#1D4ED8", "#9D174D", "#3F6212", "#7E22CE",
 )
 
-# 敏感效果默认作用于哪个属性；破坏性走性格“重力”，介入度走“敏感值”，
+# 演化修正默认作用于哪个属性；破坏性走性格“重力”，介入度走“敏感值”，
 # 其余属性走“策略值”（见 Personality.strategy_value）
 DEFAULT_SENSITIVITY_ATTR = "介入度"
 DESTRUCTION_ATTR = "破坏性"
@@ -76,7 +76,7 @@ def shade_for_mode(hex_color: str, theme_mode: str) -> str:
 
 
 def normalize_sensitivity_effect(raw: dict) -> dict:
-    """把配置里的敏感效果补全为 ``{attr, strength, objective}``。"""
+    """把配置里的演化修正补全为 ``{attr, strength, objective}``。"""
     raw = raw if isinstance(raw, dict) else {}
     try:
         strength = float(raw.get("strength", 1.0))
@@ -324,7 +324,7 @@ def matches_scope(scope, current_chapter) -> bool:
 
 def sensitivity_amount(strength, objective, attr, personality,
                        action_points=None) -> float:
-    """敏感效果倍率 = 强度 ×（性格值 + 客观影响）。
+    """演化修正量 = 强度 ×（性格系数 + 客观影响）。
 
     破坏性由性格“重力”调制，介入度由“敏感值”调制，其余属性由“策略值”
     （敏感×(1-归一行动点数) + 重力×归一个性强度）调制；无性格时基底为 0。

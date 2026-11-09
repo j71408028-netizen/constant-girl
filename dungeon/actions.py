@@ -83,7 +83,7 @@ WINDOW_FX_KEYS = tuple(key for key, _label in WINDOW_FX)
 # 2. ``option`` / ``mini_game``  模态动作：占用步进，先于流程类占位；
 # 3. ``goto``          章节跳转：之后生效的 effect / insert 落在新章节里
 #                      （effect 若先于 goto 生效会被换章清除，等于白放）；
-# 4. ``effect``        章节效果短暂覆盖（背景滤镜 / 音乐音量 / 语音效果 / 敏感效果）；
+# 4. ``effect``        章节效果短暂覆盖（背景滤镜 / 音乐音量 / 语音效果 / 演化修正）；
 # 5. ``insert``        插入段落；
 # 6. ``none``          条件标记：最后才立，依赖它的触发器最早下一轮可见。
 ACTION_POSITIONS = (

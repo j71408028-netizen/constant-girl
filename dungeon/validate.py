@@ -1119,7 +1119,7 @@ def _validate_effect_overrides(action_data, path, add, coupling_level=None) -> N
 
     四个维度同名于 ``action_data`` 字段（见 ``dungeon/overrides.py``）：背景滤镜
     ``filter`` / 音乐档位 ``bgm_level``（兼容旧 ``bgm_volume``）/ 语音效果 ``voice_fx``
-    / 敏感效果 ``sensitivity``。看的是**原文**——写错的滤镜、超范围档位只有原文
+    / 演化修正 ``sensitivity``。看的是**原文**——写错的滤镜、超范围档位只有原文
     看得出来，归一化会把它们悄悄改成合法值或直接丢掉。
     """
     data = action_data if isinstance(action_data, dict) else {}
@@ -1144,12 +1144,12 @@ def _validate_effect_overrides(action_data, path, add, coupling_level=None) -> N
         raw = data.get("sensitivity")
         if not isinstance(raw, list):
             add("warning", field_path + ".sensitivity",
-                "敏感效果覆盖必须是数组（空数组 = 清除），加载时忽略该维度")
+                "演化修正覆盖必须是数组（空数组 = 清除），加载时忽略该维度")
         else:
             for index, item in enumerate(raw):
                 item_path = f"{field_path}.sensitivity[{index}]"
                 if not isinstance(item, dict):
-                    add("warning", item_path, "敏感效果条目必须是对象")
+                    add("warning", item_path, "演化修正条目必须是对象")
                     continue
                 for numeric in ("strength", "objective"):
                     if numeric in item and not _is_number(item[numeric]):

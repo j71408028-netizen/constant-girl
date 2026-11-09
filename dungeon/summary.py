@@ -86,7 +86,7 @@ class StorySummarizer:
         """登记一条确定性关键事件，常驻提示词（有界，超出丢弃最旧）。
 
         只记定性里程碑（章节进出、选项选择、介入度/破坏性跨阈值），
-        不记敏感效果等纯数值信息。
+        不记演化修正等纯数值信息。
         """
         text = _clip(text, KEY_EVENT_CHARS)
         if not text:
