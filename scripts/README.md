@@ -18,7 +18,7 @@ GUI 冒烟）在 `tests/`，由 `python tests/run_checks.py` 统一驱动；另�
 | 脚本 | 性质 | 用途 |
 |---|---|---|
 | `dungeon_autopilot.py` | 真窗口自动驾驶 | 副本窗口全生命周期回归（15 场景，需显示器）：构造 → `run()` → 步进 → 关闭 → 落盘。最强回归，`--in-process` 连跑全部场景，`--scene <名> --isolate` 单跑。**进 CI**（`.github/workflows/gui-smoke.yml`，跳 `text-components` 实跑 14 个） |
-| `escape_sim.py` | 无头模拟 | escape_giantess 小游戏模拟（无显示器可跑）：地图生成 / 出生点连通性 / bot 实跑结算。是 `dungeon_autopilot` 对应小游戏场景的前置逻辑验证 |
+| `escape_sim.py` | 无头模拟（**进 CI**：`checks.yml`） | escape_giantess 小游戏逻辑回归（无显示器可跑）：关卡生成硬约束（出口 / 出生点可站 / 连通区不塌）→ 随机走位压一段 → 强制一次胜、一次负校验 `api.finish` 的 payload 形状。种子默认固定（`--seed N`，`--seed random` 走真随机），保证门禁可复现。与 `dungeon_autopilot --scene mini-game-escape`（只验渲染链路）互补 |
 | `child_dpi_probe.py` | 探针（**不判红**） | 副本子进程 DPI 感知：拉两个子进程打印各自的 `GetDpiForSystem()` 与注册表 `AppliedDPI`，人工对照。原 `tests/check_dungeon_child_dpi.py`——"感知探针应等于 AppliedDPI"的前提在真机不成立（本机 168 vs 192），当门禁只会长期报红，2026-10-13 迁来 |
 | `platform_api_report.py` | 报告（**不判红**） | Windows 专有 API 落点清单，发布 macOS 前过一眼。原 `tests/check_platform_compat.py`；它原先兼守的"模态对话框不得构造期裸 `grab_set()`"判红约束已归 `tests/check_modal_grabs.py` 专职（AST 版 + 行为分支），2026-10-13 迁来 |
 | `scenario_validate.py` | 批量校验（**CI 显式调用**） | 副本方案配置批量校验（`validate_scenario_config`，含资产存在性），有 error 退出码 1。原 `tests/check_scenarios.py`——它校验的是 `data/` 下的用户方案而不是仓库代码：本地编辑自己的方案出错会弄红 `run_checks.py`，CI 的干净检出里没有这些方案、永远不红，方向反了；且会被 `run_checks.py` 与 CI 显式 step 各跑一遍。2026-10-13 迁来，`tests/` 只留代码守卫 |

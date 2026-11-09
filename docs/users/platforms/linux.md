@@ -216,7 +216,7 @@ PYTHON_BIN=python3.12 bash build/linux/build_linux.sh   # 指定解释器
 
 | 工作流 | 触发 | 内容 |
 |---|---|---|
-| [`checks.yml`](../../../.github/workflows/checks.yml) | 每 PR / 推 `main` | 离线门禁：Ubuntu（Python 3.12 与 3.14 各一轮）+ Windows（3.12）跑 `tests/run_checks.py`（全部离线守卫）与 `scripts/scenario_validate.py`（默认方案 0 error） |
+| [`checks.yml`](../../../.github/workflows/checks.yml) | 每 PR / 推 `main` | 离线门禁：Ubuntu（Python 3.12 与 3.14 各一轮）+ Windows（3.12）跑 `tests/run_checks.py`（全部离线守卫）、`scripts/scenario_validate.py`（默认方案 0 error）与 `scripts/escape_sim.py`（小游戏逻辑回归，无显示器） |
 | [`gui-smoke.yml`](../../../.github/workflows/gui-smoke.yml) | 每晚 02:00（CST）+ 手动 | xvfb + 软件 GL（llvmpipe）：`dungeon_autopilot --scene all --isolate`、`smoke_mini`、`smoke_switch`；另一个 job 跑 `build/linux/build_linux.sh --self-check` 并上传目录包 |
 
 GUI 用例对长会话与驱动状态敏感（见 §5 与 附录A §5）：

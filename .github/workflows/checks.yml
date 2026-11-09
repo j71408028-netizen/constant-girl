@@ -61,3 +61,9 @@ jobs:
 
       - name: 默认方案校验（0 error 才退 0）
         run: python scripts/scenario_validate.py
+
+      # escape_giantess 小游戏的无头逻辑回归：关卡生成硬约束、随机走位压一段、
+      # 结算 payload 形状。不建渲染上下文（离屏画布走 PIL），因此能进 PR 门禁，
+      # 不需要 xvfb——这跟 gui-smoke 里的 --scene mini-game-escape（验渲染链路）互补。
+      - name: 小游戏无头模拟（escape_giantess）
+        run: python scripts/escape_sim.py

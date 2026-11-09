@@ -95,7 +95,7 @@ class MyGame(MiniGame):
 | `dungeon_autopilot.py --scene mini-game` | web 后端链路（桩包）：结果回传 / 胜负分支 / 回放 | `python scripts/dungeon_autopilot.py --scene mini-game` |
 | `dungeon_autopilot.py --scene mini-game-py` | py 后端链路：覆盖层舞台打开 / 结算分支 / ESC 中止 | `python scripts/dungeon_autopilot.py --scene mini-game-py` |
 | `dungeon_autopilot.py --scene mini-game-escape` | escape 移植版真渲染冒烟：离屏 GL 纹理上传 / 每帧绘制 / 中止 | `python scripts/dungeon_autopilot.py --scene mini-game-escape` |
-| `escape_sim.py` | escape 无头模拟（无显示器可跑）：地图生成 / 连通性 / bot 实跑结算 | `python scripts/escape_sim.py` |
+| `escape_sim.py` | escape 逻辑回归（无显示器、**进 PR 门禁**）：关卡生成硬约束 / 连通性 / 随机走位 / 结算 payload 形状 | `python scripts/escape_sim.py` |
 | `smoke_mini_game.py` | web 后端真窗口桥接（需显示器 + pywebview） | `python tests/smoke_mini_game.py` |
 
 内置参考实现：`data/packs/minigames/reaction/`（点击反应，~100 行）；

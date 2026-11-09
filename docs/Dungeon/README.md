@@ -112,6 +112,11 @@
 > 调用）。三者原先在 `tests/`，2026-10-13 移出——只打印清单、不给出结论，或校验的是
 > 用户数据而不是代码的脚本，不该占 CI 门禁位。分句器/语音链路等仍由 `tests/` 的守卫覆盖。
 
+> `scripts/escape_sim.py` 不属于上面两类：它**判红**（断言失败即非零退出）且**不需要
+> 显示器**，是 escape_giantess 的逻辑回归——关卡生成硬约束 → 随机走位压一段 → 强制
+> 一次胜、一次负校验 `api.finish` 的 payload 形状，由 `checks.yml` 在 PR 门禁里显式
+> 调用。种子默认固定，失败可复现。
+
 需显示器（GUI 冒烟层，不进无 GUI 门禁）：
 
 | 脚本 | 覆盖 | 命令 |
@@ -119,7 +124,6 @@
 | `dungeon_autopilot.py` | 真窗口生命周期：构造 → `run()` → 步进 → 关闭 → 落盘（15 场景，含原生输入线程、章节背景音乐、章节对话语音物理效果、小游戏触发器（py 覆盖层舞台与 web 子进程两条链路的胜负分支与中断、escape 移植版真渲染冒烟）、对话语音与文本组件接管冒烟） | `python scripts/dungeon_autopilot.py` |
 | `smoke_mini_game.py` | 小游戏子进程链路（需显示器 + pywebview）：子进程自动结算回传 / 中断按无结果处理 | `python tests/smoke_mini_game.py` |
 | `check_minigame.py` | 小游戏包契约：manifest（backend/entry/params）+ py 游戏代码（恰一个 MiniGame 子类、禁渲染后端/线程/print、禁私有面 `api._`） | `python tests/check_minigame.py` |
-| `escape_sim.py` | escape_giantess 无头模拟：地图生成 / 出生点连通性 / bot 实跑与自然结算（无显示器可跑） | `python scripts/escape_sim.py` |
 
 判定方式详见 [调试自动化](window_automation.md) §4：**看结论行，不看退出码**（默认如此；
 `--require-clean-exit` 复测退出路径时退出状态也计入验收）。
