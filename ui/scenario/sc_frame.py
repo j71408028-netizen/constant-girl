@@ -59,7 +59,7 @@ class ScenarioEditor(ctk.CTkFrame):
         self.voice = normalize_voice(None)
         self.text_component = DEFAULT_TEXT_COMPONENT  # 文本主组件三选一
         self.evolution_attrs = []  # 统一演化量列表
-        self.chapters = []  # 章节列表（不含条件，只描述背景与持续敏感效果）
+        self.chapters = []  # 章节列表（不含条件，只描述背景与持续演化修正）
         self.triggers = []
         self.components = []  # 显示组件 id 列表（不含文本主组件）
         self.components_params = {}  # {组件id: {参数: 值}}

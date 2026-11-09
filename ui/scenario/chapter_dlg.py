@@ -58,7 +58,7 @@ class ChapterEditDialog(BaseDialog):
 
     章节没有条件字段：进入与离开都由触发器的「跳转章节」动作执行。
     这里只编辑“身处其中时的环境”——地点与取景（地点名、取景地址、本章地标、
-    结局出口）、特定背景、背景音乐、对话语音的物理效果与持续敏感效果，外加编辑器
+    结局出口）、特定背景、背景音乐、对话语音的物理效果与持续演化修正，外加编辑器
     配色。
 
     版面沿用触发器编辑对话框确立的风格：底部按钮固定，整张表单（基础信息、
@@ -102,7 +102,7 @@ class ChapterEditDialog(BaseDialog):
         self.cast_members = normalize_cast(cast_members)
         self.result = None
         self.evolution_attrs = [a for a in (evolution_attrs or []) if isinstance(a, dict)]
-        # 敏感效果只针对介入度、破坏性与自定义属性，总伤亡不在演化对象内
+        # 演化修正只针对介入度、破坏性与自定义属性，总伤亡不在演化对象内
         self.sens_targets = [a["name"] for a in self.evolution_attrs
                              if a.get("name") and a.get("type") != "casualty"] \
             or ["介入度", "破坏性"]
@@ -336,8 +336,8 @@ class ChapterEditDialog(BaseDialog):
         self._build_voice_fx_rows(block.body)
         self._refresh_section_status(block)
 
-        # 持续敏感效果
-        block = self._add_section(area, "持续敏感效果", expanded=default_open,
+        # 持续演化修正
+        block = self._add_section(area, "持续演化修正", expanded=default_open,
                                   status=self._sensitivity_status)
         self._build_sensitivity_section(block.body)
         self._refresh_section_status(block)
@@ -448,7 +448,7 @@ class ChapterEditDialog(BaseDialog):
             return ""
         attrs = [row["attr_var"].get().strip() for row in self.sens_rows]
         attrs = [a for a in attrs if a]
-        text = f"持续敏感：{len(self.sens_rows)} 条"
+        text = f"持续演化修正：{len(self.sens_rows)} 条"
         return text + (f"（{'、'.join(attrs)}）" if attrs else "")
 
     # ---------- 在场人物 ----------
@@ -567,7 +567,7 @@ class ChapterEditDialog(BaseDialog):
         self.address_hint.grid(row=2, column=0, columnspan=2, sticky='w',
                                padx=10, pady=(0, 8))
 
-        # 独特地标行编辑：像敏感效果一样逐行添加（名称 / 尺寸 / 方向）
+        # 独特地标行编辑：像演化修正一样逐行添加（名称 / 尺寸 / 方向）
         # 靠左对齐（不缩进到控件列），行内控件多，需要整张卡片的宽度
         self.landmark_box = ctk.CTkFrame(frame, fg_color="transparent")
         self._landmark_rows = []
@@ -632,7 +632,7 @@ class ChapterEditDialog(BaseDialog):
         self._sync_exit_row()
 
     def _add_landmark_row(self, item: dict = None):
-        """加一行本章独特地标（形式同敏感效果行：名称 / 尺寸 / 方向 + 移除）。
+        """加一行本章独特地标（形式同演化修正行：名称 / 尺寸 / 方向 + 移除）。
 
         方向一个下拉三选一：高 = 竖向；长 / 宽 = 横向（横向类型 length / width）。
         """
@@ -869,15 +869,15 @@ class ChapterEditDialog(BaseDialog):
         ctk.CTkLabel(fade, text="秒（0 = 直接切换）", font=self.UI_FONT_SMALL,
                      text_color=CHAPTER_HINT).pack(side='left', padx=(6, 0))
 
-    # ---------- 持续敏感效果 ----------
+    # ---------- 持续演化修正 ----------
     def _build_sensitivity_section(self, parent):
         head = ctk.CTkFrame(parent, fg_color="transparent")
         head.pack(fill='x')
         # 提示与「添加效果」同一行：提示占左、按钮靠右
         self._empty_sens_hint = ctk.CTkLabel(
             head, justify='left', anchor='w',
-            text="敏感效果倍率 = 强度 ×（性格二阶量 + 客观影响）；\n"
-                 "介入度取敏感值、破坏性取重力、其余属性取策略值。",
+            text="演化修正量 = 强度 ×（该属性的性格系数 + 客观影响）；\n"
+                 "介入度的性格系数是敏感值，破坏性是重力，其余属性是策略值。",
             font=self.UI_FONT_SMALL, text_color=CHAPTER_HINT)
         self._empty_sens_hint.pack(side='left', fill='x', expand=True)
         self._small_button(head, "添加效果", self._add_sensitivity_row,
@@ -1073,7 +1073,7 @@ class ChapterEditDialog(BaseDialog):
                                                    int(intensity_var.get())))}
         return result
 
-    # ---------- 敏感效果 ----------
+    # ---------- 演化修正 ----------
     def _add_sensitivity_row(self, effect: dict = None):
         effect = effect or {}
 
@@ -1274,17 +1274,17 @@ class ChapterEditDialog(BaseDialog):
         for index, row in enumerate(self.sens_rows, start=1):
             attr = row["attr_var"].get().strip()
             if not attr:
-                ui.ctk.dialogs.showerror("错误", f"第 {index} 条敏感效果没有选择属性")
+                ui.ctk.dialogs.showerror("错误", f"第 {index} 条演化修正没有选择属性")
                 return
             try:
                 strength = float(row["strength_var"].get())
             except ValueError:
-                ui.ctk.dialogs.showerror("错误", f"第 {index} 条敏感效果的强度必须是数字")
+                ui.ctk.dialogs.showerror("错误", f"第 {index} 条演化修正的强度必须是数字")
                 return
             try:
                 objective = float(row["objective_var"].get())
             except ValueError:
-                ui.ctk.dialogs.showerror("错误", f"第 {index} 条敏感效果的客观影响必须是数字")
+                ui.ctk.dialogs.showerror("错误", f"第 {index} 条演化修正的客观影响必须是数字")
                 return
             sensitivity.append({"attr": attr, "strength": strength, "objective": objective})
 

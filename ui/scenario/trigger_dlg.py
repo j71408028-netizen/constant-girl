@@ -102,7 +102,7 @@ class TriggerEditDialog(BaseDialog):
         self.scenario_id = scenario_id
         self.result = None
         self.evolution_attrs = [a for a in (evolution_attrs or []) if isinstance(a, dict)]
-        # 敏感效果只针对介入度、破坏性与自定义属性，总伤亡不在演化对象内
+        # 演化修正只针对介入度、破坏性与自定义属性，总伤亡不在演化对象内
         self.sens_targets = [a["name"] for a in self.evolution_attrs
                              if a.get("name") and a.get("type") != "casualty"] or evolution_names
         self.chapter_names = chapter_names(chapters)
@@ -259,7 +259,7 @@ class TriggerEditDialog(BaseDialog):
         return control
 
     def _form_wide(self, parent, row, pady=(0, 8)):
-        """跨两列的容器：放子表单（语音两档 / 敏感效果条目 / 小游戏参数）。
+        """跨两列的容器：放子表单（语音两档 / 演化修正条目 / 小游戏参数）。
 
         右侧不留边距，让子表单里的控件与其它行的控件落在同一条右边缘上。
         """
@@ -430,7 +430,7 @@ class TriggerEditDialog(BaseDialog):
     def _build_effect_form(self, parent):
         """四个可覆盖维度的勾选表单（不勾 = 沿用章节，勾 = 这段期间改写）。
 
-        背景滤镜 / 音乐音量 / 语音效果 / 敏感效果各自一个勾选；同名维度多条覆盖
+        背景滤镜 / 音乐音量 / 语音效果 / 演化修正各自一个勾选；同名维度多条覆盖
         并存时后触发的优先，所以这里只负责挑选值，合成由运行时按集合算。
         """
         frame = self._form_grid(ctk.CTkFrame(parent, fg_color="transparent"))
@@ -477,9 +477,9 @@ class TriggerEditDialog(BaseDialog):
         self._build_effect_voice_rows(self._form_wide(frame, row, pady=(0, 8)))
         row += 1
 
-        # --- 敏感效果 ---
+        # --- 演化修正 ---
         self.effect_sens_on = tk.BooleanVar(value=False)
-        sens_control = self._form_row(frame, row, "敏感效果")
+        sens_control = self._form_row(frame, row, "演化修正")
         self._small_button(sens_control, "添加条目", self._add_effect_sens_row).pack(
             side='left')
         self._checkbox_field(sens_control, "", self.effect_sens_on).pack(
@@ -540,7 +540,7 @@ class TriggerEditDialog(BaseDialog):
                                                    int(intensity_var.get())))}
         return result
 
-    # ---------- 覆盖维度：敏感效果条目 ----------
+    # ---------- 覆盖维度：演化修正条目 ----------
     def _add_effect_sens_row(self, effect: dict = None):
         effect = effect or {}
         row = ctk.CTkFrame(self.effect_sens_container, fg_color="transparent")
@@ -595,7 +595,7 @@ class TriggerEditDialog(BaseDialog):
         if hint is None:
             self._effect_sens_hint = ctk.CTkLabel(
                 self.effect_sens_container,
-                text="（未添加条目：勾选后覆盖为空，即这段期间没有敏感效果）",
+                text="（未添加条目：勾选后覆盖为空，即这段期间没有演化修正）",
                 font=self.UI_FONT_SMALL, text_color=TRIGGER_HINT, anchor='w')
             self._effect_sens_hint.grid(row=0, column=0, sticky='w')
 
@@ -605,11 +605,11 @@ class TriggerEditDialog(BaseDialog):
             try:
                 strength = float(row["strength_var"].get())
             except ValueError:
-                raise ValueError(f"第 {index} 条敏感效果覆盖的强度必须是数字")
+                raise ValueError(f"第 {index} 条演化修正覆盖的强度必须是数字")
             try:
                 objective = float(row["objective_var"].get())
             except ValueError:
-                raise ValueError(f"第 {index} 条敏感效果覆盖的客观影响必须是数字")
+                raise ValueError(f"第 {index} 条演化修正覆盖的客观影响必须是数字")
             attr = row["attr_var"].get().strip() or DEFAULT_SENSITIVITY_ATTR
             result.append({"attr": attr, "strength": strength, "objective": objective})
         return result
@@ -1534,7 +1534,7 @@ class TriggerEditDialog(BaseDialog):
                        ("filter", "bgm_level", "voice_fx", "sensitivity")):
                 ui.ctk.dialogs.showerror(
                     "错误", "请至少勾选一个要覆盖的维度"
-                            "（背景滤镜 / 音乐音量 / 语音效果 / 敏感效果）")
+                            "（背景滤镜 / 音乐音量 / 语音效果 / 演化修正）")
                 return
             action_data["duration"] = duration
 
