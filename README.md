@@ -1,249 +1,189 @@
 # ConstantGirl
 
-> 旧称「巨大娘生成器 / GiantessGenerator」。改名不影响已有数据：打包版首次启动会把
-> 旧的应用数据目录整体迁移到新名下。
+<p>
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-2f855a">
+  <img alt="python" src="https://img.shields.io/badge/python-3.11%2B-3776ab">
+  <img alt="platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-6b7280">
+</p>
 
-一个面向桌面端的「巨大娘」主题互动创作工具。你可以在世界中设定地标与事件，生成一位巨大化的少女角色，将她的身体部位与建筑等地标进行对比，并借助 AI 生成图文并茂的报告和副本；也可以制作角色、副本方案和挑战包，分享你的角色或世界设定。
-- 披露：代码和部分素材采用AI辅助生成。
+一款纯本地运行的「巨大娘」主题互动创作工具：给少女设定身高与性格，把她同城市里的地标逐一对比，生成图文报告；再进入副本，让 AI 按剧本推进一段可以选择的文字冒险。角色、剧本、世界设定都能打包分享。
 
-- 纯本地运行：角色、地标、描述等数据全部保存在本机数据目录（源码版为项目内 `data/`，打包版为系统用户数据目录）
-- AI 辅助写作：可选接入任意兼容 OpenAI SDK 的 API 生成报告与副本文本
-- 浅色 / 深色主题
+![探索模式主界面：左侧导航，中间是角色参数，右侧是探索报告](docs/images/main-window.png)
 
-## 功能一览
+- **纯本地**：角色、地标、报告、设置都保存在本机，不需要账号，不上传数据
+- **AI 可选**：不接 AI 也能建角色、出完整的测量报告；接上任意 OpenAI 兼容接口后才有副本剧情与角色聊天
+- **两套界面**：1280×720 的桌面专业模式，与约 360×620 的低像素挂件模式，随时热切换
+- **可分享**：角色、副本方案、世界包都能打成文件，别人一键载入即可游玩
 
-| 模块   | 说明                                            |
-|------|-----------------------------------------------|
-| 探索模式 | 测量巨大娘的身体部位、地标对比，生成探索报告或AI副本；创建角色后可拥有长期档案与聊天系统 |
-| 挑战模式 | 将角色、资源打包为加密挑战包（`.chal`），挑战在其中达成副本结局           |
-| 文本管理 | 管理地标、描述等文本资源，支持多风格与自定义风格                      |
-| 剧本编辑 | 编辑副本方案，设定AI提示词与独特叙事功能                         |
-| 设置   | 主题外观、生成参数、AI 服务商配置等                           |
+> 当前处于 alpha 阶段：功能与界面文案仍在变动，升级前建议先备份 `data/`。
 
-## 环境要求
+## 快速开始
 
-- Windows、macOS 12 或更新版本；Linux（X11 / XWayland 会话）见下方「Linux（X11 / XWayland）」与 [docs/users/platforms/linux.md](docs/users/platforms/linux.md)
-- Python 3.10 及以上（开发环境为 Python 3.13；Linux 上 Python 3.12 / 3.14 均已实测）
-- macOS 需要可用的 Tcl/Tk 图形组件。使用 python.org 安装包或 Homebrew Python 均可
-- 若使用 AI 生成功能，需自行准备对应服务商的 API Key（可选功能）
+### 方式一：下载发行版（推荐给玩家）
 
-### 支持平台矩阵
+到 [Releases](https://github.com/j71408028-netizen/constant-girl/releases) 下载对应平台的压缩包，解压后直接运行，不需要安装 Python：
 
-| 平台 | 状态 | 说明 |
-|---|---|---|
-| Windows 10/11 | ✅ 受支持 | 打包发行（`build/windows/build_windows.ps1`），系统自带 WebView2 支撑内置小游戏 |
-| macOS 12+ | ✅ 受支持 | 打包发行（`build/macos/build_macos.sh`） |
-| Linux · X11 会话 | ✅ 受支持 | 打包发行（`build/linux/build_linux.sh`，onedir + tar.gz，带打包自检）；见下方「Linux（X11 / XWayland）」 |
-| Linux · Wayland + XWayland | ⚠️ 可用 | 副本窗口经 XWayland 显示；窗口置顶依赖窗口管理器的 EWMH 支持 |
-| Linux · 纯 Wayland（无 XWayland） | ❌ 不支持 | 副本窗口（GLFW）无法创建 |
+| 平台 | 解压后运行 |
+|---|---|
+| Windows 10/11 | `constant-girl.exe`（首次运行可能被 SmartScreen 拦截，选「更多信息 → 仍要运行」） |
+| macOS 12+（Apple Silicon） | `ConstantGirl.app`；首次打开需右键 →「打开」 |
+| Linux（X11 / XWayland） | `constant-girl` |
 
-## 安装与运行
+发行版的数据不在安装目录里，详见[数据与存档](#数据与存档)。
 
-### Windows
+### 方式二：从源码运行
+
+需要 Python **3.11 或更高**（3.10 装不上渲染后端 `imgui-bundle`；开发环境用 3.13）：
+
+```bash
+git clone https://github.com/j71408028-netizen/constant-girl.git
+cd constant-girl
+python -m venv .venv
+```
+
+<details>
+<summary>Windows（PowerShell）</summary>
 
 ```powershell
-py -3.10 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python main.py
 ```
 
+</details>
 
-### macOS
+<details>
+<summary>macOS</summary>
 
 ```bash
-xcode-select --install              # 首次配置 macOS 开发工具时需要
-python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python main.py
 ```
 
-默认从项目根目录启动即可。程序也会在启动时修正工作目录，因此从 Finder、快捷方式或其他目录启动源码版时，`data/` 和 `assets/` 仍能被定位。
+需要可用的 Tcl/Tk（python.org 安装包或 Homebrew Python 均可）。渲染后端目前只提供 Apple Silicon 轮子。
+</details>
 
-### Linux（X11 / XWayland）
+<details>
+<summary>Linux（X11 / XWayland）</summary>
 
 ```bash
-sudo apt install python3-tk fontconfig fonts-noto-cjk   # Tk 图形组件、字体查询与中文字体；发行版名不同时按包管理器替换
-python3 -m venv .venv
+sudo apt install python3-tk fontconfig fonts-noto-cjk   # Tk、字体查询、中文字体
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt     # 必装：openai / numpy / customtkinter 等都在这里
+python -m pip install -r requirements.txt
 python main.py
 ```
 
-```bash
-# 离线自检（不需要显示器，31 项）
-.venv/bin/python tests/run_checks.py
-# GUI 冒烟（需要显示器或 xvfb）
-.venv/bin/python tests/smoke_switch.py
+纯 Wayland 合成器下副本窗口无法创建，请在 X11 或 XWayland 会话中运行。
+</details>
 
-# 打包（PyInstaller onedir → dist/constant-girl + .tar.gz 目录包）
-bash build/linux/build_linux.sh
-# 打包 + 打包自检：在打包态里启动发布包、引导数据目录，并真开副本窗口跑六个场景
-bash build/linux/build_linux.sh --self-check
-```
+### 两种版本的差别
 
-Wayland 原生会话不在支持范围内：请在 **XWayland**（`XDG_SESSION_TYPE=wayland` 时的默认行为）下运行；
-纯 Wayland 合成器（如 sway 的纯 Wayland 后端）下副本窗口无法创建。X11 会话可直接使用。
-Linux 侧的兼容细节、限制与实测记录见 [docs/users/platforms/linux.md](docs/users/platforms/linux.md)（历史归档见 [docs/users/platforms/linux-history.md](docs/users/platforms/linux-history.md)）。
+功能完全一致，只是数据的存放位置不同：
 
-### 两套界面：专业模式与ME模式
+| | 发行版 | 源码版 |
+|---|---|---|
+| 数据目录 | 系统用户目录（详见[数据与存档](#数据与存档)） | 仓库内的 `data/` |
+| 内置资源 | 首次启动时复制到数据目录 | 直接使用仓库里的 `data/packs`、`data/static` |
+| 附带内容 | 仅运行所需文件 | 另有自检、打包脚本与开发者工具 |
 
-同一个仓库里有两套界面，共用同一份 `data/`、同一套服务与持久化层，只有入口和界面层不同：
+### 第一次打开
 
-| | 专业模式 | ME模式（挂件模式）                             |
-|---|---|----------------------------------------|
-| 界面层 | `ui/*`，CustomTkinter，1280×720 多页面 | `ui/mini/*`，原生 tkinter，约 360×620 单窗口挂件 |
-| 交互 | 导航栏 + 弹窗 + 滑杆 | 零弹窗，全部整窗换屏，选择项「点一下换下一个」                |
-| 观感 | 圆角卡片 + 主题色 | 低像素风：直角硬描边、点阵字、方块进度条                   |
+1. **（可选）配置 AI**：进入「设置 → 生成 → 网络与 AI」，填接口地址、模型名与 API Key。内置智谱 AI、DeepSeek、ChatGPT 三个模板，也可以新建任意中转站或本地服务，填完可点「测试连接」。跳过这一步不影响建角色与出报告。
+2. **建角色**：在「探索模式」里设定姓名、身高、性格与身材，或从已有档案继续。
+3. **生成报告**：程序抽取地标，把身高、步长、腿长等部位与之一一对比，生成尺寸表与描述文本。测量与报告完全在本地完成。
 
+想直接进剧情，就在「剧本编辑」里挑一个副本方案，点「进入副本」。
 
-- 入口均为 `python main.py`（`app/shell.py` 的 `run_app` 薄壳）：按设置里的「启动界面模式」启动，之后仍可在两套界面间热切换。两套界面共用同一份数据与进程模型。
-- 热切换方式：专业模式点导航栏底部的「⇄ ME模式」，ME模式点标题栏的「⇄」。副本进行中不允许切换。
+### ME模式
 
+- 不同于主界面的挂件窗口，点导航栏底部的「⇄ ME 模式」即可切换。
+- 简明而独特的使用体验：低像素UI、沉浸式调查，同时不影响报告和副本等功能。（相关视觉效果正在完善中）
 
-### macOS 已知事项
+## 功能一览
 
-- 主界面采用 CustomTkinter，副本窗口采用 imgui-bundle（`hello_imgui` + GLFW/OpenGL，2026-10 前为 Dear PyGui）；两者均提供 macOS 轮子。副本窗口的 GL 栈必须在拥有窗口的那个进程的主线程里启动，当前实现把整个副本会话放进独立子进程，满足该限制。
-- Windows DWM 标题栏、`.ico` 图标及 DPI API 已由 `sys.platform` / `platform.system()` 条件保护；macOS 将使用系统标题栏。当前仓库未提供 `.icns`，打包包体会使用 PyInstaller 默认图标；发版前可补充 `assets/icon.icns` 并在 macOS 构建命令中加入 `--icon`。
-- macOS 默认中文字体为 `PingFang SC`。旧设置中保存的微软雅黑、仿宋、宋体和 Consolas 会在设置保存时回退到平台默认字体或 `Menlo`。
+| 模块 | 说明 |
+|---|---|
+| 探索模式 | 测量角色身体部位与地标的对比，生成探索报告；创建角色后可长期存档、查看新闻与聊天 |
+| 挑战模式 | 把角色与资源打包成加密挑战包（`.chal`），他人在你设定的条件下挑战副本结局 |
+| 文本管理 | 管理地标与描述（quip）等文本资源，支持多风格与自定义风格 |
+| 资源中心 | 世界包、风格组、副本方案、取材表、挑战包的总览与一键切换，选择即时生效 |
+| 剧本编辑 | 编写副本方案： AI 提示词、章节、触发器、结局、演化属性 |
+| 设置 | 主题外观、字体、生成参数、网络代理与 AI 配置 |
 
+## 概念速查
 
-## 玩家指南
+- **地标**：可对比的建筑、桥梁、山川，带尺寸与方向（纵向 / 横向），按风格分组。
+- **描述**：按观测等级、介入度、破坏性匹配的文本片段，是报告正文的素材来源。
+- **观测等级**：按身高分 5 档（`Small` → `Colossal`），决定可用描述与展示格式。
+- **耦合等级**：你以什么身份进入副本——`Velum` 只读、`Solea` 任务执行者、`Bulla` 个体互动。
+- **性格**：巨大化角色内在的底色、沉浸程度和行为习惯，不同性格的角色会有着截然不同的外在表现。
+- **介入度 / 破坏性**：角色此刻与外界互动的表现，各分 1~4 级。
+- **行动点数**：角色的活力（0~100），随时间缓慢恢复；会被生成报告、进入副本等所消耗。
+- **副本**：角色在特定时空下行动的可视化剧情，可回放或再次经历。
 
-### 快速上手
+更详细的定义、易混词对照和内部命名见[界面术语表](docs/terminology.md)。
 
-1. **（可选）进入「设置」页**，按需配置 AI 模型。程序使用 OpenAI SDK 的兼容接口格式，支持配置任意数量的模型并为每个模型命名；设置页内置智谱 AI、DeepSeek、ChatGPT 三个模板，也可以点击「新建」添加其他中转站或本地服务。填写接口 URL、模型名和 API Key 后，可点击「测试连接」验证。
-2. **进入「探索模式」**：
-   - 在创建参数面板中设定角色姓名、身高、体型预设、性格与个性标签，可上传参考立绘；
-   - 也可点击「选择角色」从已有档案中继续。
-3. **生成报告**：系统会抽取地标，将角色的身高、步长、腿长等部位与地标逐一对比，生成尺寸表与描述文本。
-4. **进入副本**：系统将遵循副本方案，利用AI辅助生成可互动的文字剧情。
-5. **创建角色**：创建后方可保存探索报告 / 副本replay，并长期以该角色进行探索。角色也可以从临时报告 / 副本创建。
-6. **长期探索**：报告与副本会消耗行动点数并推动角色的属性变化。角色将拥有身为巨大娘的详细档案。
-
-### 核心概念
-
-- **地标（Landmark）**：世界中可供对比的物体，如大楼、桥梁、山脉。每个地标有尺寸、方向（纵向 / 横向）与类型（精确 / 均值），按风格分组管理。
-- **描述（Quip）**：按体型、介入度、破坏性匹配的描述文本片段，是报告正文的素材来源。支持多风格与自定义类型。
-- **身材（Preset）**：身高、腿长、臂长、胸宽等身体部位的比例集合，决定角色身材。
-- **性格（Personality）**：决定介入度、破坏性的初始值、步长，以及敏感值（介入度相关）、重力（破坏性相关）、个性强度，影响角色的演化方向。
-- **介入度 / 破坏性**：角色的演化属性，同时为描述条目的静态属性，分别反映角色"进入世界"的程度与对世界的冲击程度。报告中将根据角色的介入度 / 破坏性匹配合适的描述。
-- **行动点数**：生成报告需消耗行动点数；行动点数不足时角色的介入度 / 破坏性会逐渐回落。
-- **尺寸分类**：报告会按最终身高归入不同体型档位（如数十米、数百米、千米级），决定可用描述与展示格式。
-
-### 副本模块
-
-副本（Dungeon）是可互动的文字剧情模式：AI 按剧本推动剧情，你的选择影响角色状态与结局。两条进入路径共用同一个引擎（专业模式在副本窗口的入口页选方案，ME模式由「调查」直接进）。
-
-- **副本方案（Scenario）**：一份可分享的剧本配置——章节、触发器、结局与演化规则的集合，随资源包 / 世界包分发，也可在程序内的剧本编辑器里编写。
-- **章节（Chapter）**：剧情按章节推进；进入章节时应用该章的配置（开场文本、背景音乐、语音等）。
-- **触发器（Trigger）**：驱动剧情的规则——条件满足时执行动作（跳转章节、播放素材、小游戏等），支持前置条件链。
-- **结局（Ending）**：由结局触发器或结束章节收束；达成的结局会写入角色档案。
-- **回放（Replay）**：副本过程可存为回放（未触达结局时也会存「未完成」回放），可从回放创建角色。
-- **运行时**：副本窗口是独立的顶层窗口，会话跑在独立子进程里（渲染后端 imgui-bundle），与主界面进程隔离；副本进行中不允许界面热切换。
-
-### 拓展概念：角色 / 聊天 / 世界包
-
-在「探索一局」之上，程序还有三个长期系统：
-
-- **角色（character）**：创建后的角色拥有长期档案—— HTML 历史档案、离线恢复（程序没开的时间里角色仍在按性格与作息曲线演化）、今日新闻。演化模型的完整设计见 [docs/designs/character_evolution.md](docs/designs/character_evolution.md)。
-- **聊天（chat）**：与角色持续对话。AI 按 JSON 协议回复（可一次多条消息、可沉默）；AI 可自主开启 / 切换话题，并把少量白名单属性写回角色档案。协议细节见 [docs/dev/chat_delivery.md](docs/dev/chat_delivery.md)。
-- **世界包（worlds）**：一键激活后，包内资源按类型**接管**各数据源（地标、描述、副本方案、取材表……），你的自由数据不受影响；停用即恢复。世界包还可携带**行为包**在激活期间改变核心算法（[机制说明](docs/designs/behaviors/README.md)；开发见「包开发」）。
-
-### 数据与存档
+## 数据与存档
 
 ```
 data/
-├── archives/       # 角色档案与历史报告（txt 格式），按角色名归档
-├── packs/          # 资源包（地标、描述、副本、挑战包）；随程序发布，也可自行创建
-├── static/         # 取材表（materials/<组名>/ 下放姓名、身材、性格、新闻四张 .csv，可只放其中几张）与临时存储的行为包
-├── user/           # 用户数据（设置、API秘钥、挑战秘钥、报告与回放、截图、地址注册表）
-└── worlds/         # 世界包（<world_id>/）；激活世界包时创建，可携带若干资源包和取材表并一键激活
+├── archives/   角色档案与历史报告，按角色名归档
+├── packs/      内置资源包：地标 landmarks/、描述 quips/、副本方案 scenarios/、挑战包 challenges/、小游戏 minigames/
+├── static/     取材表 materials/<组名>/（names、presets、personalities、news 四张 csv）与行为包 behaviors/
+├── user/       设置、API Key、挑战秘钥、报告与回放、截图、地址注册表
+└── worlds/     世界包
 ```
 
-全部数据保存在本机；设置有备份 / 还原能力，程序自检也会先备份再还原。打包版的数据目录**不在安装位置**：Windows 为 `%LOCALAPPDATA%\constant-girl\data`，macOS 为 `~/Library/Application Support/constant-girl/data`，Linux 为 `$XDG_DATA_HOME/constant-girl/data`（默认 `~/.local/share/constant-girl/data`）。
+发行版的数据目录在系统用户目录：
 
----
+- Windows：`%LOCALAPPDATA%\constant-girl\data`
+- macOS：`~/Library/Application Support/constant-girl/data`
+- Linux：`$XDG_DATA_HOME/constant-girl/data`（默认 `~/.local/share/constant-girl/data`）
 
-## 包开发
+**备份就是把整个 `data/` 目录拷走**（升级、换机、试世界包前都建议先拷一份）。项目旧称「巨大娘生成器 / GiantessGenerator」，旧版数据目录会在首次启动时整体迁移到新名下，内容不改写。
 
-| 你想制作          | 说明                                                     | 开发指引                                       |
-|---------------|--------------------------------------------------------|--------------------------------------------|
-| 地标、描述、副本方案    | 可供探索的资源                                                | 程序内编辑器（文本管理 / 剧本编辑）即可                      |
-| 取材表           | 一个目录含姓名、身材、性格、新闻四张 .csv，缺的成员自动回落到内置 default 组 | 无程序内编辑器；推荐使用 Excel                        |
-| 世界包           | 把资源包 + 取材表打成一个可一键激活的 `<world_id>.world.zip`，激活期间接管各数据源 | [世界包行为包开发指南](docs/designs/behaviors/dev-guide.md) |
-| 行为包           | 世界包可选携带的 Python 代码包，激活期间覆盖核心算法                         | [世界包行为包开发指南](docs/designs/behaviors/dev-guide.md) |
-| 副本小游戏         | `mini_game` 触发器的运行时与作者 API                             | [小游戏框架](docs/designs/dungeon/minigame.md)          |
-| 挑战包           | 把角色与资源打包成秘钥保护的加密 `.chal`，玩家在挑战模式中达成副本结局                | 程序内「挑战模式」打包                                |
-| 世界地址          | 为你的世界申领注册表地址，供地标 / 描述风格跨世界引用                           | [地址系统作者指南](docs/designs/address-system/authoring.md)         |
+## 制作与分享
 
----
+程序内资源具有丰富的叙事形式和高度开放性，以下是制作或编辑的入口：
 
-## 开发与架构（速查）
+| 想做的东西 | 说明 | 入口 |
+|---|---|---|
+| 地标、描述、副本方案 | 可供探索的资源 | 「文本管理」「剧本编辑」 |
+| 取材表 | 一个目录四张 csv（姓名、身材、性格、新闻），缺的成员自动回落到内置 default 组 | 用 Excel 编辑 `data/static/materials/` |
+| 世界包 | 把资源包与取材表打成 `<world_id>.world.zip`，激活期间接管各数据源，停用即恢复 | 「资源中心」 |
+| 行为包 | 世界包可选携带的 Python 代码包，激活期间覆盖核心算法 | [行为包开发指南](docs/designs/behaviors/dev-guide.md) |
+| 副本小游戏 | `mini_game` 触发器的运行时与作者 API | [小游戏框架](docs/designs/dungeon/minigame.md) |
+| 挑战包 | 角色与资源打成秘钥保护的 `.chal`，玩家在挑战模式里达成结局 | 「挑战模式」 |
+| 世界地址 | 为你的世界申领注册表地址，供地标 / 描述风格跨世界引用 | [地址系统作者指南](docs/designs/address-system/authoring.md) |
 
-分层、守卫与目录组织的**完整口径**（含「为什么」）统一见
-[docs/dev/architecture.md](docs/dev/architecture.md)，这里只留速查：
+## 平台支持
 
-- **分层方向由自检强制**：`infra` → `core` → `dungeon` → `persistence` → `services`
-  → `ui` → `app`（另有 `dungeon/window/**` 特例），`python tests/check_import_graph.py`
-  越界即失败；「已登记例外」当前为空表。
-- **根目录已冻结**：只剩 `paths.py` 与字面量入口 `main.py`，不再新增根目录
-  Python 模块；应用壳本体在 `app/` 包。
-- **两条对外契约不能碰**：行为包钩子 key 是 `scope.name` 字面量（`"logic.format_size"`
-  与文件路径无关）；`services/creation_service.py` / `services/state_service.py`
-  的模块路径被行为包文档引用，不得改名。
-- **`tests/` 是常驻自检**，命名即分组，`python tests/run_checks.py` 按类别自动发现
-  （新增脚本放进对应类别即可，无需登记）：`check_*.py` 为守卫 / 行为自检（离线、
-  可进 CI 门禁）；`smoke_*.py` 为需要真实显示器的 GUI 冒烟（`--smoke` 追加）。
-- **`scripts/` 是开发者工具区**：还在用的（真窗口自动驾驶 `dungeon_autopilot.py`、无头
-  模拟 `escape_sim.py`）与**一次性用掉后只留档**的（数据迁移 `migrate_*.py`、原生崩溃探针
-  `dpg_probe/`）都放这里，`scripts/README.md` 按「持续维护 / 已落地归档」分组。它**不提供
-  自检项**，但源码仍会被离线守卫**静态扫描**（只有 `developer_tools/` 被那些守卫排除）；
-  要长期维护的回归请写成 `tests/` 脚本。
-- **`developer_tools/` 是人工检查的快捷工具**（被离线守卫整体排除）：查看资源包 / 行为包
-  改动的效果——档案导出预览、小游戏单跑宿主、描述语料体检、演化模型模拟；资源开发者在增补描述风格与
-  小游戏后也推荐运行。判据是「**能一眼看到改动效果的**」——一次性用掉就去
-  `scripts/`。脚本按 `<领域>_<输出>` 命名、产物统一写 `_out/`（整目录不入库），目录约定见
-  [`developer_tools/README.md`](developer_tools/README.md)。
-- **`build/` 里只有 `windows/`、`macos/`、`linux/` 与 `release/` 入库**：前三份是平台
-  打包脚本，`release/` 是跨平台的发布打包器——`python build/release/package.py --tag vX.Y.Z`
-  从 tag 出干净 worktree，打本平台发行包 + 源码归档 + 校验和（详见 [docs/ops/release.md](docs/ops/release.md)）。
-  后端默认 PyInstaller，`--backend nuitka` 可切 Nuitka 对照；受限网络可用 `--wheelhouse` 离线构建。
-  暂不支持单独打包某个启动模式。
-- **提交信息用约定式提交**（2026-10-06 起）：`<type>(<scope>): <subject>`，`type`
-  用英文小写（`feat` / `fix` / `refactor` / `docs` / `test` / `chore` / `build` …），
-  `scope` 写子系统，正文用中文；类型表与示例见
-  [docs/dev/architecture.md](docs/dev/architecture.md) §6。
+| 平台 | 状态 | 说明 |
+|---|---|---|
+| Windows 10/11 | ✅ 支持 | 发行包；小游戏依赖 WebView2 运行时 |
+| macOS 12+（Apple Silicon） | ✅ 支持 | 发行包；渲染后端暂无 Intel 轮子 |
+| Linux · X11 | ✅ 支持 | 发行包（onedir + tar.gz）；需 `python3-tk` 与中文字体 |
+| Linux · Wayland + XWayland | ⚠️ 可用 | 副本窗口经 XWayland 显示，窗口置顶依赖窗口管理器的 EWMH 支持 |
+| Linux · 纯 Wayland | ❌ 不支持 | 副本窗口（GLFW）无法创建 |
 
-## 相关文档
+平台细节与已知限制见 [Linux 支持说明](docs/users/platforms/linux.md)。
 
-**玩家 / 玩法**
+## 欢迎加入
 
-- [演化模型](docs/designs/character_evolution.md)：角色行动点数与演化的量、公式与已验证动态特性
-- [聊天协议](docs/dev/chat_delivery.md)：消息生命周期、话题状态机与属性写回白名单
+项目还在快速迭代阶段，欢迎任何形式的参与——写一套地标 / 描述风格、做一个副本方案、报一个 bug，都算。
 
-**包开发**
+- 改代码前先读 [AGENTS.md](AGENTS.md) 与[架构说明](docs/dev/architecture.md)，分层与命名由离线守卫强制
+- 提交前跑 `python tests/run_checks.py`（离线，不需要显示器）；改动涉及窗口的再追加 `--smoke`
+- 提交信息用约定式提交：`<type>(<scope>): <subject>`，正文用中文
 
-- [世界包行为包开发指南](docs/designs/behaviors/dev-guide.md)：行为包的开发流程、注册 API 与可覆盖目标
-- [地址系统作者指南](docs/designs/address-system/authoring.md)：地标 / 描述风格的地址申领、注册与匹配规则
-- [副本文档索引](docs/Dungeon/README.md)：`docs/Dungeon/` 副本开发文档的入口与「按任务查」表（写方案从[数据模型](docs/designs/dungeon/script.md)进；小游戏框架见 [docs/designs/dungeon/minigame.md](docs/designs/dungeon/minigame.md)）
+想读更多：[文档总入口](docs/README.md) 按读者分流；演化公式见[角色演化模型](docs/designs/character_evolution.md)；发版流程见[发布与打包](docs/ops/release.md)。
 
-**开发与架构**
+## 许可证与声明
 
-- [架构与分层](docs/dev/architecture.md)：分层现状与硬约束、操作手册与提交规范（历史决策见 [docs/dev/legacy/refactor-2026-10.md](docs/dev/legacy/refactor-2026-10.md)）
-- [发布与打包策略](docs/ops/release.md)：分支/标签模型、发布清单、`build/release/package.py` 的用法与三平台注意事项
-- [v1.0.0 更新说明](docs/releases/changelog-v1.0.0.md)：正式版相对 `v1.0.0-preview` 的全部变更（新功能、改进、修复、兼容性）
-- [开发工具目录说明](developer_tools/README.md)：`developer_tools/` 与 `tests/`、`scripts/` 的分工，新增脚本的约定与入库范围
-- [一次性工具说明](scripts/README.md)：`scripts/` 各脚本的性质与用途、迁移脚本的留档策略
+软件以 [MIT 许可证](LICENSE) 发布（Copyright © 2026 XiaoCui）。代码与部分素材由 AI 辅助生成。
 
-**平台支持**
-
-- [Linux 支持说明](docs/users/platforms/linux.md)：X11/XWayland 支持范围、XInitThreads 引导、窗口置顶（EWMH）与降级、缺依赖表现、打包与已知限制（兼容计划与试跑检查记录已移入 [docs/users/platforms/linux-history.md](docs/users/platforms/linux-history.md)）
-
-## 免责声明
-
-本工具为创作辅助软件，所有生成内容均由用户自行负责。请勿将生成内容用于商业用途或违反相关平台规定的场合。
+本工具是创作辅助软件，生成内容的使用与发布由使用者自行负责；请勿用于违反当地法律或平台规则的用途。

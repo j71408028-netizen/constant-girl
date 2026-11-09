@@ -24,7 +24,7 @@
 
 | 你是 | 先读 | 再读 |
 |---|---|---|
-| 玩家 | [`../README.md`](../README.md)「玩家指南」 | [`designs/README.md`](designs/README.md) |
+| 玩家 | [`../README.md`](../README.md)「快速开始」 | [`designs/README.md`](designs/README.md) |
 | 写界面文案 / 提示词 | [`terminology.md`](terminology.md) | [`designs/README.md`](designs/README.md) |
 | 在 Linux 上跑 | [`users/platforms/linux.md`](users/platforms/linux.md) | [`users/platforms/linux-history.md`](users/platforms/linux-history.md) |
 | 做资源包 / 世界包 / 小游戏 | [`designs/README.md`](designs/README.md) | [`designs/behaviors/dev-guide.md`](designs/behaviors/dev-guide.md) |
