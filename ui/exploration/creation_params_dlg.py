@@ -102,7 +102,7 @@ def _pick_level(value: float, buckets) -> str:
 
 
 def _trend_phrase(step: float) -> str:
-    """根据步长（随时间推进的增减趋势）生成走向短语。"""
+    """根据深度（随时间推进的增减趋势）生成走向短语。"""
     if abs(step) < 0.25:
         return "这成为了巨大娘的常态。"
     if step >= 1.5:
@@ -121,7 +121,7 @@ def _trend_phrase(step: float) -> str:
 
 
 def _init_step_phrase(noun: str, init: float, step: float, levels) -> str:
-    """由初始值与步长共同生成介入度/破坏性的具体形容。"""
+    """由潜质与深度共同生成介入度/破坏性的具体形容。"""
     base = _pick_level(init, levels)
     if init > 0.0:
         return f"{base}{_trend_phrase(step)}"
@@ -132,8 +132,8 @@ def _init_step_phrase(noun: str, init: float, step: float, levels) -> str:
 def _strategy_display_value(values: dict) -> float:
     """展示用策略值：行动点取 50，与 Personality.strategy_value() 缺省口径一致。"""
     return Personality(
-        name="", init_intrusion=0.0, step_intrusion=0.0,
-        init_destruction=0.0, step_destruction=0.0,
+        name="", init_intrusion=0.0, depth_intrusion=0.0,
+        init_destruction=0.0, depth_destruction=0.0,
         sensitivity=values["sensitivity"], gravity=values["gravity"],
         skip_base_prob=values["skip_base_prob"],
     ).strategy_value()
@@ -143,16 +143,16 @@ def _personality_summary(values: dict,
                          base_item: Optional[Personality] = None) -> list:
     """生成性格形容行：预设性格首行为其简介，其后按当前参数分述四大维度。
 
-    介入度 / 破坏性由初始值 + 步长共同形容；
+    介入度 / 破坏性由潜质 + 深度共同形容；
     策略值（行动点取 50）与个性强度（习惯与爱好的分量）各自按当前值形容。
     """
     lines = []
     if base_item is not None and base_item.description:
         lines.append(base_item.description)
     lines.append(f"{_init_step_phrase('介入', values['init_intrusion'],
-                                      values['step_intrusion'], _INTRUSION_BUCKETS)}")
+                                      values['depth_intrusion'], _INTRUSION_BUCKETS)}")
     lines.append(f"{_init_step_phrase('破坏', values['init_destruction'],
-                                      values['step_destruction'], _DESTRUCTION_BUCKETS)}")
+                                      values['depth_destruction'], _DESTRUCTION_BUCKETS)}")
     lines.append(f"{_pick_level(_strategy_display_value(values), _STRATEGY_BUCKETS)}")
     lines.append(f"{_pick_level(values['skip_base_prob'], _STRENGTH_BUCKETS)}")
     return lines
@@ -186,28 +186,28 @@ class PersonalityCustomDialog(BaseDialog):
     底部“性格形容”区在选中预设性格时首行显示其简介，
     其后的行分别按当前参数形容介入度、破坏性、策略值、个性强度四大维度；
     敏感值 / 重力滑块本身不单独配文案，其叙事由策略值行统一承载。
-    初始介入度/破坏性为 0 表示随机演化（相应步长无意义，会被禁用并高亮标注）。
+    介入潜质/破坏潜质为 0 表示随机演化（相应深度无意义，会被禁用并高亮标注）。
     结果约定：result = ("ok", label, obj) 表示确定；
              ("clear", None, None) 表示消除（回到随机）；
              None 表示直接关闭（无操作）。
     """
 
     # attr -> (label, min, max, step)
-    # 初始介入度 / 初始破坏性的滑块左端为 0.4（步长 0.1），
+    # 介入潜质 / 破坏潜质的滑块左端为 0.4（每次增减 0.1），
     # 该 0.4 只是滑块内部状态，语义上直接当作 0（随机演化）；0.5 起为真实低值，
     PARAMS = [
-        ("init_intrusion", "初始介入度", 0.4, 4.5, 0.1),
-        ("step_intrusion", "介入度步长", -3, 3, 0.1),
-        ("init_destruction", "初始破坏性", 0.4, 4.5, 0.1),
-        ("step_destruction", "破坏性步长", -3, 3, 0.1),
+        ("init_intrusion", "介入潜质", 0.4, 4.5, 0.1),
+        ("depth_intrusion", "介入深度", -3, 3, 0.1),
+        ("init_destruction", "破坏潜质", 0.4, 4.5, 0.1),
+        ("depth_destruction", "破坏深度", -3, 3, 0.1),
         ("sensitivity", "敏感值", -3, 3, 0.1),
         ("gravity", "重力", -3, 3, 0.1),
         ("skip_base_prob", "个性强度", 0, 5, 0.1),
     ]
 
     _INIT_STEP_PAIRS = {
-        "init_intrusion": "step_intrusion",
-        "init_destruction": "step_destruction",
+        "init_intrusion": "depth_intrusion",
+        "init_destruction": "depth_destruction",
     }
 
     # 性格形容维度行（预设简介之外）所用的斜体字体
@@ -336,7 +336,7 @@ class PersonalityCustomDialog(BaseDialog):
     def _semantic_value(self, attr: str) -> float:
         """滑块物理位置 → 语义值。
 
-        初始介入度/破坏性滑块左端 0.4 只是内部状态，直接视作语义值 0（随机演化）；
+        介入潜质/破坏潜质滑块左端 0.4 只是内部状态，直接视作语义值 0（随机演化）；
         其余物理值（0.5 起）即语义值本身，保证 (0, 0.5) 区间仍为不可达的真实低值。
         """
         val = round(self._sliders[attr].get(), 1)
@@ -354,7 +354,7 @@ class PersonalityCustomDialog(BaseDialog):
                                                text_color=PARAMS_DLG_TEXT_SOFT)
 
     def _update_special(self):
-        """表现初始介入度/破坏性为 0 的特殊性（随机演化，步长禁用并高亮标注）。"""
+        """表现介入潜质/破坏潜质为 0 的特殊性（随机演化，深度禁用并高亮标注）。"""
         for init_attr, step_attr in self._INIT_STEP_PAIRS.items():
             val = self._semantic_value(init_attr)
             zero = val == 0
