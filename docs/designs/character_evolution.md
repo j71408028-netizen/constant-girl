@@ -5,6 +5,9 @@
 [行为包开发指南](behaviors/dev-guide.md) 的行为钩子分组；副本侧的章节与触发器
 见 [dungeon/script.md](dungeon/script.md)。
 
+> 玩家可见术语（潜质 / 深度 / 步进）见界面术语表 `docs/terminology.md`；
+> 本文保留实现层旧称与代码字段名。
+
 ## 1. 参与的量
 
 | 层级 | 量 | 说明 | 存储位置 |

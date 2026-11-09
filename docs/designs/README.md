@@ -17,6 +17,9 @@
 | 角色聊天 | [chat/](chat/README.md) | 玩家 + 资源开发者（话题类型 / 世界态势作者）；信息视角细节在 [lens.md](chat/lens.md) |
 | 行为包 | [behaviors/](behaviors/README.md) | 玩家 + 世界包 / 行为包作者 |
 
+跨机制的界面用词（副本、观测等级、耦合等级、性格、资源与行动）见
+`docs/terminology.md`；写界面文案、提示词或玩家文档前先查这一页。
+
 ## 按任务找入口
 
 | 想做什么 | 从哪读 |
