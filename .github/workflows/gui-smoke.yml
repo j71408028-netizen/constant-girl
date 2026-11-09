@@ -113,6 +113,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: GiantessGenerator-linux
-          path: dist/GiantessGenerator-linux-*.tar.gz
+          name: constant-girl-linux
+          path: dist/constant-girl-linux-*.tar.gz
           if-no-files-found: ignore

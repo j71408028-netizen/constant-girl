@@ -37,7 +37,7 @@ import urllib.request
 from datetime import datetime
 
 from core.address_model import _REGION_RE, _WORLD_RE, cell_width_m, parse_full, split_address
-from paths import data_dir
+from paths import APP_SLUG, data_dir
 
 GIST_ID = "da0b6204e57a411462f2d72e3e0f1997"
 GIST_PAGE_URL = f"https://gist.github.com/j71408028-netizen/{GIST_ID}"
@@ -55,7 +55,7 @@ def download_registry() -> tuple:
     """下载最新注册表。返回 (data, gist_updated_at)；失败抛 RegistryOfflineError。"""
     req = urllib.request.Request(
         GIST_API_URL,
-        headers={"User-Agent": "GiantessGenerator",
+        headers={"User-Agent": APP_SLUG,
                  "Accept": "application/vnd.github+json"})
     try:
         with _build_opener().open(req, timeout=DOWNLOAD_TIMEOUT) as resp:

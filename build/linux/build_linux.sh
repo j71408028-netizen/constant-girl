@@ -7,15 +7,15 @@
 #   PYTHON_BIN=python3.12 bash build/linux/build_linux.sh
 #
 # 产物：
-#   dist/GiantessGenerator/                      onedir 目录（可执行文件同名，在目录根）
-#   dist/GiantessGenerator-linux-<arch>.tar.gz   发布用的目录包
+#   dist/constant-girl/                      onedir 目录（可执行文件同名，在目录根）
+#   dist/constant-girl-linux-<arch>.tar.gz   发布用的目录包
 #   dist/GiantessSelfCheck/                      --self-check 才生成：自动驾驶自检包
 #
 # 说明：
 # - 只在 Linux 上跑；PyInstaller 不做交叉编译，Windows/macOS 包各自在对应系统上打。
 # - 不带 --collect-all zai：项目没有该依赖（残留引用，见 linux_compat_plan §2.3-3）。
-# - 打包版数据目录走 XDG：$XDG_DATA_HOME/GiantessGenerator/data（默认
-#   ~/.local/share/GiantessGenerator/data），首启从包内 data/packs、data/static 拷贝；
+# - 打包版数据目录走 XDG：$XDG_DATA_HOME/constant-girl/data（默认
+#   ~/.local/share/constant-girl/data），首启从包内 data/packs、data/static 拷贝；
 #   源码运行仍用仓库内 data/（见 paths.py）。
 # - graphviz 的 dot 不再是依赖：编辑器关系图改为自绘画布（见
 #   docs/Dungeon/scenario_graph.md §5），打包无外部可选依赖。
@@ -30,9 +30,11 @@ cd "$ROOT"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV="${VENV:-.venv-buildlinux}"        # 与 windows(.venv-build) / macos(.venv-macos) 同规矩
 ENTRY="main.py"
-NAME="GiantessGenerator"
+# 名称只从 paths.py 取：技术名决定目录/可执行文件，正式名只用于窗口标题校验。
+NAME="$("$PYTHON_BIN" -c 'import paths; print(paths.APP_SLUG)')"
+DISPLAY_NAME="$("$PYTHON_BIN" -c 'import paths; print(paths.APP_NAME)')"
 SELF_CHECK_ENTRY="scripts/dungeon_autopilot.py"
-SELF_CHECK_NAME="GiantessSelfCheck"
+SELF_CHECK_NAME="${NAME}-selfcheck"
 ARCH="$(uname -m)"
 
 SELF_CHECK=0
@@ -178,7 +180,7 @@ if [ "$BOOTSTRAPPED" = 1 ] && [ "$APP_ALIVE" = 1 ]; then
         WINDOW_FOUND=0
         for _ in $(seq 1 80); do
             xwininfo -root -tree >"$LOG_DIR/xwininfo.txt" 2>&1 || true
-            if grep -q "巨大娘生成器" "$LOG_DIR/xwininfo.txt"; then
+            if grep -qF -- "$DISPLAY_NAME" "$LOG_DIR/xwininfo.txt"; then
                 WINDOW_FOUND=1
                 break
             fi
@@ -188,7 +190,7 @@ if [ "$BOOTSTRAPPED" = 1 ] && [ "$APP_ALIVE" = 1 ]; then
             sleep 0.5
         done
         if [ "$WINDOW_FOUND" = 1 ]; then
-            echo "   主窗口已映射（xwininfo 找到标题「巨大娘生成器」）"
+            echo "   主窗口已映射（xwininfo 找到标题「$DISPLAY_NAME」）"
         else
             echo "   警告：xwininfo 未找到主窗口标题，启动检查降级为「进程存活 + 数据目录就绪」"
         fi

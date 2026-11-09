@@ -1,4 +1,7 @@
-# 巨大娘生成器
+# ConstantGirl
+
+> 旧称「巨大娘生成器 / GiantessGenerator」。改名不影响已有数据：打包版首次启动会把
+> 旧的应用数据目录整体迁移到新名下。
 
 一个面向桌面端的「巨大娘」主题互动创作工具。你可以在世界中设定地标与事件，生成一位巨大化的少女角色，将她的身体部位与建筑等地标进行对比，并借助 AI 生成图文并茂的报告和副本；也可以制作角色、副本方案和挑战包，分享你的角色或世界设定。
 - 披露：代码和部分素材采用AI辅助生成。
@@ -77,7 +80,7 @@ python main.py
 # GUI 冒烟（需要显示器或 xvfb）
 .venv/bin/python tests/smoke_switch.py
 
-# 打包（PyInstaller onedir → dist/GiantessGenerator + .tar.gz 目录包）
+# 打包（PyInstaller onedir → dist/constant-girl + .tar.gz 目录包）
 bash build/linux/build_linux.sh
 # 打包 + 打包自检：在打包态里启动发布包、引导数据目录，并真开副本窗口跑六个场景
 bash build/linux/build_linux.sh --self-check
@@ -162,7 +165,7 @@ data/
 └── worlds/         # 世界包（<world_id>/）；激活世界包时创建，可携带若干资源包和取材表并一键激活
 ```
 
-全部数据保存在本机；设置有备份 / 还原能力，程序自检也会先备份再还原。打包版的数据目录**不在安装位置**：Windows 为 `%LOCALAPPDATA%\GiantessGenerator\data`，macOS 为 `~/Library/Application Support/GiantessGenerator/data`，Linux 为 `$XDG_DATA_HOME/GiantessGenerator/data`（默认 `~/.local/share/GiantessGenerator/data`）。
+全部数据保存在本机；设置有备份 / 还原能力，程序自检也会先备份再还原。打包版的数据目录**不在安装位置**：Windows 为 `%LOCALAPPDATA%\constant-girl\data`，macOS 为 `~/Library/Application Support/constant-girl/data`，Linux 为 `$XDG_DATA_HOME/constant-girl/data`（默认 `~/.local/share/constant-girl/data`）。
 
 ---
 

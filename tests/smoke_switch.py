@@ -143,7 +143,6 @@ def build_professional(boot):
         print(f"[Warning] 应用配色失败: {e}")
 
     root = ctk.CTk()
-    root.title("巨大娘生成器")
     root.withdraw()
     ui_fonts.align_native_scaling(root)
 

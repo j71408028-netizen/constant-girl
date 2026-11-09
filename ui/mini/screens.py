@@ -16,7 +16,7 @@ import tkinter as tk
 
 from core.ai import PROVIDER_DEFAULTS, create_client, describe_ai_error
 from core.logic import format_size
-from paths import APP_VERSION
+from paths import APP_NAME, APP_VERSION
 from ui.mini import pixel as px
 from ui.mini.chat_view import MiniChatView
 
@@ -147,7 +147,7 @@ class SettingsScreen(Screen):
 
         footer = px.transparent(body)
         footer.pack(side='bottom', fill='x')
-        px.label(footer, f"生成器 v{APP_VERSION}", tone="text_off", size=10).pack(
+        px.label(footer, f"{APP_NAME} v{APP_VERSION}", tone="text_off", size=10).pack(
             anchor='w')
 
 

@@ -9,10 +9,13 @@ v1.0.0（重构前的扁平旧结构、无 numpy/webview），也能打之后任
 
 产物统一落在 ``dist/release/``：::
 
-    GiantessGenerator-<version>-<os>-<arch>.zip   运行时包（PyInstaller onedir 整目录）
-    GiantessGenerator-<version>-src.zip           源码归档（剔除作者本机数据与缓存）
+    <slug>-<version>-<os>-<arch>.zip   运行时包（PyInstaller onedir 整目录）
+    <slug>-<version>-src.zip           源码归档（剔除作者本机数据与缓存）
     RELEASE-NOTES-<version>.md                    发布说明（tag 注记 + 构建环境 + 产物清单）
     SHA256SUMS.txt                                上述产物的 SHA256
+
+``<slug>`` 与 ``--display-name`` 均取自 ``paths.py``：文件名一律用仓库名，只有
+macOS 的 ``.app`` 用正式名（那是用户直接点开的可见产物）。
 
 用法::
 
@@ -49,8 +52,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-#: 产品名（决定 exe / app / 目录名）。
-DEFAULT_NAME = "GiantessGenerator"
+if str(ROOT) not in sys.path:          # 名称常量只在 paths.py 里定义一份
+    sys.path.insert(0, str(ROOT))
+
+from paths import APP_NAME, APP_SLUG  # noqa: E402
+
+#: 技术名（决定 exe / 目录 / 产物文件名）。
+DEFAULT_NAME = APP_SLUG
+
+#: 对外正式名（仅 macOS .app 用）。
+DEFAULT_DISPLAY_NAME = APP_NAME
 
 #: 入口文件候选（按顺序取第一个存在的）。
 ENTRY_CANDIDATES = ("main.py",)
@@ -446,7 +457,10 @@ def cleanup(work: Path, keep: bool) -> None:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="从 git tag 打出本平台发行包与源码归档")
     ap.add_argument("--tag", help="要发布的 tag（默认取 HEAD 上指着的 tag）")
-    ap.add_argument("--name", default=DEFAULT_NAME, help=f"产品名（默认 {DEFAULT_NAME}）")
+    ap.add_argument("--name", default=DEFAULT_NAME,
+                    help=f"技术名：可执行文件、产物文件名（默认 {DEFAULT_NAME}）")
+    ap.add_argument("--display-name", default=DEFAULT_DISPLAY_NAME,
+                    help=f"对外正式名：仅用于 macOS .app（默认 {DEFAULT_DISPLAY_NAME}）")
     ap.add_argument("--out", default=str(ROOT / "dist" / "release"),
                     help="产物目录（默认 dist/release）")
     ap.add_argument("--work", help="构建暂存目录（默认系统临时目录）")
@@ -502,10 +516,13 @@ def main(argv=None) -> int:
                 log("   （离线模式：跳过 pip 自升级）")
             else:
                 run([vpy, "-m", "pip", "install", "--upgrade", "pip"])
+            # macOS 的 .app 是用户直接点开的可见产物，用正式名；其余平台的可执行
+            # 文件与目录用技术名，免得命令行里带空格。
+            bundle_name = args.display_name if sys.platform == "darwin" else args.name
             if args.backend == "nuitka":
                 run([vpy, "-m", "pip", "install", *pip_flags,
                      "-r", str(src / "requirements.txt"), "nuitka"])
-                bundle = build_bundle_nuitka(vpy, src, args.name, version,
+                bundle = build_bundle_nuitka(vpy, src, bundle_name, version,
                                              console=args.console)
                 suffix = "-nuitka"
             else:
@@ -513,7 +530,7 @@ def main(argv=None) -> int:
                      "-r", str(src / "requirements.txt"), "pyinstaller"])
                 targets = detect_collect_targets(vpy)
                 log(f"   该版本可用依赖包：{', '.join(targets) or '（无）'}")
-                bundle = build_bundle(vpy, src, args.name, targets, console=args.console)
+                bundle = build_bundle(vpy, src, bundle_name, targets, console=args.console)
                 suffix = ""
             plat, arch = platform_names()
             archive = out / f"{args.name}-{version}-{plat}-{arch}{suffix}.zip"
@@ -528,7 +545,7 @@ def main(argv=None) -> int:
                 f"剔除 {len(removed)} 项：{'、'.join(removed) or '无'}）")
             artifacts.append(src_archive)
 
-        notes = write_release_notes(out, args.name, version, tag, artifacts)
+        notes = write_release_notes(out, args.display_name, version, tag, artifacts)
         artifacts.append(notes)
         artifacts.append(write_checksums(out, artifacts))
     finally:

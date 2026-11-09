@@ -5,8 +5,20 @@ import shutil
 import sys
 
 
-APP_NAME = "GiantessGenerator"
+#: 对外正式名：窗口标题、启动页、界面署名等一切用户可见处。
+APP_NAME = "ConstantGirl"
+
+#: 仓库名 / 技术名：数据目录、可执行文件、发行包名、User-Agent 等一切
+#: 机器可读处。形如 ``<repo>-<ver>-<os>-<arch>.zip``。
+APP_SLUG = "constant-girl"
+
 APP_VERSION = "2.0.0 alpha"
+
+#: 改名前使用过的应用目录名，仅在打包版首次启动时用于整体搬迁一次。
+_LEGACY_SLUGS = ("GiantessGenerator",)
+
+#: data_dir() 会被频繁调用，旧目录探测只做一次。
+_migration_checked = False
 
 
 def resource_root() -> str:
@@ -25,13 +37,41 @@ def project_root() -> str:
     return resource_root()
 
 
+def _packaged_data_base() -> str:
+    """返回打包应用数据目录所在的系统级根目录。"""
+    if sys.platform.startswith("darwin"):
+        return os.path.join(os.path.expanduser("~"), "Library", "Application Support")
+    if sys.platform.startswith("win"):
+        return os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+    return os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+
+
+def _migrate_legacy_app_dir(base: str) -> None:
+    """把旧应用目录整体搬到当前名下（仅当目标不存在时，且只搬不改写内容）。"""
+    global _migration_checked
+    if _migration_checked:
+        return
+    _migration_checked = True
+    target = os.path.join(base, APP_SLUG)
+    if os.path.exists(target):
+        return
+    for legacy in _LEGACY_SLUGS:
+        source = os.path.join(base, legacy)
+        if not os.path.isdir(source):
+            continue
+        try:
+            os.makedirs(base, exist_ok=True)
+            shutil.move(source, target)
+        except OSError as e:
+            print(f"[Warning] 迁移旧数据目录 {source} 失败: {e}")
+        return
+
+
 def _packaged_data_parent() -> str:
     """返回打包应用可写用户数据目录的父级。"""
-    if sys.platform.startswith("darwin"):
-        return os.path.join(os.path.expanduser("~"), "Library", "Application Support", APP_NAME)
-    if sys.platform.startswith("win"):
-        return os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), APP_NAME)
-    return os.path.join(os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")), APP_NAME)
+    base = _packaged_data_base()
+    _migrate_legacy_app_dir(base)
+    return os.path.join(base, APP_SLUG)
 
 
 def data_dir() -> str:

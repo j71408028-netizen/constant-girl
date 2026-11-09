@@ -111,9 +111,9 @@ python build/release/package.py --tag v1.0.0 --python /path/to/python-with-tk
 
 ```bash
 # Windows（PowerShell）：LOCALAPPDATA 指到临时目录再启动 exe
-$env:LOCALAPPDATA = "$env:TEMP\gg-smoke"; .\GiantessGenerator\GiantessGenerator.exe
+$env:LOCALAPPDATA = "$env:TEMP\gg-smoke"; .\constant-girl\constant-girl.exe
 # Linux：XDG_DATA_HOME 指到临时目录
-XDG_DATA_HOME=/tmp/gg-smoke ./GiantessGenerator/GiantessGenerator
+XDG_DATA_HOME=/tmp/gg-smoke ./constant-girl/constant-girl
 ```
 
 起来的标志是临时目录下出现 `<name>/data/{packs,static,user}`。若进程一闪即逝，用
@@ -121,7 +121,7 @@ XDG_DATA_HOME=/tmp/gg-smoke ./GiantessGenerator/GiantessGenerator
 `_internal/` 下（`sys._MEIPASS` 指向那里），所以 `assets`、`data` 不在 exe 同级目录——
 这是正常的，别按旧布局误判成"资源没打进去"。
 
-产物（`<name>` 默认 `GiantessGenerator`）：
+产物（`<name>` 默认取 `paths.py::APP_SLUG`，即 `constant-girl`）：
 
 | 文件 | 内容 |
 |---|---|
@@ -139,7 +139,7 @@ XDG_DATA_HOME=/tmp/gg-smoke ./GiantessGenerator/GiantessGenerator
 
 ```bash
 # Windows
-certutil -hashfile dist/release/GiantessGenerator-1.0.0-windows-x64.zip SHA256
+certutil -hashfile dist/release/constant-girl-1.0.0-windows-x64.zip SHA256
 # macOS / Linux
 shasum -a 256 -c dist/release/SHA256SUMS.txt
 ```
@@ -216,8 +216,8 @@ python build/release/package.py --tag v1.0.0 --backend nuitka \
   PyInstaller 默认图标；补上后打包器会自动带上（候选表见脚本内 `ICON_CANDIDATES`）。
 - **Linux**：`--icon` 被 PyInstaller 忽略（脚本只在 Windows 传图标）。无外部可选依赖
   （编辑器关系图已改为自绘画布，不再需要 Graphviz 的 `dot`）。
-- **数据目录**：打包版把可写数据放在系统用户目录（Windows `%LOCALAPPDATA%\GiantessGenerator\data`，
-  macOS `~/Library/Application Support/...`，Linux `$XDG_DATA_HOME/GiantessGenerator/data`），
+- **数据目录**：打包版把可写数据放在系统用户目录（Windows `%LOCALAPPDATA%\constant-girl\data`，
+  macOS `~/Library/Application Support/constant-girl/data`，Linux `$XDG_DATA_HOME/constant-girl/data`），
   首启从包内 `data/packs`、`data/static` 拷贝。**不要**把用户数据打进包。
 
 ## 7. 与 `build/windows|macos|linux` 的分工

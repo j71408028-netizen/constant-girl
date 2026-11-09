@@ -179,8 +179,8 @@ bash build/linux/build_linux.sh --self-check   # 打包 + 打包自检（需要�
 PYTHON_BIN=python3.12 bash build/linux/build_linux.sh   # 指定解释器
 ```
 
-- **形态**：PyInstaller **onedir**，产物 `dist/GiantessGenerator/`（可执行文件与目录同名），
-  另打 `dist/GiantessGenerator-linux-<arch>.tar.gz` 目录包。AppImage / deb 与桌面集成
+- **形态**：PyInstaller **onedir**，产物 `dist/constant-girl/`（可执行文件与目录同名），
+  另打 `dist/constant-girl-linux-<arch>.tar.gz` 目录包。AppImage / deb 与桌面集成
   （`.desktop`、PATH 安装）不在本期。
 - **依赖收集**：与 Windows / macOS 脚本同一套 `--collect-all`（customtkinter / imgui_bundle /
   PIL / openai / numpy / webview），**不带** `zai`（项目没有该依赖，见
@@ -193,8 +193,8 @@ PYTHON_BIN=python3.12 bash build/linux/build_linux.sh   # 指定解释器
 - **构建环境**：脚本自建 `.venv-buildlinux` 并 `pip install -r requirements.txt pyinstaller`，
   不污染开发 venv。Python 3.14 下 `pywebview` 会装到 6.2.1（更新的版本声明 `<3.14`），
   web 后端小游戏窗口照常可用。
-- **数据目录**：打包版走 XDG —— `$XDG_DATA_HOME/GiantessGenerator/data`
-  （默认 `~/.local/share/GiantessGenerator/data`），首启从包内 `data/packs`、`data/static`
+- **数据目录**：打包版走 XDG —— `$XDG_DATA_HOME/constant-girl/data`
+  （默认 `~/.local/share/constant-girl/data`），首启从包内 `data/packs`、`data/static`
   拷贝出可写副本；源码运行仍用仓库内 `data/`（见 `paths.py`）。
 - **打包自检**（`--self-check`）：同一套依赖把 `scripts/dungeon_autopilot.py` 也打成一个包，
   然后
@@ -231,7 +231,7 @@ GUI 用例对长会话与驱动状态敏感（见 §5 与 附录A §5）：
   捕不到。属第三方库风险，缓解手段是 XInitThreads + 错误处理器收窄 + `--isolate`
   压测；长期跟随上游（见 附录A §5）。
 - **包形态**：目前只发 tar.gz 目录包，没有 AppImage / deb / 桌面项；运行方式为解包后直接
-  执行 `GiantessGenerator/GiantessGenerator`。
+  执行 `constant-girl/constant-girl`。
 
 ---
 

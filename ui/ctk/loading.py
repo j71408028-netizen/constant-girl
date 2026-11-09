@@ -4,7 +4,7 @@ import sys
 
 import customtkinter as ctk
 
-from paths import icon_dir
+from paths import APP_NAME, icon_dir
 from ui.ctk import fonts as ui_fonts
 from ui.ctk.theme import (
     LOADING_BG, LOADING_TEXT_SOFT, LOADING_LABEL,
@@ -24,7 +24,7 @@ class LoadingPage(ctk.CTkFrame):
         self.body = body
 
         ctk.CTkLabel(
-            body, text="巨大娘生成器", font=ui_fonts.ui_font(26, "bold"),
+            body, text=APP_NAME, font=ui_fonts.ui_font(26, "bold"),
             text_color=LOADING_LABEL
         ).pack(pady=(0, 18))
         self.title_label = ctk.CTkLabel(
@@ -93,7 +93,7 @@ class LoadingWindow(ctk.CTkToplevel):
         # 首次出现时因切换标题栏颜色而闪烁。
         self._deactivate_windows_window_header_manipulation = True
         super().__init__(**kwargs)
-        self.title("巨大娘生成器")
+        self.title(APP_NAME)
         self.geometry("1280x720")
         self.minsize(640, 480)
         self._on_close = on_close

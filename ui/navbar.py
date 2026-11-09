@@ -75,7 +75,7 @@ class NavigationBar(ctk.CTkFrame):
 
         # 底部容器：版本页脚与世界包信息统一收纳，使导航栏底部更紧凑
         self.app_version_label = ctk.CTkLabel(
-            self._frames["app_version"], text=f"生成器版本：v{APP_VERSION}", font=ui_fonts.ui_font(12),
+            self._frames["app_version"], text=f"版本：v{APP_VERSION}", font=ui_fonts.ui_font(12),
             text_color=NAV_TEXT)
         self.app_version_label.pack(side="left", padx=22, pady=(0, 14))
 

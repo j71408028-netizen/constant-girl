@@ -19,6 +19,7 @@ from tkinter import filedialog
 from core.ai import profile_labels, resolve_ai_config
 from core.models import BodyPreset, CharacterSnapshot, Personality
 from core.resource_spec import type_labels
+from paths import APP_NAME
 from services.chat import events as chat_events
 from services.challenges import ChallengeService
 from core import appearance
@@ -102,7 +103,7 @@ class MiniApp:
 
     # ==================== 窗口 ====================
     def _apply_window(self):
-        self.root.title("巨大娘生成器")
+        self.root.title(APP_NAME)
         self.root.geometry(self.settings.get("window_geometry") or DEFAULT_GEOMETRY)
         self.root.minsize(*MIN_SIZE)
         px.bind_colors(self.root, {'bg': 'ink'})
@@ -197,7 +198,7 @@ class MiniApp:
         bar = px.panel(parent, fill="ink_alt", border="line")
         bar.pack(fill='x', padx=6, pady=(6, 3))
 
-        px.label(bar, "▚ 巨大娘生成器", size=14, tone="accent", bold=True).pack(
+        px.label(bar, f"▚ {APP_NAME}", size=14, tone="accent", bold=True).pack(
             side='left', padx=6, pady=4)
         # 「⇄」切到专业模式：销毁本窗口，由外壳在同进程内重建专业界面。
         px.PixelButton(bar, "⇄", self.switch_to_professional,

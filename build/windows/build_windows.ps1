@@ -7,7 +7,8 @@ $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $Root
 
 $Entry = "main.py"
-$Name = "GiantessGenerator"
+# 名称只从 paths.py 取，避免与界面上的正式名各写一份。
+$Name = (& $Python -c "import paths; print(paths.APP_SLUG)").Trim()
 
 & $Python -m venv .venv-build
 & .\.venv-build\Scripts\python.exe -m pip install --upgrade pip

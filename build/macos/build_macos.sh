@@ -9,7 +9,9 @@ cd "$ROOT"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 ENTRY="main.py"
-NAME="GiantessGenerator"
+# .app 是用户直接点开的可见产物，用正式名；数据目录等技术位置仍用仓库名。
+NAME="$("$PYTHON_BIN" -c 'import paths; print(paths.APP_NAME)')"
+SLUG="$("$PYTHON_BIN" -c 'import paths; print(paths.APP_SLUG)')"
 
 "$PYTHON_BIN" -m venv .venv-macos
 source .venv-macos/bin/activate
@@ -35,4 +37,4 @@ pyinstaller \
   "$ENTRY"
 
 echo "Created: $ROOT/dist/$NAME.app"
-echo "The bundle includes only built-in content packs. User settings and archives are created under ~/Library/Application Support/GiantessGenerator/."
+echo "The bundle includes only built-in content packs. User settings and archives are created under ~/Library/Application Support/$SLUG/."

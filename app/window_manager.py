@@ -11,7 +11,7 @@ import ui.ctk.dialogs
 import ui.ctk.ctk_patch  # noqa: F401  模式切换时同步刷新 CTk 控件 Frame 底色，避免几何重排露旧色
 from core.behavior_runtime import get_runtime
 from services.exploration.context import ExplorationContext
-from paths import icon_dir
+from paths import APP_NAME, icon_dir
 from persistence import QuipRepo, ScenarioRepo, CharacterRepo
 from persistence import SettingsRepo, LandmarkRepo, PresetRepo, PersonalityRepo
 from services.challenges import ChallengeService
@@ -40,7 +40,7 @@ class MainWindowManager:
     def __init__(self, root, context: ExplorationContext, on_progress=None,
                  world_manager=None):
         self.root = root
-        self.root.title("巨大娘生成器")
+        self.root.title(APP_NAME)
         self.root.geometry("1280x720")
         self._closing = False
         self._active_dungeon_window = None

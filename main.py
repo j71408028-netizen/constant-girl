@@ -12,7 +12,7 @@ boot_x11()
 import tkinter as tk
 import customtkinter as ctk
 
-from paths import ensure_cwd
+from paths import APP_NAME, ensure_cwd
 import ui.ctk.ctk_patch  # noqa: F401  模式切换时同步刷新 CTk 控件 Frame 底色，避免几何重排露旧色
 from ui.ctk import fonts as ui_fonts
 from services.exploration.context import ExplorationContext
@@ -289,7 +289,7 @@ def run_professional(boot):
 
     # 真实主窗口先创建但保持隐藏：初始化期间不参与拖动/缩放等窗口事件，界面在“后台”逐步构建，完成后原位替换。
     root = ctk.CTk()
-    root.title("巨大娘生成器")
+    root.title(APP_NAME)
     root.withdraw()
 
     # 原生控件（ttk.Treeview / tk.Listbox / canvas 文字 / Text tag 字体）的

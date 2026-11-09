@@ -12,7 +12,7 @@ import sys
 
 import customtkinter as ctk
 
-from paths import ensure_cwd, icon_dir
+from paths import APP_NAME, ensure_cwd, icon_dir
 from ui.ctk.loading import LoadingPage
 
 _DEFAULT_W = 1280
@@ -91,7 +91,7 @@ def splash_process(conn, color_theme, title, palette=None):
             print(f"[Warning] 启动屏应用配色 '{palette}' 失败: {e}")
 
     root = ctk.CTk()
-    root.title("巨大娘生成器")
+    root.title(APP_NAME)
     root.geometry(f"{_DEFAULT_W}x{_DEFAULT_H}")
     root.minsize(640, 480)
     # 禁用 CTk 自带的 withdraw/deiconify 标题栏处理，避免出现时闪烁。
