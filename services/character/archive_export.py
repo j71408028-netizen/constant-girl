@@ -353,7 +353,7 @@ _ACTION_LABEL = {
     "insert": "插入段落",
     "background": "场景切换",
     "ending": "结局",
-    "sensitivity": "敏感效果",
+    "sensitivity": "演化修正",
     "goto": "章节跳转",
     "effect": "效果覆盖",
     "fx": "窗口视效",
@@ -424,7 +424,7 @@ def _render_trigger_record(entry: dict) -> str:
         if "voice_fx" in data:
             parts.append("语音效果" if data.get("voice_fx") else "语音效果（清除）")
         if "sensitivity" in data:
-            parts.append("敏感效果" if data.get("sensitivity") else "敏感效果（清除）")
+            parts.append("演化修正" if data.get("sensitivity") else "演化修正（清除）")
         if parts:
             body_parts.append(
                 f"<div class='rp-trigger-body'>✨ 章节效果覆盖："
@@ -568,8 +568,8 @@ def _build_analysis_section(state: CharacterSnapshot) -> str:
             f"</div>"
         )
 
-    step_i = state.current_step_intrusion
-    step_d = state.current_step_destruction
+    step_i = state.current_depth_intrusion
+    step_d = state.current_depth_destruction
     metrics_html = (
         metric("介入度", state.intrusion, step_i,
                _pick_level(state.intrusion, _INTRUSION_BUCKETS))
