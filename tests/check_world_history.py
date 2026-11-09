@@ -59,8 +59,8 @@ def _core(name="履历娘"):
         "name": name, "nick": "", "original_height": 1.6,
         "height": 30.0, "body_parts": {"身高": 30.0},
         "personality_obj": Personality(
-            name="温和", init_intrusion=1.0, step_intrusion=0.1,
-            init_destruction=1.0, step_destruction=0.1,
+            name="温和", init_intrusion=1.0, depth_intrusion=0.1,
+            init_destruction=1.0, depth_destruction=0.1,
             sensitivity=1.0, gravity=0.5),
         "base_intrusion": 1.0, "base_destruction": 1.0,
         "greed": 0.0, "will": False, "will_status": None,

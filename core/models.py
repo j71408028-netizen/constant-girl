@@ -65,12 +65,12 @@ class BodyPreset:
 @dataclass
 class Personality:
     name: str
-    init_intrusion: float      # 初始介入度 (0-4)
-    step_intrusion: float      # 介入度步长
-    init_destruction: float    # 初始破坏性 (0-4)
-    step_destruction: float    # 破坏性步长
-    sensitivity: float         # 敏感值 (直接作用于介入度：地标切换、介入度步长演化等)
-    gravity: float = 0.0       # 重力 (作用于破坏性：地标切换、破坏性步长演化等)
+    init_intrusion: float      # 介入潜质 (0-4)
+    depth_intrusion: float     # 介入深度
+    init_destruction: float    # 破坏潜质 (0-4)
+    depth_destruction: float   # 破坏深度
+    sensitivity: float         # 敏感值 (直接作用于介入度：地标切换、介入深度演化等)
+    gravity: float = 0.0       # 重力 (作用于破坏性：地标切换、破坏深度演化等)
     description: str = ""
     skip_base_prob: float = 3.0  # 个性强度，推荐 2~4
     weight: float = field(default=1.0, compare=False, repr=False)
@@ -80,9 +80,9 @@ class Personality:
     def randomized(self, rng) -> "Personality":
         bounds = {
             "init_intrusion": (0.0, 4.0),
-            "step_intrusion": (-5.0, 5.0),
+            "depth_intrusion": (-5.0, 5.0),
             "init_destruction": (0.0, 4.0),
-            "step_destruction": (-5.0, 5.0),
+            "depth_destruction": (-5.0, 5.0),
             "sensitivity": (-5.0, 5.0),
             "gravity": (-5.0, 5.0),
             "skip_base_prob": (0.0, 5.0),
@@ -116,7 +116,7 @@ class Personality:
 
         除“直接操作当前介入度”的场景外，其余原先使用敏感值的属性操作
         （贪婪生成时的身高重映射、副本自定义属性等）均改用本值。
-        注意：负向演化的介入度步进仍由敏感值直接控制，不走策略值。
+        注意：负向演化的介入深度仍由敏感值直接控制，不走策略值。
 
         - 归一行动点数 = 行动点数 / 100（夹取 0~1）；行动点数未知时
           (1 - 归一行动点数) 取缺省 0.5；该因子不小于 0（行动点数因
@@ -371,10 +371,10 @@ class CharacterSnapshot:
     greed: float = 0.0
     will: bool = False
     will_status: Optional[str] = None
-    # 当前介入度/破坏性步长：步长随故事演进而变化（演化坐标前向初始值恢复，
+    # 当前介入/破坏深度：深度随故事演进而变化（演化坐标前向性格初始深度恢复，
     # 演化坐标后减去 步进×敏感/重力），初始值与 personality 一致，之后独立存储。
-    step_intrusion: Optional[float] = field(default=None, compare=False, repr=False)
-    step_destruction: Optional[float] = field(default=None, compare=False, repr=False)
+    depth_intrusion: Optional[float] = field(default=None, compare=False, repr=False)
+    depth_destruction: Optional[float] = field(default=None, compare=False, repr=False)
     selected_tags: List[str] = field(default_factory=list)
     intro_hidden: str = ""
     intro_visible: str = ""
@@ -453,18 +453,18 @@ class CharacterSnapshot:
         return self.evolution[-1].destruction if self.evolution else 0.0
 
     @property
-    def current_step_intrusion(self) -> float:
-        """当前介入度步长：存储字段；未初始化（None）时回退到性格初始步长。"""
-        if self.step_intrusion is not None:
-            return self.step_intrusion
-        return self.personality.step_intrusion if self.personality else 0.0
+    def current_depth_intrusion(self) -> float:
+        """当前介入深度：存储字段；未初始化（None）时回退到性格初始深度。"""
+        if self.depth_intrusion is not None:
+            return self.depth_intrusion
+        return self.personality.depth_intrusion if self.personality else 0.0
 
     @property
-    def current_step_destruction(self) -> float:
-        """当前破坏性步长：存储字段；未初始化（None）时回退到性格初始步长。"""
-        if self.step_destruction is not None:
-            return self.step_destruction
-        return self.personality.step_destruction if self.personality else 0.0
+    def current_depth_destruction(self) -> float:
+        """当前破坏深度：存储字段；未初始化（None）时回退到性格初始深度。"""
+        if self.depth_destruction is not None:
+            return self.depth_destruction
+        return self.personality.depth_destruction if self.personality else 0.0
 
     @property
     def total_casualties(self) -> float:
@@ -528,9 +528,9 @@ class ReportData:
     # 副本需要额外字段
     curr_intrusion: float = 0.0
     curr_destruction: float = 0.0
-    # 本次报告演化后的当前步长（介入度/破坏性）
-    step_intrusion: float = 0.0
-    step_destruction: float = 0.0
+    # 本次报告演化后的当前深度（介入/破坏）
+    depth_intrusion: float = 0.0
+    depth_destruction: float = 0.0
     # 本次报告锚定的角色位置（完整地址）；空表示未锚定
     position: str = ""
 

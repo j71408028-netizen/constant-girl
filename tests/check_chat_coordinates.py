@@ -35,8 +35,8 @@ def _about(actual, expected, tolerance=1e-9):
 
 def _personality(strength):
     return Personality(
-        name="测试", init_intrusion=2.5, step_intrusion=0.0,
-        init_destruction=2.5, step_destruction=0.0, sensitivity=0.0,
+        name="测试", init_intrusion=2.5, depth_intrusion=0.0,
+        init_destruction=2.5, depth_destruction=0.0, sensitivity=0.0,
         skip_base_prob=strength)
 
 

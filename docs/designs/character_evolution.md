@@ -10,7 +10,7 @@
 | 层级 | 量 | 说明 | 存储位置 |
 |---|---|---|---|
 | 一阶 | 介入度 / 破坏性 | 坐标，统一边界 **0.5 ~ 4.5** | `CharacterSnapshot.evolution` 最后一行 |
-| 二阶 | 介入度步长 / 破坏性步长 | 坐标的变化速率，随故事演化（二阶量） | `step_intrusion` / `step_destruction`（None 时回退性格初始步长） |
+| 二阶 | 介入度步长 / 破坏性步长 | 坐标的变化速率，随故事演化（二阶量） | `depth_intrusion` / `depth_destruction`（None 时回退性格初始步长） |
 | 参数 | 敏感值 / 重力 | 性格常量，UI 范围 [-3, 3] | `Personality.sensitivity` / `gravity` |
 | 参数 | 个性强度 | 性格常量，UI 范围 [0, 5] | `Personality.skip_base_prob` |
 | 状态 | 行动点数 | 0~100（自然回复上限，返还可越上限） | `CharacterSnapshot.action_points` |
@@ -48,7 +48,7 @@
 3. 步长向初始值恢复：`步长 += (初始步长 - 步长) × 0.2 × 个性强度`
 4. 叠加不适应性衰减（见 §4）
 
-以上 2~4 步由 `StateService.evolve_step_rates` 在坐标演化后一次完成
+以上 2~4 步由 `StateService.evolve_depths` 在坐标演化后一次完成
 （先扣除再恢复）。
 
 ### 3.2 副本演化（`dungeon/rules.py evolve_attributes`）
@@ -100,7 +100,7 @@
 - 回复：每分钟 `1 + 0.3 × 强度`（自然回复上限 100）；
 - 返还：副本结局返还、报告解锁部位返还（无上限，仅不低于 0）。
 
-## 4. 不适应性衰减（`decay_step_rates`）
+## 4. 不适应性衰减（`decay_depths`）
 
 **触发**：坐标达到 0.5 或 4.5 边界后（按当前坐标判断，报告/副本/负向演化
 三条路径都传入坐标）。
@@ -163,6 +163,6 @@ python developer_tools/evolution_dump.py --list-packs          # 有哪些行为
 修改演化公式后建议跑一轮并对照 §5 检查。
 
 > **能力边界**：副本演化主体公式 `dungeon/rules.py::EvolutionRules.evolve_attributes`
-> **没有**行为钩子——副本路径只通过注入的 `StateService.decay_step_rates` 受行为包影响；
+> **没有**行为钩子——副本路径只通过注入的 `StateService.decay_depths` 受行为包影响；
 > 报告路径用到的 `StateService` 坐标 / 步长方法则全部可覆盖（清单见
 > [hooks-character.md](behaviors/hooks-character.md)）。

@@ -55,8 +55,8 @@ def _assert_roundtrip(kwargs, label):
 
 def main():
     personality = Personality(
-        name="测试性格", init_intrusion=1.5, step_intrusion=0.3,
-        init_destruction=0.8, step_destruction=0.2, sensitivity=2.0,
+        name="测试性格", init_intrusion=1.5, depth_intrusion=0.3,
+        init_destruction=0.8, depth_destruction=0.2, sensitivity=2.0,
         gravity=0.5, description="用于测试", skip_base_prob=3.0)
     preset = BodyPreset(name="标准", leg_ratio=0.5)
     character = _make_character(personality)

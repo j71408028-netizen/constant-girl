@@ -183,7 +183,7 @@ check("文件不存在：返回 None + 错误说明",
       _missing is None and _err_m != "", _err_m)
 
 # ---------------- 6. 接线：两路方向拆开 ----------------
-_persona = SimpleNamespace(step_intrusion=1.0, step_destruction=1.0,
+_persona = SimpleNamespace(depth_intrusion=1.0, depth_destruction=1.0,
                            sensitivity=0.0, gravity=0.0, skip_base_prob=0.0)
 _rules = EvolutionRules()
 _START = DungeonState(intrusion=2.0, destruction=2.0)

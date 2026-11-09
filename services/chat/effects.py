@@ -34,7 +34,7 @@ EFFECT_TOOL_HINTS = {
     ),
     "step_nudge": (
         '{"axis": "intrusion|destruction", "direction": -1|0|1}：'
-        "轻微调整你接下来的行为步长（幅度很小，接近极限时会衰减）"
+        "轻微调整你接下来的行为深度（幅度很小，接近极限时会衰减）"
     ),
 }
 
@@ -77,13 +77,13 @@ def _apply_step_nudge(state: CharacterSnapshot, args: dict) -> EffectResult:
         return _fail("step_nudge.direction 必须是 -1/0/1")
     if direction not in (-1, 0, 1):
         return _fail("step_nudge.direction 必须是 -1/0/1")
-    changed = StateService.nudge_step_rates(
+    changed = StateService.nudge_depths(
         state, axis, direction, amount=STEP_NUDGE_AMOUNT)
     if changed is None:
-        return EffectResult(True, "步长未变化")
+        return EffectResult(True, "深度未变化")
     old, new = changed
     return EffectResult(
-        True, f"{axis} 步长 {old:.3f} → {new:.3f}", True)
+        True, f"{axis} 深度 {old:.3f} → {new:.3f}", True)
 
 
 EFFECT_HANDLERS: dict[str, Callable[[CharacterSnapshot, dict],

@@ -144,7 +144,7 @@ class DungeonPersistence:
         dest_d = _num(effects.get("destruction_delta"))
         refund = int(_num(effects.get("action_points_refund")))
         custom_deltas = effects.get("custom_deltas", {}) or {}
-        # 伤亡由"步进"按探索模式的伤亡公式自动计算
+        # 伤亡由「步进」按探索模式的伤亡公式自动计算
         casualty_step = _num(effects.get("casualty_step"))
         height = max(1.0, self.height or 1.0)
 
@@ -184,12 +184,12 @@ class DungeonPersistence:
             if exit_position:
                 char.position = exit_position
                 process_log.log(f"[Ending] 结局传送：位置写回 {exit_position}")
-            # 副本会话内演化的步长同步到角色存储（未演化为 None 时保留角色现值）
+            # 副本会话内演化的深度同步到角色存储（未演化为 None 时保留角色现值）
             ds = self.dungeon_state
-            if getattr(ds, "step_intrusion", None) is not None:
-                char.step_intrusion = ds.step_intrusion
-            if getattr(ds, "step_destruction", None) is not None:
-                char.step_destruction = ds.step_destruction
+            if getattr(ds, "depth_intrusion", None) is not None:
+                char.depth_intrusion = ds.depth_intrusion
+            if getattr(ds, "depth_destruction", None) is not None:
+                char.depth_destruction = ds.depth_destruction
             if self.character_repo is not None:
                 try:
                     self.character_repo.save(char)
@@ -259,9 +259,9 @@ class DungeonPersistence:
             source="_create_character_from_session",
             position=exit_position,
         )
-        # 副本会话内演化的步长同步到角色存储
-        char.step_intrusion = getattr(self.dungeon_state, "step_intrusion", None)
-        char.step_destruction = getattr(self.dungeon_state, "step_destruction", None)
+        # 副本会话内演化的深度同步到角色存储
+        char.depth_intrusion = getattr(self.dungeon_state, "depth_intrusion", None)
+        char.depth_destruction = getattr(self.dungeon_state, "depth_destruction", None)
         return char
 
     def _write_replay_file(self, char, incomplete: bool = False) -> str:

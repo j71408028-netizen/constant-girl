@@ -26,7 +26,7 @@
 
 能力边界（报告里也会写明，别把它当成 bug）：副本演化主体公式
 ``dungeon/rules.py::EvolutionRules.evolve_attributes`` **没有**行为钩子，副本路径只通过
-注入的 ``StateService.decay_step_rates`` 受行为包影响；报告路径用到的
+注入的 ``StateService.decay_depths`` 受行为包影响；报告路径用到的
 ``StateService`` 坐标/步长方法则全部可被覆盖。
 
 用法：
@@ -97,7 +97,7 @@ from dungeon.rules import EvolutionRules                      # noqa: E402
 # ==================== 性格预设 ====================
 # ``Personality`` 的参数列（预设 dict 里除 key/name/source/... 之外，正好是这 7 个）。
 PERSONALITY_FIELDS = ("init_intrusion", "init_destruction",
-                      "step_intrusion", "step_destruction",
+                      "depth_intrusion", "depth_destruction",
                       "sensitivity", "gravity", "skip_base_prob")
 
 SOURCE_CORNER = "角点"
@@ -109,31 +109,31 @@ SOURCE_TABLE = "默认性格表"
 CORNER_PRESETS = [
     dict(key="corner_all_pos", name="全正角点", note="上界全正 + 满个性强度（恢复最快、衰减为 0）",
          init_intrusion=2.5, init_destruction=2.5,
-         step_intrusion=3.0, step_destruction=3.0, sensitivity=3.0, gravity=3.0,
+         depth_intrusion=3.0, depth_destruction=3.0, sensitivity=3.0, gravity=3.0,
          skip_base_prob=5.0),
     dict(key="corner_all_neg", name="全负角点", note="下界全负 + 近零个性强度（衰减最强）",
          init_intrusion=3.5, init_destruction=3.5,
-         step_intrusion=-3.0, step_destruction=-3.0, sensitivity=-3.0, gravity=-3.0,
+         depth_intrusion=-3.0, depth_destruction=-3.0, sensitivity=-3.0, gravity=-3.0,
          skip_base_prob=0.5),
     dict(key="corner_zero_step", name="零步长角点", note="二阶量从 0 起步（敏感/重力照常踢），坐标静止检测的对照",
          init_intrusion=2.5, init_destruction=2.5,
-         step_intrusion=0.0, step_destruction=0.0, sensitivity=3.0, gravity=3.0,
+         depth_intrusion=0.0, depth_destruction=0.0, sensitivity=3.0, gravity=3.0,
          skip_base_prob=3.0),
     dict(key="corner_max_strength", name="满个性强度", note="衰减率 1-1=0：贴边也不衰减",
          init_intrusion=2.5, init_destruction=2.5,
-         step_intrusion=1.5, step_destruction=1.5, sensitivity=3.0, gravity=-3.0,
+         depth_intrusion=1.5, depth_destruction=1.5, sensitivity=3.0, gravity=-3.0,
          skip_base_prob=5.0),
     dict(key="corner_min_strength", name="零个性强度", note="衰减率最强：贴边步长几何收敛",
          init_intrusion=2.5, init_destruction=2.5,
-         step_intrusion=3.0, step_destruction=3.0, sensitivity=-3.0, gravity=-3.0,
+         depth_intrusion=3.0, depth_destruction=3.0, sensitivity=-3.0, gravity=-3.0,
          skip_base_prob=0.0),
     dict(key="corner_opposite_sg", name="敏感重力反号", note="介入度与破坏性反向漂移",
          init_intrusion=2.5, init_destruction=2.5,
-         step_intrusion=3.0, step_destruction=3.0, sensitivity=3.0, gravity=-3.0,
+         depth_intrusion=3.0, depth_destruction=3.0, sensitivity=3.0, gravity=-3.0,
          skip_base_prob=5.0),
     dict(key="corner_edge_init", name="初始坐标贴边", note="开局即贴 4.5 / 0.5，立刻进入衰减路径",
          init_intrusion=4.5, init_destruction=0.5,
-         step_intrusion=3.0, step_destruction=-3.0, sensitivity=3.0, gravity=-3.0,
+         depth_intrusion=3.0, depth_destruction=-3.0, sensitivity=3.0, gravity=-3.0,
          skip_base_prob=5.0),
 ]
 
@@ -262,11 +262,11 @@ def select_presets(group: str, table: str, only: str) -> list:
 # 本模拟**实际调用**的可覆盖目标：只有这些被覆盖才会体现在结果里。
 SIMULATED_HOOKS = (
     ("StateService.advance_coordinates", "报告步进：坐标推进"),
-    ("StateService.evolve_step_rates", "报告 / 负向：步长演化"),
-    ("StateService.decay_step_rates", "不适应性衰减（也注入副本 EvolutionRules）"),
+    ("StateService.evolve_depths", "报告 / 负向：步长演化"),
+    ("StateService.decay_depths", "不适应性衰减（也注入副本 EvolutionRules）"),
     ("StateService.apply_landmark_switch", "地标切换"),
     ("StateService.decayed_coordinates", "闲置 / 离线衰减"),
-    ("StateService.apply_step_decay", "面板逗留衰减"),
+    ("StateService.apply_depth_decay", "面板逗留衰减"),
     ("StateService.apply_negative_evolution", "负向演化"),
     ("StateService.clamp_coordinates", "坐标夹取"),
     ("StateService.shift_coordinates", "坐标平移"),
@@ -285,7 +285,7 @@ NOT_SIMULATED_HOOKS = (
 
 EVOLUTION_UNCALLABLE = (
     "副本演化主体公式 dungeon/rules.py::EvolutionRules.evolve_attributes 未提供行为钩子；"
-    "副本路径只通过注入的 StateService.decay_step_rates 受行为包影响"
+    "副本路径只通过注入的 StateService.decay_depths 受行为包影响"
 )
 
 
@@ -467,11 +467,11 @@ def do_report_step(state, rng, profile):
     step = rng.choice((1.0, 1.0, 1.0, 2.0, 2.0, 3.0, -1.0))
     intrusion, destruction = StateService.advance_coordinates(
         p, state.intrusion, state.destruction, step,
-        state.current_step_intrusion, state.current_step_destruction)
-    si, sd = StateService.evolve_step_rates(
-        p, state.current_step_intrusion, state.current_step_destruction, step,
+        state.current_depth_intrusion, state.current_depth_destruction)
+    si, sd = StateService.evolve_depths(
+        p, state.current_depth_intrusion, state.current_depth_destruction, step,
         intrusion=intrusion, destruction=destruction)
-    state.step_intrusion, state.step_destruction = si, sd
+    state.depth_intrusion, state.depth_destruction = si, sd
     state.record_change(step=step, intrusion=intrusion, destruction=destruction,
                         source="report")
     lo, hi = profile["report_cost"]
@@ -494,7 +494,7 @@ def do_dungeon_delve(state, rules, rng, profile):
     每次开副本重新计算），逐段演化，每段把坐标与步长写回角色。
 
     注意：``EvolutionRules.evolve_attributes`` 不是行为钩子，副本路径里只有注入的
-    ``StateService.decay_step_rates`` 会被行为包替换（见报告「行为包」小节）。
+    ``StateService.decay_depths`` 会被行为包替换（见报告「行为包」小节）。
     """
     if not StateService.consume_action_points(state, profile["dungeon_cost"]):
         return 0
@@ -509,8 +509,8 @@ def do_dungeon_delve(state, rules, rng, profile):
             custom_attrs_def=[CUSTOM_ATTR],
             custom_directions={},
             action_points=state.action_points)
-        state.step_intrusion = dungeon_state.step_intrusion
-        state.step_destruction = dungeon_state.step_destruction
+        state.depth_intrusion = dungeon_state.depth_intrusion
+        state.depth_destruction = dungeon_state.depth_destruction
         state.record_change(step=text_type.step_value,
                             intrusion=dungeon_state.intrusion,
                             destruction=dungeon_state.destruction,
@@ -536,7 +536,7 @@ def simulate(preset: dict, steps: int, seed: int, profile: dict,
     rng = random.Random(seed)
     random.seed(seed)   # 副本规则内部（自定义属性噪声等）使用全局 random
     state = make_snapshot(preset)
-    rules = EvolutionRules(step_decay=StateService.decay_step_rates)
+    rules = EvolutionRules(depth_decay=StateService.decay_depths)
     history = []
     phase = PHASE_REPORT
     for i in range(steps):
@@ -556,7 +556,7 @@ def simulate(preset: dict, steps: int, seed: int, profile: dict,
                 do_dungeon_delve(state, rules, rng, profile)
             else:
                 StateService.recover_action_points(state)
-                StateService.apply_step_decay(state, 0.1)
+                StateService.apply_depth_decay(state, 0.1)
             # 点数适中习惯：每步固定回复（ap_short 无此项）
             if profile["per_step_recovery"]:
                 StateService.receive_action_points(state, profile["per_step_recovery"])
@@ -575,8 +575,8 @@ def simulate(preset: dict, steps: int, seed: int, profile: dict,
                     "destruction": row.destruction,
                     "d_intrusion": row.intrusion - prev_row.intrusion,
                     "d_destruction": row.destruction - prev_row.destruction,
-                    "step_intrusion": state.current_step_intrusion,
-                    "step_destruction": state.current_step_destruction,
+                    "depth_intrusion": state.current_depth_intrusion,
+                    "depth_destruction": state.current_depth_destruction,
                     "action_points": state.action_points,
                 })
                 prev_row = row
@@ -585,8 +585,8 @@ def simulate(preset: dict, steps: int, seed: int, profile: dict,
             "phase": phase,
             "intrusion": state.intrusion,
             "destruction": state.destruction,
-            "step_intrusion": state.current_step_intrusion,
-            "step_destruction": state.current_step_destruction,
+            "depth_intrusion": state.current_depth_intrusion,
+            "depth_destruction": state.current_depth_destruction,
             "action_points": state.action_points,
             "strategy": state.personality.strategy_value(state.action_points),
             "neg_evolved": neg_evolved,
@@ -616,8 +616,8 @@ def detect_degeneracy(history) -> list:
     issues = []
     tail_len = min(200, len(history))
 
-    si = [h["step_intrusion"] for h in history]
-    sd = [h["step_destruction"] for h in history]
+    si = [h["depth_intrusion"] for h in history]
+    sd = [h["depth_destruction"] for h in history]
     intr = [h["intrusion"] for h in history]
     destr = [h["destruction"] for h in history]
 
@@ -626,7 +626,7 @@ def detect_degeneracy(history) -> list:
 
     bads = [h["step"] for h in history
             if any(bad(h[k]) for k in ("intrusion", "destruction",
-                                       "step_intrusion", "step_destruction"))]
+                                       "depth_intrusion", "depth_destruction"))]
     if bads:
         issues.append(f"出现 NaN/Inf（首次 step {bads[0]}）")
 
@@ -749,14 +749,14 @@ def plot_character(preset, history, out_dir: Path, profile: dict,
     ax1.set_title(f"{_preset_ident(preset)}（{_source_tag(preset)}｜{profile['label']}"
                   f"{pack_note}）演化轨迹  "
                   f"敏感={preset['sensitivity']} 重力={preset['gravity']} "
-                  f"步长=({preset['step_intrusion']},{preset['step_destruction']}) "
+                  f"步长=({preset['depth_intrusion']},{preset['depth_destruction']}) "
                   f"个性强度={preset['skip_base_prob']}")
     ax1.legend(loc="upper right", fontsize=9, ncols=2)
 
     _shade_phases(ax2, history)
-    ax2.plot(steps, [h["step_intrusion"] for h in history], color="#e67e22", lw=1.1,
+    ax2.plot(steps, [h["depth_intrusion"] for h in history], color="#e67e22", lw=1.1,
              label="介入度步长（二阶）")
-    ax2.plot(steps, [h["step_destruction"] for h in history], color="#8e44ad", lw=1.1,
+    ax2.plot(steps, [h["depth_destruction"] for h in history], color="#8e44ad", lw=1.1,
              label="破坏性步长（二阶）")
     ax2.plot(steps, [h["strategy"] for h in history], color="#7f8c8d", lw=1.0,
              ls=":", label="策略值")
@@ -836,14 +836,14 @@ def write_report(results, out_dir: Path, args, profile_key: str,
         "|---|---|---|---|---|---|---|---|---|"]
     for preset, history, issues in results:
         last = history[-1]
-        peak = max(max(abs(h["step_intrusion"]) for h in history),
-                   max(abs(h["step_destruction"]) for h in history))
+        peak = max(max(abs(h["depth_intrusion"]) for h in history),
+                   max(abs(h["depth_destruction"]) for h in history))
         neg_rate = sum(1 for h in history if h["neg_evolved"]) / len(history)
         verdict = "✅ 未检出退化" if not issues else "⚠️ " + "；".join(issues)
         lines.append(
             f"| {_preset_ident(preset)} | {_source_tag(preset)} "
             f"| {last['intrusion']:.2f} | {last['destruction']:.2f} "
-            f"| {last['step_intrusion']:.2f} | {last['step_destruction']:.2f} "
+            f"| {last['depth_intrusion']:.2f} | {last['depth_destruction']:.2f} "
             f"| {peak:.1f} | {neg_rate:.0%} | {verdict} |")
     lines += ["",
               "> 判定口径：步长发散（|步长|>50）、步长坍缩（末段持续为 0）、",
@@ -947,7 +947,7 @@ def write_trajectory_report(results, out_dir: Path, args, profile_key: str,
                 f"| {e['step_weight']:.2f} | {e['intrusion']:.2f} "
                 f"| {e['destruction']:.2f} | {e['d_intrusion']:+.2f} "
                 f"| {e['d_destruction']:+.2f} "
-                f"| {e['step_intrusion']:.2f}/{e['step_destruction']:.2f} "
+                f"| {e['depth_intrusion']:.2f}/{e['depth_destruction']:.2f} "
                 f"| {e['action_points']} |")
     out = out_dir / "trajectory.md"
     out.write_text("\n".join(lines), encoding="utf-8")

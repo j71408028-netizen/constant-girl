@@ -102,8 +102,8 @@ class CharacterAssembler:
                             source="character_from_core_or_report")
         # 步长随本次报告演化后的当前值写入角色存储（新角色步长起点）
         if from_report:
-            state.step_intrusion = source.step_intrusion or 0.0
-            state.step_destruction = source.step_destruction or 0.0
+            state.depth_intrusion = source.depth_intrusion or 0.0
+            state.depth_destruction = source.depth_destruction or 0.0
 
         # 出身烙印：按当前世界规则派生一次、sanitize 后终身携带；世界包此后
         # 启停不触及已有角色。origin_world 记录出身世界包（无激活包为 None）。

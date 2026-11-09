@@ -24,14 +24,14 @@
 |----------------------------|------|---------------------------------------------------------|
 | `clamp_coordinates`        | `(intrusion, destruction) -> (float, float)` | 把介入度/破坏性夹取到统一的 0.5~4.5 大边界。以下的坐标操作方法都应用此大边界。            |
 | `shift_coordinates`        | `(intrusion, destruction, intrusion_delta, destruction_delta) -> (float, float)` | 按原始坐标增量平移坐标（副本结局增量等场景）。                                 |
-| `advance_coordinates`      | `(personality, intrusion, destruction, step, step_intrusion=None, step_destruction=None) -> (float, float)` | 按故事步进推进坐标（坐标 += 步进 × 步长）；未传显式步长时沿用性格初始步长。报告事件与负向演化共用。                 |
-| `evolve_step_rates`        | `(personality, step_intrusion, step_destruction, step, intrusion=None, destruction=None) -> (float, float)` | 坐标演化后的步长演化：先按敏感值/重力扣除，再向初始值恢复；传入坐标时叠加不适应性衰减。 |
-| `decay_step_rates`         | `(personality, step_intrusion, step_destruction, step_intr, step_destr, intrusion=None, destruction=None) -> (float, float)` | 不适应性衰减的纯计算：坐标贴到 0.5/4.5 边界后，对应步长按 `0.4 ^ (|步进| × (1 - 归一个性强度))` 收敛；仅衰减，不负责敏感/重力扣除。 |
+| `advance_coordinates`      | `(personality, intrusion, destruction, step, depth_intrusion=None, depth_destruction=None) -> (float, float)` | 按故事步进推进坐标（坐标 += 步进 × 深度）；未传显式深度时沿用性格初始深度。报告事件与负向演化共用。                 |
+| `evolve_depths`        | `(personality, depth_intrusion, depth_destruction, step, intrusion=None, destruction=None) -> (float, float)` | 坐标演化后的深度演化：先按敏感值/重力扣除，再向初始值恢复；传入坐标时叠加不适应性衰减。 |
+| `decay_depths`         | `(personality, depth_intrusion, depth_destruction, depth_intr, depth_destr, intrusion=None, destruction=None) -> (float, float)` | 不适应性衰减的纯计算：坐标贴到 0.5/4.5 边界后，对应深度按 `0.4 ^ (|步进| × (1 - 归一个性强度))` 收敛；仅衰减，不负责敏感/重力扣除。 |
 | `apply_landmark_switch`    | `(personality, intrusion, destruction, to_frequency) -> (float, float)` | 地标切换（含首次匹配）时的性格调整：切换到 common 介入度 + 敏感值，切换到 unique 介入度 - 敏感值；破坏性达到 3 以上时，切换到 unique 破坏性 + 重力，切换到 common 破坏性 - 重力。 |
-| `decayed_coordinates`      | `(personality, intrusion, destruction, fraction) -> (float, float)` | 步进衰减的纯计算：仅当坐标越过性格边界（初始值 - 0.5 × 性格步长）时向边界回落 fraction 个步长。 |
-| `apply_negative_evolution` | `(state) -> None` | 行动点数不足（<50）时应用负向演化：介入度步进取 -1 - 0.5 × 性格敏感值（由敏感值直接控制），破坏性步进取 -1 - 0.5 × 性格重力；步长演化叠加不适应性衰减；有变化时向演化表追加一行（步进取本次负向步进之和）。 |
-| `apply_step_decay`         | `(state, fraction=0.1) -> None` | 步进衰减（角色面板逗留每分钟 fraction=0.1），有变化时向演化表追加一行。              |
-| `nudge_step_rates`         | `(state, axis, direction, amount=0.02) -> Optional[(float, float)]` | 聊天 effect 的步长微调：`axis` 取 intrusion/destruction，`direction` 取 -1/0/1；单次幅度很小，接近 ±5 时衰减；只改步长、不写演化表，返回 `(旧值, 新值)` 或 `None`。 |
+| `decayed_coordinates`      | `(personality, intrusion, destruction, fraction) -> (float, float)` | 闲置衰减的纯计算：仅当坐标越过性格边界（初始值 - 0.5 × 性格深度）时向边界回落 fraction 个深度。 |
+| `apply_negative_evolution` | `(state) -> None` | 行动点数不足（<50）时应用负向演化：介入深度取 -1 - 0.5 × 性格敏感值（由敏感值直接控制），破坏深度取 -1 - 0.5 × 性格重力；深度演化叠加不适应性衰减；有变化时向演化表追加一行（步进取本次负向步进之和）。 |
+| `apply_step_decay`         | `(state, fraction=0.1) -> None` | 闲置衰减（角色面板逗留每分钟 fraction=0.1），有变化时向演化表追加一行。              |
+| `nudge_depths`         | `(state, axis, direction, amount=0.02) -> Optional[(float, float)]` | 聊天 effect 的深度微调：`axis` 取 intrusion/destruction，`direction` 取 -1/0/1；单次幅度很小，接近 ±5 时衰减；只改深度、不写演化表，返回 `(旧值, 新值)` 或 `None`。 |
 | `consume_action_points`    | `(state, cost) -> bool` | 消耗行动点数；点数不足返回 `False`。                                  |
 | `receive_action_points`    | `(state, amount) -> int` | 自然回复行动点数（离线恢复、角色面板在线恢复），夹取到 0~100，返回实际变化量。 |
 | `refund_action_points`     | `(state, amount) -> int` | 返还行动点数（副本结算、报告解锁返还等），不设 100 上限，返回实际变化量。 |

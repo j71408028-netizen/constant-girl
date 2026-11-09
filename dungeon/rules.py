@@ -17,16 +17,16 @@ class EvolutionRules:
 
     def __init__(self, transition_matrix: Optional[dict] = None,
                  step_overrides: Optional[dict] = None,
-                 step_decay: Optional[object] = None):
+                 depth_decay: Optional[object] = None):
         """``transition_matrix`` / ``step_overrides`` 直接来自副本方案配置。
 
         两者都是**部分覆盖**：配置里出现的行整行替换（行内没写的列按 0 处理，
         作者显式改动一行就意味着这一行要按他的写法走），完全没有的行沿用内置
         默认——这样改一行也不会让其余段落退化成均匀随机。
 
-        ``step_decay``：不适应性衰减函数，由调用方注入。签名与
-        ``services.state_service.StateService.decay_step_rates`` 一致
-        （``(personality, step_intrusion, step_destruction, step_intr, step_destr,
+        ``depth_decay``：不适应性衰减函数，由调用方注入。签名与
+        ``services.state_service.StateService.decay_depths`` 一致
+        （``(personality, depth_intrusion, depth_destruction, depth_intr, depth_destr,
         intrusion=..., destruction=...) -> (si, sd)``）。领域层不依赖 services 层：
         副本窗口（``window/base.py``）显式注入；未注入时不做边界衰减
         （纯数值模拟可忽略，正式运行必须注入）。
@@ -41,7 +41,7 @@ class EvolutionRules:
             self._merge_step_overrides(step_overrides)
         for text_type in DungeonTextType:
             self.step_overrides.setdefault(text_type.value, text_type.step_value)
-        self.step_decay = step_decay
+        self.depth_decay = depth_decay
 
     def _merge_transition_matrix(self, matrix) -> None:
         """用配置矩阵覆盖默认矩阵：出现的行整行替换，没出现的行保持默认。
@@ -67,7 +67,7 @@ class EvolutionRules:
                 self.transition_matrix[row_key] = merged
 
     def _merge_step_overrides(self, overrides) -> None:
-        """分节步长同样按需覆盖：只接受正数与已知段落类型。"""
+        """分节步进同样按需覆盖：只接受正数与已知段落类型。"""
         known = {text_type.value for text_type in DungeonTextType}
         for key, value in overrides.items():
             if key not in known:
@@ -108,11 +108,11 @@ class EvolutionRules:
                           builtin_directions: Optional[dict[str, int]] = None) -> DungeonState:
         """按段落类型演化副本属性。
 
-        交互对坐标的操作统一由绑定触发器跳转具有敏感效果的章节实现
+        交互对坐标的操作统一由绑定触发器跳转具有演化修正的章节实现
         （sensitivity_mods / sensitivity_amount）。
 
         ``step_override``：覆盖本段步进值（结束章节为 0，即不产生坐标、
-        自定义属性与步长变化，仅累计计数）。
+        自定义属性与深度变化，仅累计计数）。
 
         ``builtin_directions``：**指名**介入度 / 破坏性两路的方向，形如
         ``{"介入度": +1, "破坏性": -1}``；缺的一路回退到 ``direction``。
@@ -127,16 +127,16 @@ class EvolutionRules:
         builtin_directions = builtin_directions or {}
         frozen = step_override is not None and float(step_override) == 0.0
 
-        # 步长演化（演算坐标前）：步长向初始值恢复 0.2*个性强度 的比例差值；
-        # 未初始化的步长（None）沿用性格初始步长，不参与恢复。
-        # 步进为 0（结束章节）时整套属性演化冻结：坐标、自定义属性与步长均不变。
-        si = state.step_intrusion if state.step_intrusion is not None else personality.step_intrusion
-        sd = state.step_destruction if state.step_destruction is not None else personality.step_destruction
+        # 深度演化（演算坐标前）：深度向性格初始深度恢复 0.2*个性强度 的比例差值；
+        # 未初始化的深度（None）沿用性格初始深度，不参与恢复。
+        # 步进为 0（结束章节）时整套属性演化冻结：坐标、自定义属性与深度均不变。
+        si = state.depth_intrusion if state.depth_intrusion is not None else personality.depth_intrusion
+        sd = state.depth_destruction if state.depth_destruction is not None else personality.depth_destruction
         if not frozen:
             strength = getattr(personality, "skip_base_prob", 3.0)
             ratio = 0.2 * strength
-            si = si + (personality.step_intrusion - si) * ratio
-            sd = sd + (personality.step_destruction - sd) * ratio
+            si = si + (personality.depth_intrusion - si) * ratio
+            sd = sd + (personality.depth_destruction - sd) * ratio
 
         intrusion_rate = si
         destruction_rate = sd
@@ -156,17 +156,17 @@ class EvolutionRules:
             new_state.custom_attrs[name] = new_state.custom_attrs.get(name, 0.0) + delta
 
         if frozen:
-            new_state.step_intrusion = state.step_intrusion
-            new_state.step_destruction = state.step_destruction
+            new_state.depth_intrusion = state.depth_intrusion
+            new_state.depth_destruction = state.depth_destruction
         else:
-            # 步长演化（演算坐标后）：步长 -= 步进 × 敏感/重力，
-            # 叠加不适应性衰减（坐标达到 0.5/4.5 后步长向 0 收敛）
-            new_state.step_intrusion = si - step * personality.sensitivity
-            new_state.step_destruction = sd - step * getattr(personality, "gravity", 0.0)
-            if self.step_decay is not None:
-                new_state.step_intrusion, new_state.step_destruction = \
-                    self.step_decay(
-                        personality, new_state.step_intrusion, new_state.step_destruction,
+            # 深度演化（演算坐标后）：深度 -= 步进 × 敏感/重力，
+            # 叠加不适应性衰减（坐标达到 0.5/4.5 后深度向 0 收敛）
+            new_state.depth_intrusion = si - step * personality.sensitivity
+            new_state.depth_destruction = sd - step * getattr(personality, "gravity", 0.0)
+            if self.depth_decay is not None:
+                new_state.depth_intrusion, new_state.depth_destruction = \
+                    self.depth_decay(
+                        personality, new_state.depth_intrusion, new_state.depth_destruction,
                         step, step,
                         intrusion=new_state.intrusion, destruction=new_state.destruction)
 

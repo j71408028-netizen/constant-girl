@@ -61,8 +61,8 @@ _RUNTIME.reset()
 
 def _personality():
     from core.models import Personality
-    return Personality(name="温和", init_intrusion=1.0, step_intrusion=0.1,
-                       init_destruction=1.0, step_destruction=0.1,
+    return Personality(name="温和", init_intrusion=1.0, depth_intrusion=0.1,
+                       init_destruction=1.0, depth_destruction=0.1,
                        sensitivity=1.0, gravity=0.5)
 
 

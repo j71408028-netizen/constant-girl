@@ -18,8 +18,8 @@
 docs/Dungeon/window_host.md §3）。
 
 领域层需要的外部行为一律由调用方注入，典型例子见 ``dungeon/rules.py``：
-``EvolutionRules(step_decay=...)`` 由 ``window/base.py`` 传入
-``StateService.decay_step_rates``，而不是领域层自己去 import services。
+``EvolutionRules(depth_decay=...)`` 由 ``window/base.py`` 传入
+``StateService.decay_depths``，而不是领域层自己去 import services。
 
 退出码：0 = 通过；1 = 存在越界依赖。
 """

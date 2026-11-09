@@ -6,8 +6,8 @@
   prompts / response / splitter / summary / details / schema / validate …）是纯领域，
   禁止 import ``imgui_bundle`` / ``dearpygui`` / ``tkinter`` / ``customtkinter`` /
   ``services`` / ``ui``，也禁止反向依赖 ``dungeon.window``；
-- 需要外部行为时走**依赖注入**：例如 ``EvolutionRules(step_decay=...)`` 由 UI 层
-  （``window/base.py``）显式传入 ``StateService.decay_step_rates``；
+- 需要外部行为时走**依赖注入**：例如 ``EvolutionRules(depth_decay=...)`` 由 UI 层
+  （``window/base.py``）显式传入 ``StateService.decay_depths``；
 - 需要 UI 的代码一律放 ``dungeon/window/``（含 background / dispatcher /
   launcher / components）。
 """

@@ -94,11 +94,11 @@ class ReportEngine:
         selected_tags = core_state["selected_tags"]
         greed = core_state["greed"]
         will = core_state["will"]
-        # 当前介入度/破坏性步长：未在 core_state 提供时沿用性格初始步长
-        curr_step_intrusion = core_state.get("step_intrusion",
-                                             personality_obj.step_intrusion)
-        curr_step_destruction = core_state.get("step_destruction",
-                                               personality_obj.step_destruction)
+        # 当前介入/破坏深度：未在 core_state 提供时沿用性格初始深度
+        curr_depth_intrusion = core_state.get("depth_intrusion",
+                                             personality_obj.depth_intrusion)
+        curr_depth_destruction = core_state.get("depth_destruction",
+                                               personality_obj.depth_destruction)
 
         comparison_order = settings.get("comparison_order", "match")
         comparison_count = settings.get("comparison_count", 5)
@@ -142,8 +142,8 @@ class ReportEngine:
                 "total_casualties": 0.0,
                 "curr_intrusion": curr_intrusion,
                 "curr_destruction": curr_destruction,
-                "step_intrusion": curr_step_intrusion,
-                "step_destruction": curr_step_destruction,
+                "depth_intrusion": curr_depth_intrusion,
+                "depth_destruction": curr_depth_destruction,
                 "size_cat": size_cat,
                 "position": position_now,
                 "engaged": arbitration["engaged"],
@@ -255,14 +255,14 @@ class ReportEngine:
             if quip_text is not None:
                 curr_intrusion, curr_destruction = state_service.advance_coordinates(
                     personality_obj, curr_intrusion, curr_destruction, actual_step,
-                    step_intrusion=curr_step_intrusion,
-                    step_destruction=curr_step_destruction)
-                # 步长演化（演化坐标后）：先按步进扣除 步长 -= 步进 × 敏感/重力，
+                    depth_intrusion=curr_depth_intrusion,
+                    depth_destruction=curr_depth_destruction)
+                # 深度演化（演化坐标后）：先按步进扣除 深度 -= 步进 × 敏感/重力，
                 # 再向初始值恢复 0.2*个性强度 的比例差值，并叠加不适应性衰减
-                # （坐标达到 0.5/4.5 后步长向 0 收敛）
-                curr_step_intrusion, curr_step_destruction = \
-                    state_service.evolve_step_rates(
-                        personality_obj, curr_step_intrusion, curr_step_destruction,
+                # （坐标达到 0.5/4.5 后深度向 0 收敛）
+                curr_depth_intrusion, curr_depth_destruction = \
+                    state_service.evolve_depths(
+                        personality_obj, curr_depth_intrusion, curr_depth_destruction,
                         actual_step,
                         intrusion=curr_intrusion, destruction=curr_destruction)
 
@@ -304,8 +304,8 @@ class ReportEngine:
             "quip_results": quip_results,
             "curr_intrusion": curr_intrusion,
             "curr_destruction": curr_destruction,
-            "step_intrusion": curr_step_intrusion,
-            "step_destruction": curr_step_destruction,
+            "depth_intrusion": curr_depth_intrusion,
+            "depth_destruction": curr_depth_destruction,
             "total_casualties": total_casualties,
             "size_cat": size_cat,
             "style_meta_cache": style_meta_cache,

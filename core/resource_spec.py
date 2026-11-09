@@ -308,8 +308,8 @@ _PRESET_FIELDS = _csv_fields(
 _PERSONALITY_FIELDS = _csv_fields(
     ("weight", "number", "权重"),
     ("name", "str", "名称"),
-    ("init_intrusion", "number"), ("step_intrusion", "number"),
-    ("init_destruction", "number"), ("step_destruction", "number"),
+    ("init_intrusion", "number"), ("depth_intrusion", "number"),
+    ("init_destruction", "number"), ("depth_destruction", "number"),
     ("sensitivity", "number"), ("gravity", "number"),
     ("skip_base_prob", "number"), ("description", "text"),
     required=("name",),

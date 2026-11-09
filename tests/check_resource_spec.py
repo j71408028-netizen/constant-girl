@@ -333,7 +333,7 @@ try:
     for member_key, header in (
             ("names", ["surname", "ppm", "name", "nick"]),
             ("presets", ["name", "height_ratio", "leg_ratio", "foot_length_ratio"]),
-            ("personalities", ["name", "init_intrusion", "step_intrusion"]),
+            ("personalities", ["name", "init_intrusion", "depth_intrusion"]),
             ("news", ["size_category", "intrusion", "destruction", "text"])):
         with open(os.path.join(material_dir, f"{member_key}.csv"), "w",
                   encoding="utf-8-sig", newline="") as handle:

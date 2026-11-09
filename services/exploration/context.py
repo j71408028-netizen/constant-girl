@@ -276,8 +276,8 @@ class ExplorationContext:
                 "preset_obj": None,
                 "base_intrusion": state.intrusion,
                 "base_destruction": state.destruction,
-                "step_intrusion": state.current_step_intrusion,
-                "step_destruction": state.current_step_destruction,
+                "depth_intrusion": state.current_depth_intrusion,
+                "depth_destruction": state.current_depth_destruction,
                 "greed": state.greed,
                 "will": state.will,
                 "will_status": state.will_status,
@@ -355,11 +355,11 @@ class ExplorationContext:
                                 source="report_from_core_or_character",
                                 position=report_data.get("position") or state.position or "",
                                 env_factor=settled_env)
-            # 步长随本次报告演化后的当前值写回角色存储
-            state.step_intrusion = report_data.get("step_intrusion",
-                                                   state.current_step_intrusion)
-            state.step_destruction = report_data.get("step_destruction",
-                                                     state.current_step_destruction)
+            # 深度随本次报告演化后的当前值写回角色存储
+            state.depth_intrusion = report_data.get("depth_intrusion",
+                                                   state.current_depth_intrusion)
+            state.depth_destruction = report_data.get("depth_destruction",
+                                                     state.current_depth_destruction)
             state.landmark_durability = report_data.get("landmark_durability", {})
             state.landmark_addresses = report_data.get("landmark_addresses",
                                                        dict(state.landmark_addresses or {}))
@@ -401,8 +401,8 @@ class ExplorationContext:
             casualty_breakdown=report_data["quip_results"],
             curr_intrusion=report_data["curr_intrusion"],
             curr_destruction=report_data["curr_destruction"],
-            step_intrusion=report_data.get("step_intrusion", 0.0),
-            step_destruction=report_data.get("step_destruction", 0.0),
+            depth_intrusion=report_data.get("depth_intrusion", 0.0),
+            depth_destruction=report_data.get("depth_destruction", 0.0),
             position=report_data.get("position", ""),
         )
 

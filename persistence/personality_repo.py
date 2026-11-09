@@ -91,18 +91,18 @@ class PersonalityRepo:
             return None
         raw = {
             "init_intrusion": row.get("init_intrusion"),
-            "step_intrusion": row.get("step_intrusion"),
+            "depth_intrusion": row.get("depth_intrusion"),
             "init_destruction": row.get("init_destruction"),
-            "step_destruction": row.get("step_destruction"),
+            "depth_destruction": row.get("depth_destruction"),
             "sensitivity": row.get("sensitivity"),
             "gravity": row.get("gravity"),
             "skip_base_prob": row.get("skip_base_prob"),
         }
         fields = {
             "init_intrusion": (0.0, 4.0, 1.0),
-            "step_intrusion": (-5.0, 5.0, 0.5),
+            "depth_intrusion": (-5.0, 5.0, 0.5),
             "init_destruction": (0.0, 4.0, 1.0),
-            "step_destruction": (-5.0, 5.0, 0.5),
+            "depth_destruction": (-5.0, 5.0, 0.5),
             "sensitivity": (-5.0, 5.0, 1.0),
             "gravity": (-5.0, 5.0, 0.0),
             "skip_base_prob": (0.0, 5.0, 3.0),
@@ -139,12 +139,12 @@ class PersonalityRepo:
             "name": item.name,
             "init_intrusion": format_float_parameter(
                 item.init_intrusion, ranges.get("init_intrusion", 0.0)),
-            "step_intrusion": format_float_parameter(
-                item.step_intrusion, ranges.get("step_intrusion", 0.0)),
+            "depth_intrusion": format_float_parameter(
+                item.depth_intrusion, ranges.get("depth_intrusion", 0.0)),
             "init_destruction": format_float_parameter(
                 item.init_destruction, ranges.get("init_destruction", 0.0)),
-            "step_destruction": format_float_parameter(
-                item.step_destruction, ranges.get("step_destruction", 0.0)),
+            "depth_destruction": format_float_parameter(
+                item.depth_destruction, ranges.get("depth_destruction", 0.0)),
             "sensitivity": format_float_parameter(
                 item.sensitivity, ranges.get("sensitivity", 0.0)),
             "gravity": format_float_parameter(

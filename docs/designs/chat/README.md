@@ -76,7 +76,7 @@ tension = clamp(0.6 × world_stance + 0.4 × identity_offset + 0.3 × event_pres
 - `identity_offset` 由当前身份的关系认知映射：`lover -0.15 / close -0.10 / friend -0.05 /
   stranger +0.05 / rival +0.15 / enemy +0.25`，未知与默认不额外加压。
 - `event_pressure` 扫最近 50 行演化记录与 7 天窗口，按伤亡增量与坐标位移计权，排除纯
-  步长衰减（`apply_step_decay`）行；旧聊天来源按 0.25 低权重计入；已达成结局也算事件。
+  闲置衰减（`apply_step_decay`）行；旧聊天来源按 0.25 低权重计入；已达成结局也算事件。
   求和后按 48 小时半衰期衰减。
 
 **状态**（`compute_size_state`）：
@@ -181,7 +181,7 @@ size_state = clamp(0.5 + 0.4 × resilience − 0.5 × edge − 0.5 × ap_deficit
 | tool | args | 行为 |
 |---|---|---|
 | `self_view` | `{"text": "..."}` | 追加到 `intro_visible`，不改写旧介绍与 `intro_hidden`，单条 ≤ 500 字，重复内容不重复追加 |
-| `step_nudge` | `{"axis": "intrusion\|destruction", "direction": -1\|0\|1}` | 经 `StateService.nudge_step_rates` 微调步长，单次约 ±0.02，接近步长上限时衰减 |
+| `step_nudge` | `{"axis": "intrusion\|destruction", "direction": -1\|0\|1}` | 经 `StateService.nudge_depths` 微调深度，单次约 ±0.02，接近深度上限时衰减 |
 
 - 每轮最多一个；给成数组视为多个，整条丢弃。未知工具或非法参数只记失败日志，不重试、
   不回滚已经生成的回复。
@@ -246,5 +246,5 @@ python tests/run_checks.py check_chat_coordinates check_chat_topics \
 ## 相关
 
 - 消息生命周期、协议解析、投递与界面职责：[`../dev/chat_delivery.md`（实现细节在 `docs/dev/chat_delivery.md`）
-- 演化坐标、步长与不适应性衰减：[`character_evolution.md`](../character_evolution.md)
+- 演化坐标、深度与不适应性衰减：[`character_evolution.md`](../character_evolution.md)
 - 行为包能覆盖什么：[`behaviors/dev-guide.md`](../behaviors/dev-guide.md)

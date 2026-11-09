@@ -39,80 +39,80 @@ class StateService:
     @behavior_hook("StateService", "advance_coordinates")
     def advance_coordinates(personality, intrusion: float, destruction: float,
                             step: float,
-                            step_intrusion: Optional[float] = None,
-                            step_destruction: Optional[float] = None,
+                            depth_intrusion: Optional[float] = None,
+                            depth_destruction: Optional[float] = None,
                             ) -> Tuple[float, float]:
-        """按故事步进推进坐标：坐标 += 步进 × 步长。
+        """按故事步进推进坐标：坐标 += 步进 × 深度。
 
-        未传入显式步长时沿用性格步长（旧行为，不演化步长）；
-        传入显式步长（角色已演化的当前步长）时按该步长推进，
-        供报告/副本等“步长随故事演化”的流程使用。调用方需在演化坐标后
-        调用 evolve_step_rates（先扣除再向初始值恢复）。
+        未传入显式深度时沿用性格初始深度（旧行为，不演化深度）；
+        传入显式深度（角色已演化的当前深度）时按该深度推进，
+        供报告/副本等“深度随故事演化”的流程使用。调用方需在演化坐标后
+        调用 evolve_depths（先扣除再向初始深度恢复）。
         """
         if personality is None:
             return intrusion, destruction
-        si = personality.step_intrusion if step_intrusion is None else step_intrusion
-        sd = personality.step_destruction if step_destruction is None else step_destruction
+        si = personality.depth_intrusion if depth_intrusion is None else depth_intrusion
+        sd = personality.depth_destruction if depth_destruction is None else depth_destruction
         return StateService.shift_coordinates(
             intrusion, destruction, si * step, sd * step)
 
     @staticmethod
-    @behavior_hook("StateService", "evolve_step_rates")
-    def evolve_step_rates(personality, step_intrusion: float, step_destruction: float,
+    @behavior_hook("StateService", "evolve_depths")
+    def evolve_depths(personality, depth_intrusion: float, depth_destruction: float,
                           step: float,
                           intrusion: Optional[float] = None,
                           destruction: Optional[float] = None,
                           ) -> Tuple[float, float]:
-        """演化坐标后按同一故事步进演化介入度/破坏性步长（先扣除再恢复）。
+        """演化坐标后按同一故事推进演化介入深度/破坏深度（先扣除再恢复）。
 
-        - 扣除：步长 -= 步进 × 性格值：
-            step_intrusion -= step * sensitivity
-            step_destruction -= step * gravity
-        - 恢复：步长向初始值恢复 0.2 * 个性强度 的比例差值：
+        - 扣除：深度 -= 步进 × 性格值：
+            depth_intrusion -= step * sensitivity
+            depth_destruction -= step * gravity
+        - 恢复：深度向性格初始深度恢复 0.2 * 个性强度 的比例差值：
             current += (init - current) * 0.2 * skip_base_prob
         - 提供坐标（intrusion/destruction）时叠加不适应性衰减（见
-          :meth:`decay_step_rates`）：坐标达到 0.5/4.5 边界后，对应步长向 0 收敛。
-        调用方先用当前步长演化坐标（advance_coordinates），再以同一故事
+          :meth:`decay_depths`）：坐标达到 0.5/4.5 边界后，对应深度向 0 收敛。
+        调用方先用当前深度演化坐标（advance_coordinates），再以同一故事
         步进调用本方法。
         """
         if personality is None:
-            return step_intrusion, step_destruction
-        step_intrusion = step_intrusion - step * personality.sensitivity
-        step_destruction = step_destruction - step * getattr(personality, "gravity", 0.0)
+            return depth_intrusion, depth_destruction
+        depth_intrusion = depth_intrusion - step * personality.sensitivity
+        depth_destruction = depth_destruction - step * getattr(personality, "gravity", 0.0)
         strength = getattr(personality, "skip_base_prob", 3.0)
         ratio = 0.2 * strength
-        step_intrusion = step_intrusion + (
-            personality.step_intrusion - step_intrusion) * ratio
-        step_destruction = step_destruction + (
-            personality.step_destruction - step_destruction) * ratio
-        return StateService.decay_step_rates(
-            personality, step_intrusion, step_destruction,
+        depth_intrusion = depth_intrusion + (
+            personality.depth_intrusion - depth_intrusion) * ratio
+        depth_destruction = depth_destruction + (
+            personality.depth_destruction - depth_destruction) * ratio
+        return StateService.decay_depths(
+            personality, depth_intrusion, depth_destruction,
             step, step, intrusion, destruction)
 
     @staticmethod
-    @behavior_hook("StateService", "decay_step_rates")
-    def decay_step_rates(personality, step_intrusion: float,
-                         step_destruction: float,
-                         step_intr: float, step_destr: float,
+    @behavior_hook("StateService", "decay_depths")
+    def decay_depths(personality, depth_intrusion: float,
+                         depth_destruction: float,
+                         depth_intr: float, depth_destr: float,
                          intrusion: Optional[float] = None,
                          destruction: Optional[float] = None,
                          ) -> Tuple[float, float]:
-        """不适应性衰减：坐标达到 0.5/4.5 边界后，对应步长每步向 0 移动（个性越强越适应，衰减越弱）。
+        """不适应性衰减：坐标达到 0.5/4.5 边界后，对应深度每步向 0 移动（个性越强越适应，衰减越弱）。
 
-        step_intr / step_destr 为本次的步进（取绝对值参与计算，正负均可）；
-        未提供对应坐标时不衰减。仅衰减，不负责步长的敏感/重力扣除。
+        depth_intr / depth_destr 为本次的步进（取绝对值参与计算，正负均可）；
+        未提供对应坐标时不衰减。仅衰减，不负责深度的敏感/重力扣除。
         """
         if personality is None:
-            return step_intrusion, step_destruction
+            return depth_intrusion, depth_destruction
         rate = 1.0 - personality.normalized_strength
         if rate > 0.0:
             if intrusion is not None and (intrusion <= 0.5 or intrusion >= 4.5):
-                decay = abs(step_intr) * rate
-                step_intrusion = step_intrusion * 0.4 ** decay
+                decay = abs(depth_intr) * rate
+                depth_intrusion = depth_intrusion * 0.4 ** decay
             if destruction is not None and (destruction <= 0.5 or destruction >= 4.5):
-                decay = abs(step_destr) * rate
-                step_destruction = step_destruction * 0.4 ** decay
-        return step_intrusion, step_destruction
+                decay = abs(depth_destr) * rate
+                depth_destruction = depth_destruction * 0.4 ** decay
+        return depth_intrusion, depth_destruction
 
     @staticmethod
     @behavior_hook("StateService", "apply_landmark_switch")
@@ -139,7 +139,7 @@ class StateService:
     @behavior_hook("StateService", "decayed_coordinates")
     def decayed_coordinates(personality, intrusion: float, destruction: float,
                             fraction: float) -> Tuple[float, float]:
-        """步进衰减的纯计算：仅当坐标越过性格边界（初始值 - 0.5*步长）时向边界回落 fraction 个步长。
+        """闲置衰减的纯计算：仅当坐标越过性格边界（初始值 - 0.5*深度）时向边界回落 fraction 个深度。
         fraction 为本次回落的步进，视场景而定（加载期按离线分钟数、面板逗留每分钟 0.1）；衰减不会越过边界。
         不改状态、不记表。
         """
@@ -147,22 +147,22 @@ class StateService:
             return intrusion, destruction
         bound_intrusion = personality.init_intrusion
         bound_destruction = personality.init_destruction
-        if personality.step_intrusion > 0:
+        if personality.depth_intrusion > 0:
             if intrusion > bound_intrusion:
                 intrusion = max(bound_intrusion,
-                                intrusion - fraction * personality.step_intrusion)
-        elif personality.step_intrusion < 0:
+                                intrusion - fraction * personality.depth_intrusion)
+        elif personality.depth_intrusion < 0:
             if intrusion < bound_intrusion:
                 intrusion = min(bound_intrusion,
-                                intrusion - fraction * personality.step_intrusion)
-        if personality.step_destruction > 0:
+                                intrusion - fraction * personality.depth_intrusion)
+        if personality.depth_destruction > 0:
             if destruction > bound_destruction:
                 destruction = max(bound_destruction,
-                                  destruction - fraction * personality.step_destruction)
-        elif personality.step_destruction < 0:
+                                  destruction - fraction * personality.depth_destruction)
+        elif personality.depth_destruction < 0:
             if destruction < bound_destruction:
                 destruction = min(bound_destruction,
-                                  destruction - fraction * personality.step_destruction)
+                                  destruction - fraction * personality.depth_destruction)
 
         return StateService.clamp_coordinates(intrusion, destruction)
 
@@ -172,9 +172,9 @@ class StateService:
     @behavior_hook("StateService", "apply_negative_evolution")
     def apply_negative_evolution(state: CharacterSnapshot):
         """行动点数不足（<50）时应用负向演化。
-        介入度步进取 -1 - 0.5 * 性格敏感值（由敏感值直接控制，不走策略值），
-        破坏性步进取 -1 - 0.5 * 性格重力，无限制地每次应用，仅受 0.5~4.5
-        边界约束；同时按步长演化规则恢复/扣除介入度与破坏性步长
+        介入深度取 -1 - 0.5 * 性格敏感值（由敏感值直接控制，不走策略值），
+        破坏深度取 -1 - 0.5 * 性格重力，无限制地每次应用，仅受 0.5~4.5
+        边界约束；同时按深度演化规则恢复/扣除介入深度与破坏深度
         （含不适应性衰减）；有变化时向演化表追加一行，行的步进取两种步进之和。
         """
         if state.action_points >= 50:
@@ -184,24 +184,24 @@ class StateService:
             return
         intrusion_step = -1.0 - 0.5 * personality.sensitivity
         destruction_step = -1.0 - 0.5 * getattr(personality, "gravity", 0.0)
-        # 步长向初始值恢复（step=0 时无扣除、无衰减，仅恢复）
-        si = state.current_step_intrusion
-        sd = state.current_step_destruction
-        si, sd = StateService.evolve_step_rates(personality, si, sd, 0.0)
+        # 深度向性格初始深度恢复（step=0 时无扣除、无衰减，仅恢复）
+        si = state.current_depth_intrusion
+        sd = state.current_depth_destruction
+        si, sd = StateService.evolve_depths(personality, si, sd, 0.0)
         intrusion, destruction = StateService.shift_coordinates(
             state.intrusion, state.destruction,
             si * intrusion_step, sd * destruction_step)
         # 演算坐标后：各分量按自身步进扣除 步进×性格值，并叠加不适应性衰减
         si = si - intrusion_step * personality.sensitivity
         sd = sd - destruction_step * getattr(personality, "gravity", 0.0)
-        si, sd = StateService.decay_step_rates(
+        si, sd = StateService.decay_depths(
             personality, si, sd, intrusion_step, destruction_step,
             intrusion=intrusion, destruction=destruction)
-        state.step_intrusion = si
-        state.step_destruction = sd
+        state.depth_intrusion = si
+        state.depth_destruction = sd
         if (intrusion != state.intrusion or destruction != state.destruction
-                or si != state.current_step_intrusion
-                or sd != state.current_step_destruction):
+                or si != state.current_depth_intrusion
+                or sd != state.current_depth_destruction):
             state.record_change(step=intrusion_step + destruction_step,
                                 intrusion=intrusion,
                                 destruction=destruction,
@@ -210,7 +210,7 @@ class StateService:
     @staticmethod
     @behavior_hook("StateService", "apply_step_decay")
     def apply_step_decay(state: CharacterSnapshot, fraction: float = 0.1):
-        """步进衰减（角色面板逗留等在线场景）：向性格边界回落 fraction 个步长。
+        """闲置衰减（角色面板逗留等在线场景）：向性格边界回落 fraction 个深度。
         有变化时向演化表追加一行（步进记 0.0）。
         """
         if state.personality is None:
@@ -222,15 +222,15 @@ class StateService:
                                 source="apply_step_decay")
 
     @staticmethod
-    @behavior_hook("StateService", "nudge_step_rates")
-    def nudge_step_rates(state: CharacterSnapshot, axis: str, direction: int,
+    @behavior_hook("StateService", "nudge_depths")
+    def nudge_depths(state: CharacterSnapshot, axis: str, direction: int,
                          amount: float = 0.02
                          ) -> Optional[Tuple[float, float]]:
-        """按聊天意图轻微调整某一路步长，返回 ``(旧值, 新值)``。
+        """按聊天意图轻微调整某一路深度，返回 ``(旧值, 新值)``。
 
         ``axis`` 为 intrusion/destruction，``direction`` 只接受 -1/0/1。
-        单次幅度很小，并随步长绝对值接近上限而衰减，避免连续聊天把步长
-        推到极端。不写演化表：只改进化参数，不改坐标。
+        单次幅度很小，并随深度绝对值接近上限而衰减，避免连续聊天把深度
+        推到极端。不写演化表：只改演化参数，不改坐标。
         """
         if axis not in ("intrusion", "destruction"):
             return None
@@ -246,7 +246,7 @@ class StateService:
             return None
         if not step > 0.0:
             return None
-        field_name = f"step_{axis}"
+        field_name = f"depth_{axis}"
         current = getattr(state, f"current_{field_name}", None)
         if current is None:
             current = getattr(state, field_name, 0.0) or 0.0

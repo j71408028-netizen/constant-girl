@@ -47,8 +47,8 @@ def check(name, ok, extra=""):
 
 
 def _personality() -> Personality:
-    return Personality(name="冷", init_intrusion=2.0, step_intrusion=0.1,
-                       init_destruction=2.0, step_destruction=0.1,
+    return Personality(name="冷", init_intrusion=2.0, depth_intrusion=0.1,
+                       init_destruction=2.0, depth_destruction=0.1,
                        sensitivity=1.0, gravity=1.0,
                        description="说话短，慢热，不轻易信人")
 

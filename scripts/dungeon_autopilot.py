@@ -526,8 +526,8 @@ class _Personality:
     description = "冷静而好奇"
     init_intrusion = 1.0
     init_destruction = 1.0
-    step_intrusion = 0.1
-    step_destruction = 0.1
+    depth_intrusion = 0.1
+    depth_destruction = 0.1
     sensitivity = 1.0
     normalized_strength = 0.5
     skip_base_prob = 0.0

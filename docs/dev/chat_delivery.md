@@ -308,7 +308,7 @@ Topic
   `settings.json` 的 `world_stance`（worship / accept / coexist / alert /
   hostile，缺省 coexist，可由 `ChatService(..., world_stance_provider=...)`
   注入覆盖）；关系认知取当前身份的 `Relationship.kind`；事件压力扫描最近
-  50 行演化记录与 7 天窗口，按伤亡增量与坐标位移计权，排除纯步长衰减行，
+  50 行演化记录与 7 天窗口，按伤亡增量与坐标位移计权，排除纯闲置衰减行，
   旧聊天来源的世界事实按低权重计入，已达成结局也作为事件；所有事件再按
   48 小时半衰期衰减；
 - 状态：演化坐标贴边、行动点不足、个性强度（越高越适应）。
@@ -336,7 +336,7 @@ AI 只输出 `effect: {tool, args}`，服务层按注册表校验、夹取、执
 - `self_view {"text": "..."}`：追加到 `intro_visible`，不改写已有介绍与
   `intro_hidden`，单条截断到 500 字；重复内容不重复追加。
 - `step_nudge {"axis": "intrusion|destruction", "direction": -1|0|1}`：
-  经 `StateService.nudge_step_rates` 微调步长（单次约 ±0.02，接近 ±5
+  经 `StateService.nudge_depths` 微调深度（单次约 ±0.02，接近 ±5
   上限时衰减），不写演化表、不改坐标。
 
 每次执行（含失败）都向 `ChatState.applied_effects` 追加

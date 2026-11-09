@@ -201,8 +201,8 @@ class DungeonStoryEngine:
                     "highlight": any(u.highlight for u in final_units),
                     "intrusion_before": before_state.intrusion,
                     "destruction_before": before_state.destruction,
-                    "step_intrusion_before": before_state.step_intrusion,
-                    "step_destruction_before": before_state.step_destruction,
+                    "depth_intrusion_before": before_state.depth_intrusion,
+                    "depth_destruction_before": before_state.depth_destruction,
                     "custom_before": before_state.custom_attrs.copy(),
                     "direction": direction,
                     "custom_directions": custom_directions
@@ -405,8 +405,8 @@ class DungeonStoryEngine:
             "highlight": any(u.highlight for u in units),
             "intrusion_before": before_state.intrusion,
             "destruction_before": before_state.destruction,
-            "step_intrusion_before": before_state.step_intrusion,
-            "step_destruction_before": before_state.step_destruction,
+            "depth_intrusion_before": before_state.depth_intrusion,
+            "depth_destruction_before": before_state.depth_destruction,
             "custom_before": before_state.custom_attrs.copy(),
             "direction": directive.direction,
             "custom_directions": custom_directions,
@@ -708,8 +708,8 @@ class DungeonStoryEngine:
 
         step_info["intrusion_after"] = self.dungeon_state.intrusion
         step_info["destruction_after"] = self.dungeon_state.destruction
-        step_info["step_intrusion_after"] = self.dungeon_state.step_intrusion
-        step_info["step_destruction_after"] = self.dungeon_state.step_destruction
+        step_info["depth_intrusion_after"] = self.dungeon_state.depth_intrusion
+        step_info["depth_destruction_after"] = self.dungeon_state.depth_destruction
         step_info["custom_after"] = self.dungeon_state.custom_attrs.copy()
         step_info["casualty_increase"] = casualty_increase
         step_info["total_casualties_after"] = self.dungeon_state.total_casualties
@@ -794,10 +794,10 @@ class DungeonStoryEngine:
                            prefix=step.get("type_prefix"))
         self.dungeon_state.intrusion = step["intrusion_after"]
         self.dungeon_state.destruction = step["destruction_after"]
-        if "step_intrusion_after" in step:
-            self.dungeon_state.step_intrusion = step["step_intrusion_after"]
-        if "step_destruction_after" in step:
-            self.dungeon_state.step_destruction = step["step_destruction_after"]
+        if "depth_intrusion_after" in step:
+            self.dungeon_state.depth_intrusion = step["depth_intrusion_after"]
+        if "depth_destruction_after" in step:
+            self.dungeon_state.depth_destruction = step["depth_destruction_after"]
         if "custom_after" in step:
             self.dungeon_state.custom_attrs = step["custom_after"].copy()
         if "total_casualties_after" in step:

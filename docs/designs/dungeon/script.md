@@ -537,7 +537,7 @@ Dungeon 关系图文档 `scenario_graph.md` §3。
 | 旧配置行为 | 迁移后所有既有触发器都是「任意章节」，也不自动创建章节 |
 | 旧版 `background` / `sensitivity` 动作 | **不再执行**，配置本身不被改写，需要清理时在编辑器里删除 |
 | 旧 `ending` 动作 | **继续执行**；新做结局请改用「结束章节」 |
-| 演化配置链路 | `window/base.py::_init_session` 把 `transition_matrix` 与 `section_steps` 传给 `EvolutionRules`（同时注入 `StateService.decay_step_rates`）；这条链路由 `check_scenario_schema.py` 守卫 |
+| 演化配置链路 | `window/base.py::_init_session` 把 `transition_matrix` 与 `section_steps` 传给 `EvolutionRules`（同时注入 `StateService.decay_depths`）；这条链路由 `check_scenario_schema.py` 守卫 |
 
 ### 9.3 回放记录
 

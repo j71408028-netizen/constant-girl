@@ -62,7 +62,7 @@
 - 禁止 import：`imgui_bundle` / `dearpygui` / `customtkinter` / `tkinter` / `services.*` / `ui.*`
 - 禁止反向依赖自己的 UI 子包：`dungeon.window`（含 `from .window import`）
 - 禁止逃逸出包的相对导入：`from .. import`
-- 需要外部行为时**依赖注入**（唯一现状：`EvolutionRules(step_decay=StateService.decay_step_rates)`，由 `window/base.py::_init_session` 传入）
+- 需要外部行为时**依赖注入**（唯一现状：`EvolutionRules(depth_decay=StateService.decay_depths)`，由 `window/base.py::_init_session` 传入）
 
 ### 3.2 窗口层（`dungeon/window/`）
 
@@ -74,7 +74,7 @@
 
 | 领域层需要的外部行为 | 注入方式 | 注入方 |
 |---|---|---|
-| 二阶量（步长）不适应边界衰减 | `EvolutionRules(step_decay=...)` | `window/base.py` 传 `StateService.decay_step_rates` |
+| 深度不适应边界衰减 | `EvolutionRules(depth_decay=...)` | `window/base.py` 传 `StateService.decay_depths` |
 | AI 生成 / 提示词取材 | `DungeonPromptBuilder(self)` 读窗口实例公开属性 | `window/base.py` |
 | AI 客户端 | `self.ai_client`（`engine` 惰性检查，缺失时 `_show_ai_error`） | `window/base.py::create_client`（按 `core/netproxy` 注入代理） |
 | 联网失败说清原因 | `describe_ai_error`（AI）/ `_describe_synth_error`（语音），同口径按 HTTP 状态码分类 | 各暴露点调用（见 §4.5） |
@@ -239,7 +239,7 @@ _generate_next_text()
 
 _finish_step()
   a. _apply_effect_overrides()      章节效果覆盖倒计时递减，到期交还章节默认
-  b. _record_casualties()           按身高 / 步长 / 破坏性算伤亡，追加 casualty_evolution
+  b. _record_casualties()           按身高 / 步进 / 破坏性算伤亡，追加 casualty_evolution
   c. replay_data.append(step_info)  一步一条完整快照
   d. _check_unlock_coord()          身材解锁
   e. summarizer.record_key_event()  坐标跨整数阈值的里程碑
@@ -270,7 +270,7 @@ _finish_step()
 
 ### 5.2 结束路径
 
-结束章节（章节属性 `ending=true`）内步进恒为 0——坐标、自定义属性、步长全部冻结，仍累计计数；
+结束章节（章节属性 `ending=true`）内步进恒为 0——坐标、自定义属性、深度全部冻结，仍累计计数；
 达到 `max_paragraphs` 时由 `_terminate_from_ending_chapter()` 用章节自身的结算字段
 （增量 / 伤亡步进 / 行动点返还 / 图标）生成结局。
 

@@ -218,7 +218,7 @@ class DungeonWindowBase:
         self.chapters = normalize_chapters((scenario_config or {}).get("chapters", []))
         # 当前章节的尺寸换算候选池：章节名 -> 池子（切章失效，见 chapter_landmarks）
         self._chapter_landmark_cache = None
-        # 章节运行时状态：当前章节、章节持续敏感效果、章节效果的短暂覆盖
+        # 章节运行时状态：当前章节、章节持续演化修正、章节效果的短暂覆盖
         self.current_chapter = None
         self.chapter_sensitivity_effects = []
         # 短暂覆盖条目：[{remaining, overrides}]，见 dungeon/overrides.py；
@@ -673,12 +673,12 @@ class DungeonWindowBase:
             intrusion=personality.init_intrusion if personality.init_intrusion != 0 else random.uniform(0.5, 2.5),
             destruction=personality.init_destruction if personality.init_destruction != 0 else random.uniform(0.5, 2.5),
             custom_attrs=init_custom,
-            step_intrusion=(character.current_step_intrusion
+            depth_intrusion=(character.current_depth_intrusion
                             if character is not None
-                            else personality.step_intrusion),
-            step_destruction=(character.current_step_destruction
+                            else personality.depth_intrusion),
+            depth_destruction=(character.current_depth_destruction
                               if character is not None
-                              else personality.step_destruction),
+                              else personality.depth_destruction),
         )
         self.dungeon_state.total_steps = 0
         self.dungeon_state.steps_since_trigger = 0
@@ -687,7 +687,7 @@ class DungeonWindowBase:
         self.dungeon_logic = EvolutionRules(
             transition_matrix=scenario_config.get("transition_matrix"),
             step_overrides=scenario_config.get("section_steps"),
-            step_decay=StateService.decay_step_rates)
+            depth_decay=StateService.decay_depths)
         self.current_text_type = None
         self.last_ai_text = ""
         self._generating = False
@@ -755,8 +755,8 @@ class DungeonWindowBase:
                 intrusion=first_step["intrusion_before"],
                 destruction=first_step["destruction_before"],
                 custom_attrs=first_step.get("custom_before", {}),
-                step_intrusion=first_step.get("step_intrusion_before"),
-                step_destruction=first_step.get("step_destruction_before"),
+                depth_intrusion=first_step.get("depth_intrusion_before"),
+                depth_destruction=first_step.get("depth_destruction_before"),
             )
         self.dungeon_logic = None
         self.current_text_type = None

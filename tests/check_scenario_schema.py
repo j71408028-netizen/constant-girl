@@ -647,7 +647,7 @@ _wired = [kw.arg for node in _ast.walk(_ast.parse(_window_source))
           if isinstance(node, _ast.Call)
           and getattr(node.func, "id", "") == "EvolutionRules"
           for kw in node.keywords]
-for _kw in ("transition_matrix", "step_overrides", "step_decay"):
+for _kw in ("transition_matrix", "step_overrides", "depth_decay"):
     check(f"window/base.py 构造 EvolutionRules 时注入 {_kw}", _kw in _wired, _wired)
 
 # ---------------- 结论 ----------------

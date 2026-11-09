@@ -47,8 +47,8 @@ def _state() -> CharacterSnapshot:
                               intro_visible="原本的公开介绍",
                               intro_hidden="不该被改的隐藏介绍")
     state.record_change(intrusion=2.5, destruction=2.5)
-    state.step_intrusion = 1.0
-    state.step_destruction = 1.0
+    state.depth_intrusion = 1.0
+    state.depth_destruction = 1.0
     return state
 
 
@@ -130,36 +130,36 @@ def check_step_nudge() -> list:
          "args": {"axis": "intrusion", "direction": 1}})
     _check(problems, "step_nudge 应小幅增加步长",
            record is not None and changed
-           and state.step_intrusion > 1.0
-           and state.step_intrusion - 1.0 < STEP_NUDGE_AMOUNT,
-           state.step_intrusion)
+           and state.depth_intrusion > 1.0
+           and state.depth_intrusion - 1.0 < STEP_NUDGE_AMOUNT,
+           state.depth_intrusion)
 
-    state.step_intrusion = 4.99
-    old = state.step_intrusion
+    state.depth_intrusion = 4.99
+    old = state.depth_intrusion
     run_effect(state, chat,
                {"tool": "step_nudge",
                 "args": {"axis": "intrusion", "direction": 1}})
     _check(problems, "接近上限时应衰减",
-           0.0 < state.step_intrusion - old < STEP_NUDGE_AMOUNT * 0.1,
-           state.step_intrusion - old)
+           0.0 < state.depth_intrusion - old < STEP_NUDGE_AMOUNT * 0.1,
+           state.depth_intrusion - old)
 
-    state.step_destruction = 2.0
+    state.depth_destruction = 2.0
     record, changed = run_effect(
         state, chat,
         {"tool": "step_nudge",
          "args": {"axis": "destruction", "direction": 0}})
     _check(problems, "direction=0 应是合法空操作",
            record is not None and not changed
-           and state.step_destruction == 2.0)
+           and state.depth_destruction == 2.0)
 
-    before = (state.step_intrusion, state.step_destruction)
+    before = (state.depth_intrusion, state.depth_destruction)
     record, changed = run_effect(
         state, chat,
         {"tool": "step_nudge",
          "args": {"axis": "gravity", "direction": 1}})
     _check(problems, "非法轴应失败且不改步长",
            record is not None and not changed
-           and (state.step_intrusion, state.step_destruction) == before,
+           and (state.depth_intrusion, state.depth_destruction) == before,
            record)
     return problems
 
@@ -253,7 +253,7 @@ def check_finish_exchange() -> list:
 
     silent_state = _state()
     silent_chat = ChatState(giantess_id="g1")
-    old_step = silent_state.step_destruction
+    old_step = silent_state.depth_destruction
     service._finish_exchange(silent_state, silent_chat, {
         "messages": [],
         "silent_reason": "不想回",
@@ -262,8 +262,8 @@ def check_finish_exchange() -> list:
                    "args": {"axis": "destruction", "direction": 1}},
     })
     _check(problems, "沉默轮也应应用 effect",
-           silent_state.step_destruction > old_step,
-           silent_state.step_destruction)
+           silent_state.depth_destruction > old_step,
+           silent_state.depth_destruction)
     _check(problems, "沉默轮不应排队消息",
            not silent_chat.messages)
 
@@ -278,7 +278,7 @@ def check_finish_exchange() -> list:
            and "未知工具" in fail_chat.applied_effects[-1].result)
     _check(problems, "失败效果不应改主档案",
            fail_state.intro_visible == "原本的公开介绍"
-           and fail_state.step_intrusion == 1.0)
+           and fail_state.depth_intrusion == 1.0)
     return problems
 
 
