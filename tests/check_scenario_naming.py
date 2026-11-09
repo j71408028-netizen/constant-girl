@@ -5,8 +5,8 @@
 
 1. 静态守卫（AST）：仓库 .py 里不得再出现指代「副本方案」的旧标识符
    （``dungeon_id`` / ``DungeonRepo`` / ``ScriptManager`` 等），以及裸写的
-   ``"dungeons"`` 资源键字符串；白名单见 ``ALLOWED_FILES``（terms.py 的
-   旧契约常量与迁移脚本）。
+   ``"dungeons"`` 资源键字符串；白名单见 ``ALLOWED_FILES``（terms.py 的旧契约常量
+   与守卫自身）。迁移脚本一律从 ``dungeon.terms`` 取常量，不再单独开白名单。
 2. 行为自检：``dungeon.terms`` 的兼容读、``ScenarioRepo`` 的读写根语义、
    ``WorldPackManifest`` 的成员核对（旧的 ``dungeons`` 资源键与目录已不再兼容）。
 
@@ -26,7 +26,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # 静态守卫：允许出现旧标识符/旧字面量的文件（相对路径，正斜杠）
 ALLOWED_FILES = {
     "dungeon/terms.py",
-    "scripts/migrate_scenario_naming.py",
     "tests/check_scenario_naming.py",
     "tests/check_dungeon_finalize.py",
 }
