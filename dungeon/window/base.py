@@ -756,6 +756,9 @@ class DungeonWindowBase:
         records = replay.parse_all(replay_data, on_drop=dropped.append)
         if dropped:
             process_log.log(f"[Replay] 跳过 {len(dropped)} 条无法解析的回放记录")
+        # 素材（章节背景 / 音乐 / 结局图标）都是相对方案目录的路径，而回放文件不带
+        # 方案标识——先把所属方案反查出来，否则这些素材一律解析失败
+        self._resolve_replay_scenario(records)
         # 回放数据可能以触发器记录开头（如开局即触发的背景触发器），
         # 取第一条步进记录还原初始属性；若全为触发器记录则使用默认值。
         first_step = next((r for r in records if isinstance(r, replay.StepRecord)), None)
@@ -786,6 +789,51 @@ class DungeonWindowBase:
         self.story_summary = StorySummarizer()
         # 回放也照方案配置朗读（音色可能只有默认值——回放数据里没有主角称呼）
         self._configure_voice(getattr(self, "scenario_config", None))
+
+    #: 回放反查方案时最多取样的素材路径条数
+    _REPLAY_SCENARIO_PATH_LIMIT = 8
+
+    def _resolve_replay_scenario(self, records):
+        """按记录里的素材路径反查回放所属的方案。
+
+        回放文件只存记录、不带方案标识，而章节背景 / 背景音乐 / 结局图标都是相对
+        方案目录的路径。少了 ``scenario_id``，这些素材一律解析失败：开场背景停在
+        入口画面、音乐不响。这里取记录中出现的素材路径，在全部方案目录里逐条命中
+        计数，命中最多的方案即视为所属方案；一条都不命中（素材已删、全是绝对路径）
+        就保持原样，由各处的缺省分支处理。
+
+        调用方显式给的 ``scenario_id`` 优先——那是明确的上下文，不猜。
+        """
+        repo = getattr(self, "scenario_repo", None)
+        if self.scenario_id or repo is None or not records:
+            return
+        paths = []
+        for record in records:
+            if isinstance(record, replay.ChapterRecord):
+                candidates = ((record.background or {}).get("image_path"),
+                              (record.bgm or {}).get("path"))
+            elif isinstance(record, replay.EndingRecord):
+                candidates = (record.icon_path,)
+            else:
+                continue
+            for candidate in candidates:
+                path = str(candidate or "").strip().lstrip("/\\")
+                if path and not os.path.isabs(path) and path not in paths:
+                    paths.append(path)
+            if len(paths) >= self._REPLAY_SCENARIO_PATH_LIMIT:
+                break
+        if not paths:
+            return
+        best, best_hits = "", 0
+        for scenario_id in repo.list_all():
+            root = repo.scenario_dir(scenario_id)
+            hits = sum(1 for path in paths if os.path.exists(os.path.join(root, path)))
+            if hits > best_hits:
+                best, best_hits = scenario_id, hits
+        if best:
+            self.scenario_id = best
+            process_log.log(
+                f"[Replay] 回放所属方案：{best}（素材命中 {best_hits}/{len(paths)}）")
 
     def _message_window_size(self) -> int:
         """对话历史保留的消息条数（不含系统提示；可在设置中调整，默认 20）。

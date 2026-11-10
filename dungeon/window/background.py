@@ -364,7 +364,13 @@ class DungeonBackground:
         if os.path.isabs(image_path):
             candidates.append(os.path.normpath(image_path))
         if owner.scenario_id and owner.scenario_repo:
-            candidates.append(os.path.normpath(os.path.join(owner.scenario_repo.root, owner.scenario_id, processed)))
+            repo = owner.scenario_repo
+            # 与「方案目录」口径一致：世界包接管的方案不在可写根下
+            dir_of = getattr(repo, "scenario_dir", None)
+            base = (dir_of(owner.scenario_id) if callable(dir_of)
+                    else os.path.join(repo.root, owner.scenario_id))
+            if base:
+                candidates.append(os.path.normpath(os.path.join(base, processed)))
         candidates.extend([
             os.path.normpath(processed),
             os.path.normpath(os.path.join(os.path.abspath(os.path.dirname(__file__)), "..", processed)),
