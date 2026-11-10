@@ -569,7 +569,14 @@ Dungeon 关系图文档 `scenario_graph.md` §3。
   覆盖就持续到换章）；
 - **旧格式在 `parse_all` 收敛**：早前的 `goto` 触发器记录把目标章节的环境写在
   `chapter_background` / `chapter_bgm` / `chapter_voice_fx` 三个平级键上，读入时
-  展开成「`ChapterRecord` + `TriggerRecord`」两条，读取方只认章节记录这一种形态。
+  展开成「`ChapterRecord` + `TriggerRecord`」两条，读取方只认章节记录这一种形态；
+- **步进记录的呈现是播放，不是打印**：回放把 `text` 按内置分句器切成显示段落，
+  走与实时同一条限速游标（首段逐字上屏、其余等点击），因此回放的阅读节奏与
+  当场游玩一致；没有正文的记录（章节进入 / 跳转 / 覆盖 / 视效）不占点击，
+  `_replay_next_step` 会把它们随一次点击连续落地。
+- **回放文件不带方案标识**：`background.image_path` / `bgm.path` / `icon_path`
+  都是相对方案目录的路径，加载时由 `_init_replay` 拿这些路径在全部方案里反查
+  所属方案（命中最多者），否则背景与音乐一律解析失败。
 
 反向出口 `to_config_fragment(record)` 把 `ChapterRecord` 还原成
 `{name, background, bgm, voice_fx}`、`TriggerRecord` 还原成
