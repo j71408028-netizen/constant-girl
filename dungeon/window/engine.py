@@ -5,6 +5,7 @@ import threading
 import time
 
 from dungeon import process_log
+from dungeon import replay
 from dungeon import script_text
 from dungeon.audio.chapters import find_chapter, is_terminating_chapter, overflow_jump_target
 from dungeon.characters import CharacterLedger
@@ -199,6 +200,8 @@ class DungeonStoryEngine:
                     # 回放以逻辑段落为单位，把「本段有高亮」整体记下（显示层按
                     # 显示段落渲染，回放只出整段）
                     "highlight": any(u.highlight for u in final_units),
+                    # 前缀随记录走：回放没有章节配置，现算会把结束章节算成「环境」
+                    "type_prefix": prefix,
                     "intrusion_before": before_state.intrusion,
                     "destruction_before": before_state.destruction,
                     "depth_intrusion_before": before_state.depth_intrusion,
@@ -768,44 +771,48 @@ class DungeonStoryEngine:
             self._request_close()
             return
         if self.current_replay_index >= len(self.loaded_replay):
-            process_log.log("回放结束")
+            process_log.log("回放结束（记录已播完）")
             self._request_close()
             return
-        entry = self.loaded_replay[self.current_replay_index]
-        if entry.get("kind") == "characters":
-            # 账本快照：已在 _init_replay 里还原，步进时跳过
-            self.current_replay_index += 1
-            return
-        if entry.get("kind") == "trigger":
-            self._replay_trigger(entry)
-            self.current_replay_index += 1
-            return
-        if entry.get("kind") == "chapter":
-            self._replay_chapter(entry)
-            self.current_replay_index += 1
-            return
-        step = entry
-        text_type = DungeonTextType(step["type"])
-        text = step["text"]
-        # 结束章节产生的段落在回放中同样以「结局」类型展示
-        if step.get("ending_chapter"):
-            text_type = DungeonTextType.BACKGROUND
-        self._display_text(text, text_type, highlight=step.get("highlight", False),
-                           prefix=step.get("type_prefix"))
-        self.dungeon_state.intrusion = step["intrusion_after"]
-        self.dungeon_state.destruction = step["destruction_after"]
-        if "depth_intrusion_after" in step:
-            self.dungeon_state.depth_intrusion = step["depth_intrusion_after"]
-        if "depth_destruction_after" in step:
-            self.dungeon_state.depth_destruction = step["depth_destruction_after"]
-        if "custom_after" in step:
-            self.dungeon_state.custom_attrs = step["custom_after"].copy()
-        if "total_casualties_after" in step:
-            self.dungeon_state.total_casualties = step["total_casualties_after"]
-        self.dungeon_state.casualty_evolution.append(step.get("casualty_increase", 0.0))
-        # 回放同样喂给剧情压缩器，保证概要/最近段落与实际推进一致
-        self._record_story_summary(text_type, text)
+        record = self.loaded_replay[self.current_replay_index]
         self.current_replay_index += 1
+        # 账本快照已在 _init_replay 里还原，步进时跳过
+        if isinstance(record, replay.CharactersRecord):
+            return
+        if isinstance(record, replay.ChapterRecord):
+            self._replay_chapter(record)
+            return
+        if isinstance(record, replay.TriggerRecord):
+            self._replay_trigger(record)
+            return
+        if isinstance(record, replay.EndingRecord):
+            self._replay_ending(record)
+            return
+        self._replay_step(record)
+
+    def _replay_step(self, record):
+        """复现一个逻辑段落：正文 + 状态快照，并按一步消耗效果覆盖时长。"""
+        self._display_text(record.text, record.text_type,
+                           highlight=record.highlight, prefix=record.prefix)
+        state = self.dungeon_state
+        if record.intrusion_after is not None:
+            state.intrusion = record.intrusion_after
+        if record.destruction_after is not None:
+            state.destruction = record.destruction_after
+        if record.depth_intrusion_after is not None:
+            state.depth_intrusion = record.depth_intrusion_after
+        if record.depth_destruction_after is not None:
+            state.depth_destruction = record.depth_destruction_after
+        if record.custom_after is not None:
+            state.custom_attrs = dict(record.custom_after)
+        if record.total_casualties_after is not None:
+            state.total_casualties = record.total_casualties_after
+        state.casualty_evolution.append(record.casualty_increase)
+        # 回放同样喂给剧情压缩器，保证概要/最近段落与实际推进一致
+        self._record_story_summary(record.text_type, record.text)
+        # 效果覆盖的时长以步计：实时在 _finish_step 里消耗，回放没有那一步，
+        # 只能在这里对齐——否则滤镜/语音/音量一旦覆盖就持续到换章
+        self._apply_effect_overrides()
 
     # ---------- 生成错误 ----------
     def _note_session_error(self, error) -> None:

@@ -1,0 +1,391 @@
+"""自检：回放记录的解析层与回放步进（``dungeon/replay.py`` + ``_replay_*``）。
+
+用法：``python tests/check_replay_parse.py``
+
+无 GUI：回放宿主用「真 mixin + 少量替身」拼出来（``ReplayHost``），只守纯逻辑：
+
+1. ``dungeon.replay``：分类 / 各形态字段归一 / 脏记录不抛异常；
+2. 内嵌配置走配置侧归一器（legacy ``volume``、非法语音预设、只写在
+   ``action_data.type`` 里的动作类型）；
+3. 回放步进：显示前缀随记录走（结束章节 =「结局」）、状态快照还原、
+   ``effect`` 覆盖按步到期（含音乐档位这一维）；
+4. 结局记录：``_record_ending`` 只记一次，回放时复现正文 + 图标并终止；
+5. 档案导出：账本快照不画、结局记录画成结局块、meta 计数只数真步进 / 真触发。
+"""
+
+import os
+import sys
+import tempfile
+from collections import deque
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+_report_path = os.path.join(tempfile.mkdtemp(prefix="replay_parse_"), "report.txt")
+_log = open(_report_path, "w", encoding="utf-8")
+sys.stdout = _log
+sys.stderr = _log
+
+failures = []
+total = 0
+
+
+def check(name, ok, extra=""):
+    global total
+    total += 1
+    print(("  OK   " if ok else "  FAIL ") + name + (f"  <{extra}>" if extra and not ok else ""))
+    if not ok:
+        failures.append(name)
+
+
+from dungeon import replay  # noqa: E402
+from dungeon.audio import buses  # noqa: E402
+from dungeon.models import (PREFIX_ENDING, DungeonState,  # noqa: E402
+                            DungeonTextType)
+from dungeon.window.ending import EndingHandler  # noqa: E402
+from dungeon.window.engine import DungeonStoryEngine  # noqa: E402
+from dungeon.window.triggers import TriggerHandler  # noqa: E402
+
+# ---------------- 1. 分类与容错 ----------------
+check("无 kind = 步进", replay.classify({"type": "dialog"}) == replay.KIND_STEP)
+check("四种显式 kind", [replay.classify({"kind": k}) for k in
+                        ("chapter", "trigger", "characters", "ending")]
+      == [replay.KIND_CHAPTER, replay.KIND_TRIGGER, replay.KIND_CHARACTERS,
+          replay.KIND_ENDING])
+check("未知 kind 不可识别（整条跳过）", replay.classify({"kind": "chatter"}) == "")
+check("非字典不可识别", replay.classify(["x"]) == "" and replay.classify(None) == "")
+
+_dirty = [
+    "整套坏数据",
+    None,
+    42,
+    {"kind": "unknown"},
+    {"type": "ending"},                     # 已删的段落类型 + 没有正文
+    {"step": "x", "type": None},
+    {"type": "dialog"},                     # 没有正文
+]
+try:
+    dropped = replay.parse_all(_dirty)
+    crashed = None
+except Exception as exc:                     # noqa: BLE001 - 这里就是要它不抛
+    dropped, crashed = [], exc
+check("脏记录不抛异常", crashed is None, repr(crashed))
+check("非字典 / 未知 kind / 无正文整条丢弃", dropped == [],
+      [type(r).__name__ for r in dropped])
+
+_loose = replay.parse_all([
+    {"kind": "trigger", "action_data": "不是字典"},
+    {"kind": "chapter", "bgm": [1, 2]},
+    {"kind": "characters"},
+    {"text": "没有类型"},
+])
+check("缺字段的记录按默认补全后仍可用（不因一处缺键丢整条）",
+      [type(r).__name__ for r in _loose]
+      == ["TriggerRecord", "ChapterRecord", "CharactersRecord", "StepRecord"],
+      [type(r).__name__ for r in _loose])
+
+_step = replay.parse({
+    "step": 3, "type": "dialog", "text": " 正文 ", "highlight": 1,
+    "intrusion_before": 1, "destruction_before": 2,
+    "intrusion_after": 1.5, "destruction_after": 2.5,
+    "custom_before": {"好感": "3", "坏值": "x"}, "custom_after": {"好感": 4},
+    "total_casualties_after": 12.5, "casualty_increase": 0.5,
+})
+check("步进记录归一", isinstance(_step, replay.StepRecord)
+      and _step.step == 3 and _step.text_type is DungeonTextType.DIALOG
+      and _step.highlight is True, _step)
+check("自定义属性只留数字项", _step.custom_before == {"好感": 3.0}, _step.custom_before)
+check("缺 before 时退到 after",
+      replay.parse({"type": "dialog", "text": "x", "intrusion_after": 3}).intrusion_before == 3.0)
+check("缺 *_after 是 None（回放不改状态）",
+      replay.parse({"type": "dialog", "text": "x"}).intrusion_after is None)
+check("custom_after 缺失与空字典区分开",
+      replay.parse({"type": "dialog", "text": "x"}).custom_after is None
+      and replay.parse({"type": "dialog", "text": "x",
+                        "custom_after": {}}).custom_after == {})
+check("未知段落类型回退「环境」",
+      replay.parse({"type": "ending", "text": "x"}).text_type is DungeonTextType.BACKGROUND)
+
+# ---------------- 2. 内嵌配置复用配置侧归一器 ----------------
+_chapter = replay.parse({"kind": "chapter", "name": "A",
+                         "background": {"image_path": "a.png", "filter_effect": "blur"},
+                         "bgm": {"path": "a.mp3", "volume": 80},
+                         "voice_fx": {"her": {"preset": "不存在的预设"}}})
+check("章节记录：legacy volume 折算成档位",
+      _chapter.bgm.get("level") == buses.step_from_level(80)
+      and "volume" not in _chapter.bgm, _chapter.bgm)
+check("章节记录：非法语音预设归一为「不加效果」", _chapter.voice_fx == {}, _chapter.voice_fx)
+check("章节记录：非字典 bgm 归一为空（视为停播）",
+      replay.parse({"kind": "chapter", "bgm": [1]}).bgm == {})
+
+_trigger = replay.parse({"kind": "trigger", "name": "跳",
+                         "action_data": {"type": "goto", "chapter": "B"}})
+check("动作类型从 action_data.type 回退", _trigger.action_type == "goto")
+check("缺动作类型的记录退成 none",
+      replay.parse({"kind": "trigger", "name": "x"}).action_type == "none")
+check("选择编号非数字视为未选择",
+      replay.parse({"kind": "trigger", "name": "x",
+                    "choice_index": "abc"}).choice_index is None)
+check("小游戏标量结果包成 {value}", replay.parse(
+    {"kind": "trigger", "name": "g", "game_result": 3}).game_result == {"value": 3})
+
+# ---------------- 3. 回放宿主 ----------------
+class _Bgm:
+    def __init__(self):
+        self.calls = []
+
+    def play(self, spec):
+        self.calls.append(dict(spec or {}))
+
+
+class _Speech:
+    def __init__(self):
+        self.effects = []
+
+    def set_effect(self, spec=None):
+        self.effects.append(dict(spec or {}))
+
+
+class _Frame:
+    """帧时钟替身：主线程里立即执行。"""
+
+    def call(self, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+
+class ReplayHost(DungeonStoryEngine, TriggerHandler, EndingHandler):
+    """回放宿主：真 mixin + 少量替身（无窗口、无音频设备、无 AI）。
+
+    ``_display_text`` 照 ``window/ui.py`` 的同名方法写：前缀优先用传入值。
+    """
+
+    def __init__(self, records=None):
+        self.loaded_replay = replay.parse_all(records or [])
+        self.current_replay_index = 0
+        self.dungeon_state = DungeonState(intrusion=0.0, destruction=0.0, custom_attrs={})
+        self.chapters = []
+        self.current_chapter = None
+        self.chapter_sensitivity_effects = []
+        self.chapter_filter = ""
+        self.chapter_bgm = {}
+        self.effect_overrides = []
+        self._applied_visual_filter = None
+        self._applied_bgm_level = None
+        self.current_background_path = ""
+        self.chapter_voice_fx = {}
+        self.current_voice_fx = {}
+        self._applied_voice_fx = {}
+        self._bgm = _Bgm()
+        self._speech = _Speech()
+        self._frame = _Frame()
+        self._window_fx = self
+        self._script = None
+        self._script_key = None
+        self._script_index = 0
+        self._script_exhausted = False
+        self._pregen = None
+        self.personality = None
+        self.character = None
+        self.story_summary = None
+        self.story_history = []
+        self.triggers = []
+        self.triggered_names = set()
+        self.fired_triggers = set()
+        self._round_fired = set()
+        self.trigger_choices = {}
+        self.pending_insertions = deque()
+        self.pending_option = None
+        self.pending_mini_game = None
+        self.pending_ending = None
+        self.dungeon_ended = False
+        self.ending_text = ""
+        self.ending_icon_path = ""
+        self._ending_name = ""
+        self._ending_recorded = False
+        self.replay_data = []
+        self.bg_calls = []
+        self.fx_calls = []
+        self.icon_calls = []
+        self.closed = False
+        self._closing = False
+
+    # ---------- 替身 ----------
+    def change_background(self, image_path, smooth, filter_effect):
+        self.bg_calls.append((image_path, smooth, filter_effect))
+
+    def start(self, fx_key, duration, intensity):
+        self.fx_calls.append((fx_key, duration, intensity))
+
+    def _current_action_points(self):
+        return None
+
+    def _update_text_display(self):
+        pass
+
+    def _update_ending_icon(self):
+        self.icon_calls.append(self.ending_icon_path)
+
+    def _request_close(self):
+        self.closed = True
+
+    def _display_text(self, text, text_type, highlight=False, speaker=None, prefix=None):
+        prefix = self._display_type_prefix(text_type) if prefix is None else prefix
+        self.story_history.append({"type_str": prefix, "text": text,
+                                   "highlight": highlight, "speaker": speaker})
+
+
+# ---------- 3.1 显示前缀随记录走 ----------
+def _play(records, steps=1):
+    host = ReplayHost(records)
+    for _ in range(steps):
+        host._replay_next_step()
+    return host
+
+
+_old = _play([{"type": "background", "text": "结束前", "ending_chapter": True,
+               "intrusion_after": 1, "destruction_after": 1}])
+check("旧记录（无 type_prefix）在结束章节显示「结局」",
+      _old.story_history[-1]["type_str"] == PREFIX_ENDING, _old.story_history[-1])
+
+_new = _play([{"type": "background", "text": "结束前", "ending_chapter": True,
+               "type_prefix": PREFIX_ENDING, "intrusion_after": 1,
+               "destruction_after": 1}])
+check("新记录直接取 type_prefix", _new.story_history[-1]["type_str"] == PREFIX_ENDING)
+
+_plain = _play([{"type": "dialog", "text": "你好"}])
+check("无前缀记录按类型现算", _plain.story_history[-1]["type_str"] == "【对话】")
+_blank = _play([{"type": "dialog", "text": "留白", "type_prefix": ""}])
+check("空串前缀 = 本段不显示前缀（固定文本的纯叙述段）",
+      _blank.story_history[-1]["type_str"] == "")
+
+# ---------- 3.2 状态快照 ----------
+_state = _play([{"type": "dialog", "text": "一段", "intrusion_after": 3.5,
+                 "destruction_after": 1.5, "custom_after": {"好感": 2},
+                 "total_casualties_after": 99, "casualty_increase": 4}])
+check("回放按记录还原状态", _state.dungeon_state.intrusion == 3.5
+      and _state.dungeon_state.destruction == 1.5
+      and _state.dungeon_state.custom_attrs == {"好感": 2.0}
+      and _state.dungeon_state.total_casualties == 99
+      and _state.dungeon_state.casualty_evolution == [4.0],
+      _state.dungeon_state)
+_keep = ReplayHost([{"type": "dialog", "text": "一段"}])
+_keep.dungeon_state.intrusion = 2.0
+_keep._replay_next_step()
+check("缺快照的旧记录不动状态", _keep.dungeon_state.intrusion == 2.0)
+
+# ---------- 3.3 覆盖按步到期 ----------
+_CHAPTER_A = [{"kind": "chapter", "name": "A",
+               "background": {"image_path": "a.png", "filter_effect": "smooth"},
+               "bgm": {"path": "a.mp3", "level": 3}}]
+_effect_records = _CHAPTER_A + [
+    {"kind": "trigger", "name": "覆盖", "action_type": "effect",
+     "action_data": {"filter": "blur", "bgm_level": 1, "duration": 2}},
+    {"type": "dialog", "text": "一步", "type_prefix": "【对话】"},
+    {"type": "dialog", "text": "两步", "type_prefix": "【对话】"},
+    {"type": "dialog", "text": "三步", "type_prefix": "【对话】"},
+]
+host = ReplayHost(_effect_records)
+host._replay_next_step()                       # 章节
+check("回放进入章节：音乐按记录复现（legacy 也能取到档位）",
+      host.chapter_bgm.get("level") == 3 and host.current_background_path == "a.png",
+      host.chapter_bgm)
+host._replay_next_step()                       # 覆盖
+check("回放复现覆盖（滤镜 + 档位）",
+      host._applied_visual_filter == "blur" and host._applied_bgm_level == 1,
+      (host._applied_visual_filter, host._applied_bgm_level))
+host._replay_next_step()                       # 第 1 步
+check("覆盖第 1 步后仍生效",
+      bool(host.effect_overrides) and host._applied_visual_filter == "blur"
+      and host._applied_bgm_level == 1,
+      (host.effect_overrides, host._applied_visual_filter))
+host._replay_next_step()                       # 第 2 步：到期
+check("走过 duration 步后覆盖到期", host.effect_overrides == [])
+check("到期后滤镜回章节默认（来自记录，不查方案配置）",
+      host._applied_visual_filter == "smooth" and host.bg_calls[-1][2] == "smooth",
+      host.bg_calls[-1])
+check("到期后音乐档位回章节默认",
+      host._applied_bgm_level == 3 and host._bgm.calls[-1].get("level") == 3,
+      host._bgm.calls[-1])
+host._replay_next_step()                       # 第 3 步：不该再回退一次
+check("到期后再走一步不重复刷新",
+      host._applied_visual_filter == "smooth"
+      and host.bg_calls.count(("a.png", False, "smooth")) == 1,
+      host.bg_calls)
+
+# ---------- 3.4 章节跳转记录 ----------
+_jump = ReplayHost(_CHAPTER_A + [
+    {"kind": "trigger", "name": "跳", "action_type": "goto",
+     "action_data": {"chapter": "B"},
+     "chapter_background": {"image_path": "b.png", "filter_effect": "emboss"},
+     "chapter_bgm": {"path": "b.mp3", "volume": 40}}])
+_jump._replay_next_step()
+_jump._replay_next_step()
+check("跳转记录复现目标章节环境（bgm 同样归一）",
+      _jump.current_chapter == "B" and _jump.current_background_path == "b.png"
+      and _jump.chapter_filter == "emboss"
+      and _jump.chapter_bgm.get("level") == buses.step_from_level(40),
+      (_jump.current_chapter, _jump.chapter_bgm))
+
+# ---------------- 4. 结局记录 ----------------
+class _EndingState:
+    total_steps = 7
+
+
+_writer = ReplayHost()
+_writer.dungeon_state = _EndingState()
+_writer._ending_name = "真结局"
+_writer.ending_text = "正文"
+_writer.ending_icon_path = "icon.png"
+_writer._record_ending()
+_writer._record_ending()
+check("结局记录只写一次", len(_writer.replay_data) == 1, _writer.replay_data)
+check("结局记录字段", _writer.replay_data[0] == {
+    "kind": "ending", "name": "真结局", "text": "正文",
+    "icon_path": "icon.png", "step": 7}, _writer.replay_data[0])
+check("结局记录能被解析回原样",
+      replay.parse(_writer.replay_data[0]).text == "正文")
+
+_ending = ReplayHost([{"kind": "ending", "name": "真结局", "text": "正文",
+                       "icon_path": "icon.png", "step": 7}])
+_ending._replay_next_step()
+check("回放复现结局：正文 + 标记 + 终止",
+      _ending.story_history[-1] == {"type_str": PREFIX_ENDING, "text": "正文",
+                                    "highlight": True, "speaker": None}
+      and _ending.ending_text == "正文" and _ending.dungeon_ended is True,
+      _ending.story_history[-1])
+check("回放复现结局图标", _ending.icon_calls == ["icon.png"], _ending.icon_calls)
+_ending._replay_next_step()
+check("结局之后再点一次 = 关窗", _ending.closed is True)
+
+_old_ending = ReplayHost([{"kind": "trigger", "name": "旧结局",
+                           "action_type": "ending",
+                           "action_data": {"type": "ending", "icon_path": "old.png"},
+                           "ending_text": "旧正文"}])
+_old_ending._replay_next_step()
+check("旧版 ending 触发记录仍能复现结局（含图标）",
+      _old_ending.ending_text == "旧正文" and _old_ending.icon_calls == ["old.png"]
+      and _old_ending.dungeon_ended is True, _old_ending.story_history)
+
+# ---------------- 5. 档案导出 ----------------
+from services.character.archive_export import (_render_replay_entries,  # noqa: E402
+                                               _replay_counts)
+
+_entries = [
+    {"kind": "characters", "snapshot": {"members": []}},
+    {"type": "dialog", "text": "第一段", "step": 1},
+    {"kind": "trigger", "name": "跳", "action_type": "goto", "action_data": {}},
+    {"kind": "chapter", "name": "A"},
+    {"kind": "ending", "name": "真结局", "text": "END"},
+]
+_html = _render_replay_entries(_entries)
+check("账本快照不画成空块", "text-unknown" not in _html and "【未知】" not in _html, _html)
+check("结局记录画成结局块", "真结局" in _html and "END" in _html)
+check("meta 计数只数真步进与真触发", _replay_counts(_entries) == (1, 1),
+      _replay_counts(_entries))
+
+# ---------------- 汇总 ----------------
+_log.flush()
+sys.stdout = sys.__stdout__
+print(f"[check_replay_parse] {'PASSED' if not failures else 'FAILED'} "
+      f"{total - len(failures)}/{total}")
+print(f"[check_replay_parse] report: {_report_path}")
+sys.exit(1 if failures else 0)

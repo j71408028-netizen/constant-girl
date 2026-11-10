@@ -85,7 +85,7 @@
 
 | 模块 | 职责 | 关键出口 |
 |---|---|---|
-| `models.py` | 运行态数据与枚举 | `DungeonTextType`（5 种段落类型 + 默认步进值）、`DungeonState`（坐标 / 自定义属性 / 计数 / 二阶步长） |
+| `models.py` | 运行态数据与枚举 | `DungeonTextType`（5 种段落类型 + 默认步进值 + `display_prefix`，实时与回放共用同一份前缀）、`DungeonState`（坐标 / 自定义属性 / 计数 / 二阶步长）、`PREFIX_ENDING` / `PREFIX_UNKNOWN` |
 | `rules.py` | 演化与条件求值 | `EvolutionRules`（转移矩阵、分节步长、属性演化）、`TriggerRules.evaluate` |
 | `chapters.py` | 章节模型与归一化 | `normalize_chapter(s)`、`normalize_chapters`、`normalize_bgm`、`find_chapter`、`is_terminating_chapter`、`overflow_jump_target`、`chapter_step_override`、`sensitivity_amount`、`matches_scope` |
 | `audio/buses.py` | 音频音量**总线单一真相源**（总控 → 音乐 / 语音 / 音效） | `BUSES` / `BUS_LABELS`、`STEPS` / `STEP_LABELS` / `STEP_DB` / `BUS_ANCHOR_DB`（档位与分层的 dB 单一真相源）、`step_options` / `step_choices`（编辑器档位候选）、`clamp_step` / `step_from_level`（0-4 档位与旧 0-100 迁移）、`levels_from_settings` / `set_bus_levels` / `effective_bus_level`（玩家侧实时电平，缺省 `DEFAULT_BUS_LEVELS`）、`bus_default` / `clamp_level` / `resolve_gain`（档位×总线×总控）、`to_ratio` / `to_db` / `db_gain` |
@@ -102,6 +102,7 @@
 | `splitter.py` | 内置确定性分句 | `split_stream_units`（流式：首句上屏，余句排队）、`split_full_text`（终局定格） |
 | `summary.py` | 剧情压缩与常驻记忆 | `StorySummarizer`（按块 / 按章节压缩 + 最近 N 段原文 + 关键事件 + 事实卡；响应可搭车 `character_updates`，`drain_character_updates` 交给账本） |
 | `details.py` | 细节探究 | `build_detail_query_prompt`、`parse_detail_queries`、`parse_character_updates`（细节响应搭车抽取角色状态，见 [角色系统](../designs/dungeon/characters.md) §4）、`search_replay_details` |
+| `replay.py` | 回放记录的**语法与解析层**（纯领域） | `KIND_STEP/CHAPTER/TRIGGER/CHARACTERS/ENDING`、`classify` / `parse` / `parse_all`（坏记录返回 `None` 由调用方跳过）、`StepRecord` / `ChapterRecord` / `TriggerRecord` / `CharactersRecord` / `EndingRecord`；内嵌配置复用 `normalize_bgm` / `normalize_voice_fx` / `normalize_action_type`，见 [副本剧本](../designs/dungeon/script.md) §9.3 |
 | `schema.py` | 方案配置字段**单一真相源** | `SCENARIO_FIELDS` / `CHAPTER_FIELDS` / `TRIGGER_FIELDS` / `FieldSpec` / `empty_scenario_config()` |
 | `validate.py` | 结构化诊断（error / warning / info） | `validate_scenario_config(config, scenario_dir=...)`、`has_errors`、`format_diagnostics` |
 | `terms.py` | 术语与持久化契约常量 | `SCENARIO_ID_KEY`、`DEFAULT_SCENARIO_ID`、旧键迁移与兼容读取 |
@@ -121,7 +122,7 @@ TriggerHandler, OptionHandler, EndingHandler, DungeonPersistence, ComponentHandl
 | `DungeonStoryEngine` | `engine.py` | 步进核心：AI 生成、流式分句、属性演化、伤亡结算、收尾回调 |
 | `TriggerHandler` | `triggers.py` | 触发器判定、章节进出、章节效果短暂覆盖、窗口视效、插入段落 |
 | `OptionHandler` | `options.py` | 选项触发器：后台生成选项文字 → 弹窗 → 记录选择 |
-| `EndingHandler` | `ending.py` | 章节敏感效果汇总、结局生成与结局文本构建 |
+| `EndingHandler` | `ending.py` | 章节敏感效果汇总、结局生成、结局写进回放（`_record_ending`）与回放复现（`_replay_ending`） |
 | `DungeonPersistence` | `persistence.py` | 结局结算、回放 / 报告落盘、统一收尾 `_finalize(completed)` |
 | `ComponentHandler` | `components.py` | 显示组件实例的构建 / 布局 / 每帧绘制 / 销毁接入 |
 

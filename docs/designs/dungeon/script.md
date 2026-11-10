@@ -543,10 +543,26 @@ Dungeon 关系图文档 `scenario_graph.md` §3。
 
 | 记录 | 说明 |
 |---|---|
-| 普通步进 | 读取处按 `not entry.get("kind")` 识别：`engine._replay_next_step`、`persistence`、`archive_export._render_replay_entries`；`text` 一律是剥离显示层标记的净文本，`highlight` 记「本段有高亮」、回放按整段高亮复现（显示层的高亮单位是显示段落，回放只出整段） |
-| `kind: "chapter"` | 章节进入；`goto` 触发器记录额外带 `chapter_background`，回放时不依赖当前章节配置即可复现 |
-| `kind: "trigger"` | 触发器触发，回放时走 `_replay_trigger` |
-| `ending_chapter: true` | 结束章节产生的步进记录，回放时按「结局」类型展示 |
+| 普通步进（无 `kind`） | `text` 一律是剥离显示层标记的净文本；`highlight` 记「本段有高亮」，回放按整段高亮复现（显示层的高亮单位是显示段落，回放只出整段）；`type_prefix` 是当时的显示前缀（空串 = 本段不显示前缀，固定文本里没声明类型的段落就是这样），缺失时回放按 `type` 现算、`ending_chapter` 为真时按「结局」 |
+| `kind: "chapter"` | 章节进入，带当时的 `background` / `bgm` / `voice_fx`，回放不依赖当前方案；`goto` 触发器记录额外带 `chapter_background` / `chapter_bgm` / `chapter_voice_fx` 三个平级键 |
+| `kind: "trigger"` | 触发器触发，回放时走 `_replay_trigger`；分支动作额外带 `choice_index` / `choice_text` / `option_prompt`、`game_result` / `choice_value`、`ending_text` |
+| `kind: "characters"` | 文件头部的人物账本快照（`_init_replay` 整本还原成只读视图），不参与步进，也不进档案导出的正文 |
+| `kind: "ending"` | 结局正文 + `icon_path`：回放到此为止（再点一次关窗）。旧回放没有这条记录，末段即结束 |
+
+记录的语法在 `dungeon/replay.py`：`classify()` / `parse()` 产出 Record
+（`StepRecord` / `ChapterRecord` / `TriggerRecord` / `CharactersRecord` /
+`EndingRecord`），窗口层只吃 Record，不再各自 `dict.get`。三条约定：
+
+- **内嵌配置复用配置侧归一器**（`normalize_bgm` / `normalize_voice_fx` /
+  `normalize_action_type`）：记录里存的是当时的环境，重新拼成配置时必须与
+  编辑器写出的同形（legacy `volume` 折算成档位、非法预设归一为「不加效果」、
+  只写在 `action_data.type` 里的动作类型照样认）；
+- **容错在解析层**：缺键给默认、类型不符给默认，整条坏记录（非字典 / 未知
+  `kind` / 没有正文的步进）返回 `None` 由调用方跳过——一条脏记录不该让整段
+  回放卡在半路（回放文件来自「所有文件」选择框，内容不由本程序保证）；
+- **`effect` 覆盖的时长以步计**：实时在 `_finish_step` 里消耗，回放没有那一步，
+  所以 `_replay_step` 每段收尾同样消耗一次（否则滤镜 / 语音 / 音乐音量一旦被
+  覆盖就持续到换章）。
 
 ### 9.4 剧情压缩（提示词上下文）
 

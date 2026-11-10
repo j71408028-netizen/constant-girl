@@ -14,6 +14,7 @@
 
 from dungeon.window.ending import EndingHandler  # noqa: E402
 from dungeon.window.triggers import TriggerHandler  # noqa: E402
+from dungeon.audio.chapters import normalize_bgm  # noqa: E402
 
 
 class _State:
@@ -83,6 +84,9 @@ class TriggerHost(TriggerHandler, EndingHandler):
         self.current_background_path = ""
         self._applied_visual_filter = None
         self._applied_bgm_level = None
+        # 章节环境默认值（覆盖到期的回退目标）：回放模式下由记录填入
+        self.chapter_filter = ""
+        self.chapter_bgm = {}
         self.chapter_voice_fx = {}
         self.current_voice_fx = {}
         self._applied_voice_fx = {}
@@ -105,9 +109,11 @@ class TriggerHost(TriggerHandler, EndingHandler):
             return
         background = chapter.get("background") or {}
         self.current_background_path = background.get("image_path", "")
+        self.chapter_filter = background.get("filter_effect") or ""
         self._applied_visual_filter = background.get("filter_effect")
-        bgm = chapter.get("bgm") or {}
-        self._applied_bgm_level = bgm.get("level")
+        bgm = normalize_bgm(chapter.get("bgm"))
+        self.chapter_bgm = dict(bgm)
+        self._applied_bgm_level = bgm.get("level") if bgm.get("path") else None
         self.chapter_voice_fx = dict(chapter.get("voice_fx") or {})
         self.current_voice_fx = dict(self.chapter_voice_fx)
         self._applied_voice_fx = dict(self.chapter_voice_fx)

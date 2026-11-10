@@ -1,6 +1,11 @@
 from dataclasses import dataclass, field
 from enum import Enum
 
+#: 结束章节内所有段落的显示前缀（类型被覆盖为「结局」）
+PREFIX_ENDING = "【结局】"
+#: 前缀表里没有的类型（脏记录 / 新增类型漏登记）
+PREFIX_UNKNOWN = "【未知】"
+
 
 class DungeonTextType(Enum):
     """副本文本类型及其默认步进权重。"""
@@ -19,6 +24,17 @@ class DungeonTextType(Enum):
             DungeonTextType.DIALOG: 0.1,
             DungeonTextType.INTERACTION: 0.2,
             DungeonTextType.ACTION: 0.3,
+        }[self]
+
+    @property
+    def display_prefix(self) -> str:
+        """段落类型的中文前缀（实时与回放共用这一份）。"""
+        return {
+            DungeonTextType.BACKGROUND: "【环境】",
+            DungeonTextType.BRANCH: "【分支】",
+            DungeonTextType.DIALOG: "【对话】",
+            DungeonTextType.INTERACTION: "【互动】",
+            DungeonTextType.ACTION: "【行动】",
         }[self]
 
 

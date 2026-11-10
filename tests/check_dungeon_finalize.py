@@ -72,6 +72,7 @@ check("repo 自愈读取 .bak", repo.load_config("default")["initial_prompt"] ==
 
 # ---------------- 3. _finalize 三态 ----------------
 import dungeon.window.persistence as persp  # noqa: E402
+from dungeon.window.ending import EndingHandler  # noqa: E402
 from dungeon.window.host import DIALOG_ASK, HostPort  # noqa: E402
 
 
@@ -111,7 +112,7 @@ class FakeState:
     total_casualties = 1234.0
 
 
-class StubSession(persp.DungeonPersistence):
+class StubSession(persp.DungeonPersistence, EndingHandler):
     """最小会话替身：只补齐 _finalize 依赖的状态字段。"""
 
     def __init__(self, with_character=True, mode="explore", errors=()):

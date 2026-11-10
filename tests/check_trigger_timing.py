@@ -40,6 +40,7 @@ def check(name, ok, extra=""):
 
 import dungeon.actions as actions_mod  # noqa: E402
 from _trigger_host import TriggerHost  # noqa: E402
+from dungeon.replay import parse as replay_parse  # noqa: E402
 from dungeon.validate import validate_scenario_config  # noqa: E402
 from dungeon.window.fx import parse_fx_params  # noqa: E402
 
@@ -162,8 +163,9 @@ check("旧版 ending 不再执行（不启动结局生成）", legacy.ending_cal
 
 # ---------------- 6. 回放复现 ----------------
 replay = TriggerHost([], record_goto=True)
-replay._replay_trigger({"name": "窗", "action_type": "fx",
-                        "action_data": {"fx": "invert", "duration": 2, "intensity": 90}})
+replay._replay_trigger(replay_parse({"kind": "trigger", "name": "窗", "action_type": "fx",
+                                     "action_data": {"fx": "invert", "duration": 2,
+                                                     "intensity": 90}}))
 check("回放复现窗口视效", replay.fx_calls == [("invert", 2.0, 90.0)], str(replay.fx_calls))
 
 # ---------------- 7. 校验器 ----------------

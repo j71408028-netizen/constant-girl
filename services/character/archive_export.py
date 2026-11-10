@@ -357,6 +357,7 @@ _ACTION_LABEL = {
     "goto": "章节跳转",
     "effect": "效果覆盖",
     "fx": "窗口视效",
+    "mini_game": "小游戏",
     "none": "条件标记",
 }
 
@@ -452,16 +453,45 @@ def _render_chapter_record(entry: dict) -> str:
     return f"<div class='rp-trigger-head'>📖 章节「{name}」{tag}</div>"
 
 
+def _render_ending_record(entry: dict) -> str:
+    """结局记录：回放/报告的最后一屏（图标名 + 结局正文）。"""
+    name = str(entry.get("name", "") or "").strip()
+    tag = f"<span class='rp-trigger-tag'>{html.escape(name)}</span>" if name else ""
+    text = str(entry.get("text", "") or "")
+    body = f"<div class='rp-trigger-body rp-ending'>{html.escape(text)}</div>" if text else ""
+    return f"<div class='rp-trigger-head'>🏁 结局{tag}</div>{body}"
+
+
+def _replay_counts(entries: list) -> tuple:
+    """回放文件的（步进段数, 触发器次数）。
+
+    章节进入、人物账本快照、结局记录都不是「段」也不是「次触发」——早前用
+    ``len(entries) - steps`` 顶替，快照（文件头部那条）会被多算一次。
+    """
+    steps = sum(1 for e in entries
+                if isinstance(e, dict) and not e.get("kind"))
+    triggers = sum(1 for e in entries
+                   if isinstance(e, dict) and e.get("kind") == "trigger")
+    return steps, triggers
+
+
 def _render_replay_entries(entries: list) -> str:
     blocks = []
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        if entry.get("kind") == "trigger":
+        kind = entry.get("kind")
+        if kind == "characters":
+            # 人物账本快照不是剧情，导出不画（它也不是一次"触发"）
+            continue
+        if kind == "trigger":
             blocks.append(f"<div class='rp-item rp-trigger'>{_render_trigger_record(entry)}</div>")
             continue
-        if entry.get("kind") == "chapter":
+        if kind == "chapter":
             blocks.append(f"<div class='rp-item rp-trigger'>{_render_chapter_record(entry)}</div>")
+            continue
+        if kind == "ending":
+            blocks.append(f"<div class='rp-item rp-trigger'>{_render_ending_record(entry)}</div>")
             continue
         t = str(entry.get("type", ""))
         label, cls = _TYPE_BADGE.get(t, ("未知", "t-unknown"))
@@ -1101,9 +1131,7 @@ def _build_replays_section(replay_files: list) -> str:
             continue
         title, date_part = _file_caption(path.replace(".replay.json", ".json"))
         date_html = f"<span class='file-date'>{_esc(date_part)}</span>" if date_part else ""
-        steps = sum(1 for e in entries
-                    if isinstance(e, dict) and not e.get("kind"))
-        triggers = len(entries) - steps
+        steps, triggers = _replay_counts(entries)
         meta = (f"<span class='file-meta'>{steps} 段" +
                 (f" · {triggers} 次触发" if triggers else "") + "</span>")
         body = _render_replay_entries(entries)

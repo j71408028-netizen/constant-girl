@@ -10,16 +10,18 @@
 import random
 
 from dungeon import process_log
+from dungeon import replay
 from dungeon.actions import (ACTION_POSITIONS, EMPTY_ACTIONS, ENDING_ACTION,
                              MINI_GAME_DEFAULT_ID, WINDOW_FX_KEYS,
                              normalize_action_type)
-from dungeon.audio.chapters import (DEFAULT_BGM_LEVEL, bgm_level, chapter_bgm,
-                              chapter_fixed_text, find_chapter,
-                              is_terminating_chapter, matches_scope,
+from dungeon.audio.chapters import (DEFAULT_BGM_LEVEL, chapter_fixed_text,
+                              find_chapter, is_terminating_chapter,
+                              matches_scope, normalize_bgm,
                               sensitivity_amount)
+from dungeon.audio.voice_fx import normalize_voice_fx
 from dungeon.overrides import (active_override, describe as describe_overrides,
                                invalid_filter, parse_overrides)
-from dungeon.models import DungeonState, DungeonTextType
+from dungeon.models import DungeonState, DungeonTextType, PREFIX_ENDING
 from dungeon.response import canonical_history_entry
 from dungeon.rules import TriggerRules
 from dungeon.splitter import split_full_text, strip_display_markers
@@ -171,9 +173,11 @@ class TriggerHandler:
                        if self.current_chapter else None)
             background = (chapter or {}).get("background") or {}
         image_path = (background or {}).get("image_path")
+        filter_key = (background or {}).get("filter_effect")
+        # 章节默认滤镜（覆盖到期时回退到这里，不查章节配置：回放没有配置）
+        self.chapter_filter = filter_key or ""
         if not image_path:
             return
-        filter_key = background.get("filter_effect")
         self._set_background(image_path,
                              bool(background.get("smooth_transition", True)),
                              filter_key)
@@ -190,12 +194,13 @@ class TriggerHandler:
             chapter = (find_chapter(self.chapters, self.current_chapter)
                        if self.current_chapter else None)
             bgm = (chapter or {}).get("bgm") or {}
-        bgm = bgm or {}
+        # 归一在这里做：回放记录里的音乐是当时配置的副本，可能带旧键（volume）
+        bgm = normalize_bgm(bgm)
+        self.chapter_bgm = dict(bgm)
         self.current_bgm_path = str(bgm.get("path") or "")
         self._bgm.play(bgm)
         # 记录实际落地的音量档位，供「音乐音量覆盖」到期时判断是否需要挪回去
-        # （bgm_level 兼容旧 volume，未存盘迁移的老方案也能取到正确档位）
-        self._applied_bgm_level = bgm_level(bgm) if bgm.get("path") else None
+        self._applied_bgm_level = bgm.get("level") if bgm.get("path") else None
 
     def _apply_chapter_voice_fx(self, voice_fx: dict = None):
         """应用章节的对话语音物理效果（两档：她 / 其他人）。
@@ -211,7 +216,7 @@ class TriggerHandler:
             chapter = (find_chapter(self.chapters, self.current_chapter)
                        if self.current_chapter else None)
             voice_fx = (chapter or {}).get("voice_fx") or {}
-        self.chapter_voice_fx = dict(voice_fx or {})
+        self.chapter_voice_fx = normalize_voice_fx(voice_fx)
         self._refresh_voice_fx()
 
     def _set_background(self, image_path, smooth: bool = False, filter_effect=None):
@@ -246,12 +251,7 @@ class TriggerHandler:
     def _refresh_visual_filter(self):
         """按当前生效的滤镜覆盖重刷背景；无覆盖则恢复章节默认滤镜。"""
         override = self._active_override("filter")
-        if override is None:
-            chapter = (find_chapter(self.chapters, self.current_chapter)
-                       if self.current_chapter else None)
-            target = ((chapter or {}).get("background") or {}).get("filter_effect") or ""
-        else:
-            target = override or ""
+        target = self.chapter_filter if override is None else (override or "")
         if target == self._applied_visual_filter:
             return
         self._applied_visual_filter = target
@@ -267,9 +267,7 @@ class TriggerHandler:
         同一首曲子只挪音量、不从头重放（``BgmPlayer._apply`` 的既有语义）；
         章节本就没有音乐时音量覆盖无处施加，直接忽略。
         """
-        chapter = (find_chapter(self.chapters, self.current_chapter)
-                   if self.current_chapter else None)
-        bgm = chapter_bgm(chapter) if chapter else {}
+        bgm = self.chapter_bgm or {}
         if not bgm.get("path"):
             self._applied_bgm_level = None
             return
@@ -599,25 +597,25 @@ class TriggerHandler:
 
     def _replay_chapter(self, record):
         """回放时直接复现章节进入（含当时的环境，不依赖当前章节配置）。"""
-        name = record.get("name") or ""
+        name = record.name
         self._enter_chapter(name, record=False,
-                            background=record.get("background"),
-                            bgm=record.get("bgm"),
-                            voice_fx=record.get("voice_fx"),
+                            background=record.background,
+                            bgm=record.bgm,
+                            voice_fx=record.voice_fx,
                             allow_unknown=True)
         process_log.log(f"[Replay] 复现章节进入: {name or '无章节'}")
 
     def _replay_trigger(self, record):
         """回放时复现触发器动作（不判定条件、不弹选项，选择作为一步直接展示）。"""
-        action_type = record.get("action_type")
-        action_data = record.get("action_data", {}) or {}
-        name = record.get("name", "")
+        action_type = record.action_type
+        action_data = record.action_data
+        name = record.name
         if action_type == "goto":
             self._enter_chapter(str(action_data.get("chapter") or ""),
                                 record=False,
-                                background=record.get("chapter_background"),
-                                bgm=record.get("chapter_bgm"),
-                                voice_fx=record.get("chapter_voice_fx"),
+                                background=record.chapter_background,
+                                bgm=record.chapter_bgm,
+                                voice_fx=record.chapter_voice_fx,
                                 allow_unknown=True)
             process_log.log(f"[Replay] 复现章节跳转: {name}")
         elif action_type == "effect":
@@ -636,19 +634,18 @@ class TriggerHandler:
                 self._window_fx.start(fx_key, duration, intensity)
             process_log.log(f"[Replay] 复现窗口视效: {name}")
         elif action_type == "option":
-            choice_index = record.get("choice_index")
-            if choice_index is None:
+            idx = record.choice_index
+            if idx is None:
                 return  # 未完成选择，跳过
-            idx = int(choice_index)
             options = action_data.get("options") or []
             chosen = options[idx] if 0 <= idx < len(options) else {}
-            text = (record.get("choice_text")
+            text = (record.choice_text
                     or chosen.get("text") or chosen.get("prompt") or f"选项 {idx + 1}")
             self.trigger_choices.setdefault(name, []).append(idx)
             self.option_choice = {
                 "name": name,
                 "index": idx,
-                "prompt": record.get("option_prompt") or chosen.get("prompt", ""),
+                "prompt": record.option_prompt or chosen.get("prompt", ""),
                 "text": chosen.get("text", ""),
             }
             self.story_history.append({"type_str": "【选择】", "text": text,
@@ -656,11 +653,11 @@ class TriggerHandler:
             self._update_text_display()
             process_log.log(f"[Replay] 复现选项触发器: {name} → 选择 {idx}")
         elif action_type == "mini_game":
-            result = record.get("game_result") or {}
+            result = record.game_result
             if not result:
                 process_log.log(f"[Replay] 复现小游戏触发器: {name}（无结果，跳过）")
                 return
-            value = record.get("choice_value")
+            value = record.choice_value
             if value is None:
                 value = _mini_game_return_value(result)
             # 返回值进选择记录，与实时结算同构；跳转由回放的关联触发器完成
@@ -671,22 +668,13 @@ class TriggerHandler:
                 "highlight": True, "speaker": None})
             self._update_text_display()
             process_log.log(f"[Replay] 复现小游戏触发器: {name} → 返回值 {value}")
-        elif action_type == "ending":
-            ending_text = record.get("ending_text", "")
-            # 回放时同样显示结局图标（图标路径来自结局动作配置）
-            icon_path = (action_data or {}).get("icon_path", "") or ""
-            if icon_path:
-                self._ending_name = name
-                self.ending_icon_path = icon_path
-                self._frame.call(self._update_ending_icon)
-            if ending_text:
-                self.ending_text = ending_text
-                self.story_history.append({"type_str": "【结局】", "text": ending_text,
-                                           "highlight": True, "speaker": None})
-                self._update_text_display()
-            self.pending_ending = None
-            self.dungeon_ended = True
-            process_log.log(f"[Replay] 复现结局触发器: {name}")
+        elif action_type == ENDING_ACTION:
+            # 旧存档的结局触发器：正文本体由 kind:"ending" 记录承担，这里只为兼容
+            self._replay_ending(replay.EndingRecord(
+                name=name,
+                text=record.ending_text,
+                icon_path=str((action_data or {}).get("icon_path") or ""),
+                step=record.step))
         else:
             # insert / sensitivity / none：效果已随文本步骤与属性快照复现
             process_log.log(f"[Replay] 触发器动作无需额外复现: {name} [{action_type}]")
@@ -761,6 +749,7 @@ class TriggerHandler:
             "type": text_type.value,
             "text": clean_text,
             "highlight": any(u.highlight for u in units),
+            "type_prefix": anim_item["type_str"],
             "intrusion_before": before_state.intrusion,
             "destruction_before": before_state.destruction,
             "custom_before": before_state.custom_attrs.copy(),

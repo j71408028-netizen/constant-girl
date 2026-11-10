@@ -3,6 +3,7 @@
 import threading
 
 from dungeon import process_log
+from dungeon.models import PREFIX_ENDING
 from dungeon.splitter import strip_highlight_markers
 
 
@@ -49,7 +50,8 @@ class EndingHandler:
         else:
             snippets = []
             for info in self.replay_data[-limit:]:
-                if not info.get("text"):
+                # 只取步进记录：章节 / 触发器 / 结局记录不是故事片段
+                if "type" not in info or not info.get("text"):
                     continue
                 t = str(info["text"])
                 if len(t) > text_limit:
@@ -68,7 +70,7 @@ class EndingHandler:
             client = getattr(self, "ai_client", None)
             self.ending_effects = pending.get("action_data", {}) or {}
 
-            current_item = {"type_str": "【结局】", "text": "", "highlight": True,
+            current_item = {"type_str": PREFIX_ENDING, "text": "", "highlight": True,
                             "speaker": None}
             self.story_history.append(current_item)
 
@@ -117,10 +119,46 @@ class EndingHandler:
             self._ending_generating = False
             if 'name' in locals() and not self.ending_text:
                 self.ending_text = f"结局：{name}"
-            # 结局文本写回回放记录，供回放时复现结局
-            if self._last_ending_record is not None:
-                self._last_ending_record["ending_text"] = self.ending_text
-                self._last_ending_record = None
+            # 结局正文进回放记录，否则回放到最后一段就关窗（没有正文、没有图标）
+            self._record_ending()
             # 统一收尾（见 window/persistence.py::_finalize）：
             # 结算结局增量 → 记录重要结局索引 → 按设置自动保存回放
             self._finalize(completed=True, reason="触发结局")
+
+    def _record_ending(self):
+        """把结局正文写进回放（``kind:"ending"``，只记一次）。
+
+        结局文本是收尾线程的产物，回放没有任何别的途径拿到它；``ending_icon_path``
+        同理（只有配了图标的结局才算重要结局，回放也要照着显示）。
+        """
+        if getattr(self, "_ending_recorded", False):
+            return
+        self._ending_recorded = True
+        name = str(getattr(self, "_ending_name", "") or "")
+        text = str(getattr(self, "ending_text", "") or "")
+        self.replay_data.append({
+            "kind": "ending",
+            "name": name,
+            "text": text or (f"结局：{name}" if name else ""),
+            "icon_path": str(getattr(self, "ending_icon_path", "") or ""),
+            "step": int(getattr(self.dungeon_state, "total_steps", 0) or 0),
+        })
+
+    # ------------------ 回放：结局正文 ------------------
+    def _replay_ending(self, record):
+        """复现结局：图标 + 正文 + 终止标记，与实时结局同一套展示。
+
+        旧回放没有这条记录，回放到末段就关窗（不凭空补一段正文）。
+        """
+        self._ending_name = record.name or "结局"
+        if record.icon_path:
+            self.ending_icon_path = record.icon_path
+            self._frame.call(self._update_ending_icon)
+        if record.text:
+            self.ending_text = record.text
+            self.story_history.append({"type_str": PREFIX_ENDING, "text": record.text,
+                                       "highlight": True, "speaker": None})
+            self._update_text_display()
+        self.pending_ending = None
+        self.dungeon_ended = True
+        process_log.log(f"[Replay] 复现结局: {record.name or '结局'}")

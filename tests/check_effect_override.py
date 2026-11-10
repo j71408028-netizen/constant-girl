@@ -45,6 +45,7 @@ import dungeon.actions as actions_mod  # noqa: E402
 from _trigger_host import CHAPTERS_AB, SENSITIVITY_A, TriggerHost  # noqa: E402
 from dungeon.overrides import (active_override, describe, invalid_filter,  # noqa: E402
                                parse_overrides)
+from dungeon.replay import parse as replay_parse  # noqa: E402
 from dungeon.validate import validate_scenario_config  # noqa: E402
 
 # ---------------- 1. 覆盖模型 ----------------
@@ -151,12 +152,14 @@ check("换章后落到新章默认（B 无背景/无音乐/无语音/无敏感�
       host._applied_visual_filter is None and host._applied_bgm_level is None
       and host.current_voice_fx == {} and host._apply_sensitivity_mods() == {})
 
-# 回放：按记录原样复现
+# 回放：按记录原样复现（记录先经 dungeon.replay 解析成 TriggerRecord）
 replay = TriggerHost(chapters=CHAPTERS_AB, current_chapter="A",
                      sensitivity_effects=SENSITIVITY_A)
 replay._enter_chapter("A")
-replay._replay_trigger({"name": "覆盖", "action_type": "effect",
-                        "action_data": {"filter": "detail", "bgm_level": 1, "duration": 3}})
+replay._replay_trigger(replay_parse({"kind": "trigger", "name": "覆盖",
+                                     "action_type": "effect",
+                                     "action_data": {"filter": "detail", "bgm_level": 1,
+                                                     "duration": 3}}))
 check("回放复现覆盖",
       replay.effect_overrides
       and replay.effect_overrides[0]["overrides"] == {"filter": "detail", "bgm_level": 1}

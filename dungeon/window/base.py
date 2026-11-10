@@ -36,6 +36,7 @@ from collections import deque
 from core.ai import create_client
 from core import netproxy
 from dungeon import process_log
+from dungeon import replay
 from dungeon import settings as dungeon_settings
 from dungeon.audio import BgmPlayer, buses
 from dungeon.audio.speech import (SpeechDirector, VoiceCaster, normalize_voice,
@@ -52,7 +53,7 @@ from dungeon.window.host import HostPort
 from dungeon.window.result import (REASON_ALREADY_RUNNING, REASON_ENTRY_CANCELLED,
                                    REASON_LAUNCH_FAILED, REASON_SESSION_ENDED,
                                    SessionResult)
-from dungeon.models import DungeonTextType, DungeonState
+from dungeon.models import DungeonState, PREFIX_ENDING, PREFIX_UNKNOWN
 from dungeon.prompts import DungeonPromptBuilder
 from dungeon.rules import EvolutionRules
 from dungeon.summary import StorySummarizer
@@ -221,6 +222,10 @@ class DungeonWindowBase:
         # 章节运行时状态：当前章节、章节持续演化修正、章节效果的短暂覆盖
         self.current_chapter = None
         self.chapter_sensitivity_effects = []
+        # 当前章节的环境默认值（音乐 / 背景滤镜）：短暂覆盖到期时回退到这里，
+        # 而不是回查章节配置——回放模式没有章节配置，环境只存在于记录里
+        self.chapter_bgm = {}
+        self.chapter_filter = ""
         # 短暂覆盖条目：[{remaining, overrides}]，见 dungeon/overrides.py；
         # 三个 _applied_* 记录各维度已落地值，避免每步重复刷背景 / 挪音量 / 重设语音
         self.effect_overrides = []
@@ -258,9 +263,10 @@ class DungeonWindowBase:
         self.pending_option = None     # 待弹出的选项触发器数据
         self.option_choice = None      # 最近一次选择 {"name","index","prompt","text"}
         self._option_generating = False
-        # 回放记录引用：选择/结局生成完成后把结果写回对应记录
+        # 回放记录引用：选项选择完成后把结果写回对应记录
         self._last_option_record = None
-        self._last_ending_record = None
+        # 结局是否已写进回放记录（收尾线程与退出兜底都会尝试，只记一次）
+        self._ending_recorded = False
         # 小游戏触发器状态：pending_mini_game 非空期间步进挂起，等结果回传
         self.pending_mini_game = None
         self._last_mini_game_record = None
@@ -744,19 +750,23 @@ class DungeonWindowBase:
 
     def _init_replay(self, replay_data):
         """回放模式：仅重放数据，不创建 AI 客户端与提示词构建器。"""
-        replay_data = replay_data or []
+        # 解析在领域层做（dungeon.replay）：坏记录在那里被丢弃，这里的记录都已归一
+        records = replay.parse_all(replay_data)
+        skipped = len(replay_data or []) - len(records)
+        if skipped:
+            process_log.log(f"[Replay] 跳过 {skipped} 条无法解析的回放记录")
         # 回放数据可能以触发器记录开头（如开局即触发的背景触发器），
         # 取第一条步进记录还原初始属性；若全为触发器记录则使用默认值。
-        first_step = next((e for e in replay_data if not e.get("kind")), None)
+        first_step = next((r for r in records if isinstance(r, replay.StepRecord)), None)
         if first_step is None:
             self.dungeon_state = DungeonState(intrusion=0.0, destruction=0.0, custom_attrs={})
         else:
             self.dungeon_state = DungeonState(
-                intrusion=first_step["intrusion_before"],
-                destruction=first_step["destruction_before"],
-                custom_attrs=first_step.get("custom_before", {}),
-                depth_intrusion=first_step.get("depth_intrusion_before"),
-                depth_destruction=first_step.get("depth_destruction_before"),
+                intrusion=first_step.intrusion_before,
+                destruction=first_step.destruction_before,
+                custom_attrs=dict(first_step.custom_before),
+                depth_intrusion=first_step.depth_intrusion_before,
+                depth_destruction=first_step.depth_destruction_before,
             )
         self.dungeon_logic = None
         self.current_text_type = None
@@ -765,14 +775,12 @@ class DungeonWindowBase:
         # 保持 seed 出来的设定成员
         self.cast = normalize_cast((self.scenario_config or {}).get("cast"))
         self.characters = CharacterLedger(self.cast)
-        for record in replay_data:
-            if isinstance(record, dict) and record.get("kind") == "characters":
-                self.characters.restore(record.get("snapshot"))
+        for record in records:
+            if isinstance(record, replay.CharactersRecord):
+                self.characters.restore(record.snapshot)
                 break
-        # 快照记录不参与回放步进
-        self.loaded_replay = [e for e in replay_data
-                              if not (isinstance(e, dict)
-                                      and e.get("kind") == "characters")]
+        # 快照记录已还原，保留在列表里只为位置对应（步进时跳过）
+        self.loaded_replay = records
         # 回放模式同样维护剧情压缩器（不调用 AI，仅走内部算法压缩）
         self.story_summary = StorySummarizer()
         # 回放也照方案配置朗读（音色可能只有默认值——回放数据里没有主角称呼）
@@ -908,19 +916,14 @@ class DungeonWindowBase:
 
     @staticmethod
     def _type_prefix(text_type):
-        return {
-            DungeonTextType.BACKGROUND: "【环境】",
-            DungeonTextType.BRANCH: "【分支】",
-            DungeonTextType.DIALOG: "【对话】",
-            DungeonTextType.INTERACTION: "【互动】",
-            DungeonTextType.ACTION: "【行动】",
-        }.get(text_type, "【未知】")
+        prefix = getattr(text_type, "display_prefix", None)
+        return prefix if isinstance(prefix, str) else PREFIX_UNKNOWN
 
     def _display_type_prefix(self, text_type) -> str:
         """段落前缀：结束章节内所有段落一律显示为「结局」。"""
         try:
             if self._in_terminating_chapter():
-                return "【结局】"
+                return PREFIX_ENDING
         except Exception:
             pass
         return self._type_prefix(text_type)

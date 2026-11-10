@@ -471,8 +471,7 @@ class DungeonPersistence:
                 name = (self.pending_ending or {}).get("name", "")
                 if not self.ending_text:
                     self.ending_text = f"结局：{name}"
-                    if self._last_ending_record is not None:
-                        self._last_ending_record["ending_text"] = self.ending_text
+                self._record_ending()
                 self._finalize(completed=True, reason="结局已触发，生成未结束")
             else:
                 self._finalize(completed=False, reason="未触发结局就退出")
