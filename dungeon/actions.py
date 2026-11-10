@@ -16,7 +16,8 @@
 「旧版·已失效」（无表单，提示删除）——让作者在校验阶段看见并处理，而不是
 在运行时静默吞掉。
 
-展示名、动作集合、归一化都从这里取，避免各处各写一份字符串常量。
+展示名、动作集合、归一化、动作类型的读取（``trigger_action_type``）都从这里取，
+避免各处各写一份字符串常量。
 """
 
 # 运行时支持的动作：单步行为 + 章节跳转 + 小游戏挑战 + 条件标记
@@ -108,6 +109,31 @@ def normalize_action_type(action_type, action_data: dict = None) -> str:
     if action_type is None or action_type == "":
         return (action_data or {}).get("type") or "none"
     return action_type
+
+
+# 动作类型的规范键 + 只读兼容的旧键（按序取第一个非空值）。三个键并存是历史包袱：
+# ``action_type`` 是运行时与编辑器一直在用的键，``action`` 是早期 schema 声明的键，
+# ``action_data["type"]`` 更早。三者同时出现时以 ``action_type`` 为准——运行时
+# 从来按它执行，另两个只是兼容。见 docs/designs/dungeon/script.md §4。
+ACTION_TYPE_KEYS = ("action_type", "action")
+
+
+def trigger_action_type(trigger) -> str:
+    """读触发器的动作类型：全仓唯一入口。
+
+    运行时（``window/triggers.py``）、校验器（``validate.py``）、关系图
+    （``scenario_graph.py``）与编辑器列表都从这里取，避免读到不同的键而得出
+    不同的动作（曾经校验器按 ``action`` 放行、运行时按 ``action_type`` 跳过）。
+    """
+    if not isinstance(trigger, dict):
+        return "none"
+    action_data = trigger.get("action_data")
+    action_data = action_data if isinstance(action_data, dict) else {}
+    for key in ACTION_TYPE_KEYS:
+        value = trigger.get(key)
+        if value is not None and value != "":
+            return normalize_action_type(value, action_data)
+    return normalize_action_type(None, action_data)
 
 
 def action_label(action_type) -> str:

@@ -6,7 +6,7 @@ import customtkinter as ctk
 import ui.ctk
 from dungeon.actions import (
     MINI_GAME_DEFAULT_ID, NEW_ACTIONS, VISUAL_FILTERS, VISUAL_FILTER_KEYS,
-    WINDOW_FX, WINDOW_FX_KEYS, action_label, normalize_action_type,
+    WINDOW_FX, WINDOW_FX_KEYS, action_label, trigger_action_type,
 )
 from dungeon.window.minigame import list_mini_games, mini_game_params
 from dungeon.audio import buses
@@ -1351,8 +1351,7 @@ class TriggerEditDialog(BaseDialog):
 
     def _load_action_controls(self, action_data):
         action_data = action_data or {}
-        action_type = normalize_action_type(
-            self.trigger.get("action_type"), action_data)
+        action_type = trigger_action_type(self.trigger)
         if action_type in LEGACY_ACTIONS:
             # 旧版动作（背景切换 / 性格敏感化）已不再支持：没有对应表单，
             # 回落到“条件标记”让用户重新选择动作类型，或直接在列表中删除它

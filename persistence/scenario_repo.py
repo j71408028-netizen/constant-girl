@@ -266,6 +266,11 @@ class ScenarioRepo:
                     t["precondition_names"] = []
                 # 所在章节：早期配置没有该字段，空值表示不限章节
                 t.setdefault("chapter", "")
+                # 动作类型：早期键 action 并到规范键 action_type。两者并存时不覆盖
+                # action_type——运行时一直按它执行，这里只做单向迁移
+                legacy_action = t.pop("action", None)
+                if legacy_action is not None and not t.get("action_type"):
+                    t["action_type"] = legacy_action
             new_config["triggers"] = new_triggers
         else:
             new_config["triggers"] = []

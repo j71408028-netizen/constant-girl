@@ -28,7 +28,7 @@ from dungeon.admission import (FIELD_ADDRESS, FIELD_HEIGHT_MAX,
 from core.address_model import (REL_DIVERGENT, REL_WORLD_MISMATCH, format_addr_verbose,
                                 relate, validate_address_text)
 from dungeon.actions import (VISUAL_FILTER_KEYS, WINDOW_FX_KEYS,
-                             normalize_action_type)
+                             trigger_action_type)
 from dungeon.graph_lint import lint_graph
 from dungeon.scenario_graph import build_graph
 from dungeon.audio import buses
@@ -1001,6 +1001,19 @@ def _validate_triggers(triggers, chapter_names, terminating, trigger_names,
         for key in schema.DEPRECATED_TRIGGER_KEYS:
             if key in trigger:
                 add("warning", path + "." + key, "旧版字段，加载时会被迁移/移除")
+        # 动作键：action 是早期声明的键，加载时并到 action_type。两键取值相同时
+        # 只是冗余（存量配置里很常见），不打扰作者；**不一致**才是真问题——
+        # 运行时按 action_type 执行，作者看着 action 改却改不动
+        legacy_action = trigger.get("action")
+        canonical_action = trigger.get("action_type")
+        if legacy_action is not None and legacy_action != "":
+            if canonical_action is None or canonical_action == "":
+                add("info", path + ".action",
+                    "旧版字段，加载时会并到 action_type")
+            elif str(legacy_action) != str(canonical_action):
+                add("warning", path + ".action_type",
+                    f"action「{legacy_action}」与 action_type「{canonical_action}」"
+                    f"不一致，运行时按 action_type 执行；加载时 action 会被移除")
         scope = str(trigger.get("chapter") or "").strip()
         if scope and scope != CHAPTER_NONE and scope not in chapter_names:
             add("warning", path + ".chapter",
@@ -1013,8 +1026,8 @@ def _validate_triggers(triggers, chapter_names, terminating, trigger_names,
                             add, custom_attrs, trigger_names)
         raw_data = trigger.get("action_data")
         action_data = raw_data if isinstance(raw_data, dict) else {}
-        action_type = normalize_action_type(trigger.get("action"), action_data)
-        action_path = path + ".action"
+        action_type = trigger_action_type(trigger)
+        action_path = path + ".action_type"
         in_terminating = scope not in ("", CHAPTER_NONE) and scope in terminating
         if action_type in LEGACY_ACTIONS:
             add("warning", action_path,

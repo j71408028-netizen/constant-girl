@@ -11,7 +11,7 @@
 读取方只吃本模块产出的 Record，不再各自 ``dict.get``。三条约定：
 
 1. **内嵌配置一律复用配置侧的归一器**（``normalize_bgm`` / ``normalize_voice_fx`` /
-   ``normalize_action_type``）：记录里存的是当时的环境，重新拼成配置时必须与编辑器
+   ``trigger_action_type``）：记录里存的是当时的环境，重新拼成配置时必须与编辑器
    写出的同形，否则「回放→配置」的回溯改写会产出另一种合法但走样的配置。
 2. **容错是这里的事**：缺键给默认、类型不符给默认、整条坏记录返回 ``None`` 由调用方
    跳过。一条坏记录不该让整段回放卡死在半路。
@@ -22,7 +22,7 @@
 
 from dataclasses import dataclass
 
-from dungeon.actions import normalize_action_type
+from dungeon.actions import trigger_action_type
 from dungeon.audio.chapters import normalize_bgm
 from dungeon.audio.voice_fx import normalize_voice_fx
 from dungeon.models import (PREFIX_ENDING, DungeonTextType)
@@ -227,8 +227,8 @@ def _parse_chapter(raw: dict) -> ChapterRecord:
 
 def _parse_trigger(raw: dict) -> TriggerRecord:
     action_data = _mapping(raw.get("action_data"))
-    # 旧记录可能只把动作类型写在 action_data["type"] 里
-    action_type = normalize_action_type(raw.get("action_type"), action_data)
+    # 与配置侧同一个读法：旧记录可能把动作类型写在 action 或 action_data["type"] 里
+    action_type = trigger_action_type(raw)
     result = raw.get("game_result")
     return TriggerRecord(
         name=_text(raw.get("name")),

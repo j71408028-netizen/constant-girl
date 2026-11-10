@@ -13,7 +13,7 @@ from dungeon import process_log
 from dungeon import replay
 from dungeon.actions import (ACTION_POSITIONS, EMPTY_ACTIONS, ENDING_ACTION,
                              MINI_GAME_DEFAULT_ID, WINDOW_FX_KEYS,
-                             normalize_action_type)
+                             trigger_action_type)
 from dungeon.audio.chapters import (DEFAULT_BGM_LEVEL, chapter_fixed_text,
                               find_chapter, is_terminating_chapter,
                               matches_scope, normalize_bgm,
@@ -336,8 +336,7 @@ class TriggerHandler:
                 name = trigger.get("name")
                 if name in self.triggered_names or name in self._round_fired:
                     continue
-                action_data = trigger.get("action_data", {})
-                action_type = normalize_action_type(trigger.get("action_type"), action_data)
+                action_type = trigger_action_type(trigger)
                 if action_type not in position:
                     continue
                 if self._dispatch_trigger(trigger, trigger_index, action_type):

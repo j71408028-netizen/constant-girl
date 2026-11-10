@@ -39,7 +39,7 @@
 from dataclasses import dataclass
 
 from dungeon import schema
-from dungeon.actions import ACTION_POSITIONS, action_label, normalize_action_type
+from dungeon.actions import ACTION_POSITIONS, action_label, trigger_action_type
 from dungeon.audio.chapters import (
     CHAPTER_ANY, CHAPTER_ANY_LABEL, CHAPTER_NONE, normalize_chapters,
 )
@@ -503,7 +503,7 @@ def build_graph(config) -> ScenarioGraph:
         scope = str(trigger.get("chapter") or "").strip()
         action_data = trigger.get("action_data")
         action_data = action_data if isinstance(action_data, dict) else {}
-        action_type = normalize_action_type(trigger.get("action"), action_data)
+        action_type = trigger_action_type(trigger)
 
         flags = []
         if scope in (CHAPTER_ANY, CHAPTER_NONE):
@@ -543,7 +543,7 @@ def build_graph(config) -> ScenarioGraph:
                                   detail=precondition))
         action_data = trigger.get("action_data")
         action_data = action_data if isinstance(action_data, dict) else {}
-        if normalize_action_type(trigger.get("action"), action_data) == EDGE_GOTO:
+        if trigger_action_type(trigger) == EDGE_GOTO:
             target = str(action_data.get("chapter") or "").strip()
             if target in known:
                 edges.append(Edge(EDGE_GOTO, node_id, chapter_node_id(target), detail=target))

@@ -5,7 +5,7 @@ import customtkinter as ctk
 
 import ui.ctk
 from dungeon.actions import (MINI_GAME_DEFAULT_ID, VISUAL_FILTERS, WINDOW_FX,
-                             action_label, normalize_action_type)
+                             action_label, trigger_action_type)
 from dungeon.validate import LEGACY_ACTIONS
 from dungeon.audio.chapters import (
     CHAPTER_ANY, CHAPTER_NONE, default_chapter_color, shade_for_mode,
@@ -269,7 +269,7 @@ class ChapterTriggerManager(TreeviewManager):
         return text
 
     def _action_text(self, trigger: dict) -> str:
-        action_type = normalize_action_type(trigger.get("action_type"), trigger.get("action_data"))
+        action_type = trigger_action_type(trigger)
         if action_type in LEGACY_ACTIONS:
             # 旧版动作已不再支持（运行时直接跳过），列表里标出来供用户删除
             return f"{LEGACY_ACTIONS[action_type]}（旧版·已失效）"
@@ -298,8 +298,7 @@ class ChapterTriggerManager(TreeviewManager):
         ``fx`` 取窗口视效、``goto`` 取目标章节、``mini_game`` 取小游戏。
         旧版动作与空动作不显示。
         """
-        action_type = normalize_action_type(
-            trigger.get("action_type"), trigger.get("action_data"))
+        action_type = trigger_action_type(trigger)
         if action_type in LEGACY_ACTIONS:
             return ""
         data = trigger.get("action_data")

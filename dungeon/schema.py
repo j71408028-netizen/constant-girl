@@ -261,11 +261,14 @@ TRIGGER_FIELDS = (
     FieldSpec("precondition_names", "list", "前置触发器"),
     FieldSpec("condition", "dict", "触发条件"),
     FieldSpec("repeatable", "bool", "可重复触发", True),
-    FieldSpec("action", "enum", "动作"),
+    FieldSpec("action_type", "enum", "动作"),
     FieldSpec("action_data", "dict", "动作参数"),
 )
 
 # 迁移前遗留的触发器键（``_migrate`` 会转换/移除）
+# 另：早期声明的动作键 ``action`` 也在加载时并到 ``action_type``（见
+# ``_migrate`` 与校验器里的专项提示）——它不算废弃键，因为存量配置里常与
+# ``action_type`` 并存且取值相同，逐条报「旧版字段」只会淹没真正的问题。
 DEPRECATED_TRIGGER_KEYS = ("id", "precondition_ids")
 
 # ---------------- 条件规则 ----------------

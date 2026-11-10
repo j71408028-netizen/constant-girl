@@ -314,12 +314,16 @@ AI 生成**（`normalize_fixed_text` 把缺路径的配置归一成空 dict，�
 | `precondition_names` | list | — | 前置触发器；列表内每个都至少触发过一次 |
 | `condition` | dict | — | 条件规则组，见 §5 |
 | `repeatable` | bool | `true` | 可重复触发 |
-| `action` | enum | — | 动作类型，见 §6（旧配置键 `action_type` 兼容） |
+| `action_type` | enum | — | 动作类型，见 §6（旧配置键 `action` / `action_data["type"]` 兼容） |
 | `action_data` | dict | — | 动作参数 |
 
 判定顺序见 `TriggerHandler.check_triggers`：**所在章节 → 前置触发器 → 条件规则**，任何一项不满足即跳过。
-`action_data["type"]` 与 `action_type` 冗余存在于旧配置中；`normalize_action_type` 只做
-「动作字段缺失时回退 `action_data["type"]`」，不再做任何旧别名转换。
+动作类型的读法只有一处：`actions.trigger_action_type`，依次看 `action_type` → `action` →
+`action_data["type"]`，三者并存时以 `action_type` 为准（运行时、校验器、关系图、编辑器列表
+都走它——曾经校验器读 `action`、运行时读 `action_type`，两键不一致时会出现"校验器放行、
+运行时静默跳过"）。`action` 在加载时并到 `action_type` 并移除（`scenario_repo._migrate`，
+只写规范键）；`normalize_action_type` 只做「动作字段缺失时回退 `action_data["type"]`」，
+不做任何旧别名转换。
 
 ## 5. 条件键索引
 

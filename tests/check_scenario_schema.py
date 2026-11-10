@@ -168,19 +168,19 @@ def _bad_config():
             {"name": "终幕", "ending": True},
         ],
         "triggers": [
-            {"name": "t_goto", "chapter": "开场", "action": "goto",
+            {"name": "t_goto", "chapter": "开场", "action_type": "goto",
              "action_data": {"chapter": "不存在"}},
-            {"name": "t_opt", "chapter": "终幕", "action": "option",
+            {"name": "t_opt", "chapter": "终幕", "action_type": "option",
              "action_data": {"options": []}},
-            {"name": "t_opt", "action": "insert", "action_data": {"text": ""}},
-            {"name": "", "action": "background"},
-            {"name": "t_cond", "action": "none",
+            {"name": "t_opt", "action_type": "insert", "action_data": {"text": ""}},
+            {"name": "", "action_type": "background"},
+            {"name": "t_cond", "action_type": "none",
              "condition": {"operator": "xor", "rules": [
                  {"key": "幽灵", "comparator": "=>", "value": 1},
                  {"key": "选择:不存在", "metric": "avg", "value": 1},
                  {"key": "伤亡数组", "metric": "sum", "value": 1},
              ]}, "precondition_names": ["不存在"]},
-            {"name": "t_old", "action": "ending", "action_data": {}},
+            {"name": "t_old", "action_type": "ending", "action_data": {}},
         ],
     }
 
@@ -200,7 +200,7 @@ _expect("error", "triggers[2].action_data.text", "插入触发器缺文本（err
 _expect("warning", "triggers[1]", "结束章节内放 option（warning）")
 _expect("warning", "triggers[2].name", "触发器重名")
 _expect("warning", "triggers[3].name", "触发器缺名")
-_expect("warning", "triggers[3].action", "旧版动作 background")
+_expect("warning", "triggers[3].action_type", "旧版动作 background")
 _expect("warning", "triggers[4].condition.operator", "非法逻辑组合符")
 _expect("warning", "triggers[4].condition.rules[0].comparator", "非法比较符")
 _expect("warning", "triggers[4].condition.rules[0].key", "未知条件键")
@@ -208,7 +208,7 @@ _expect("warning", "triggers[4].condition.rules[1].key", "选择: 引用不存�
 _expect("warning", "triggers[4].condition.rules[1].metric", "选项度量不支持")
 _expect("warning", "triggers[4].condition.rules[2].metric", "伤亡度量不支持")
 _expect("warning", "triggers[4].precondition_names", "前置引用不存在")
-_expect("warning", "triggers[5].action", "旧版结局触发器")
+_expect("warning", "triggers[5].action_type", "旧版结局触发器")
 _expect("error", "chapters[0].overflow_target", "超限跳转悬空（error）")
 _expect("warning", "initial_prompt", "initial_prompt 非字符串")
 _expect("warning", "coupling_level", "耦合等级无效")
@@ -495,7 +495,7 @@ _ft_config["chapters"] = [
      "fixed_text": {"path": "texts/missing.txt"}},
 ]
 _ft_config["triggers"] = [
-    {"name": "t_insert", "chapter": "开场", "action": "insert",
+    {"name": "t_insert", "chapter": "开场", "action_type": "insert",
      "action_data": {"text": "插入一段"}},
 ]
 _ft_diags = validate_scenario_config(_ft_config, scenario_dir=_ft_tmp)
@@ -522,7 +522,7 @@ check("诊断：半写指令（缺类型 / 缺方向）",
       format_diagnostics([d for d in _ft_diags if "fixed_text" in d.path],
                          include_info=True))
 check("诊断：固定文本章节内 insert 被提示会跳过",
-      any(d.level == "warning" and d.path == "triggers[0].action"
+      any(d.level == "warning" and d.path == "triggers[0].action_type"
           and "固定文本章节" in d.message for d in _ft_diags),
       format_diagnostics([d for d in _ft_diags if "triggers" in d.path]))
 
@@ -573,6 +573,71 @@ check("迁移：列表里的 text_nvl 同样提升",
       _loaded_old.get("text_component") == "text_nvl"
       and _loaded_old.get("components") == ["attr_bar"],
       _loaded_old)
+
+# ---------------- 5b. 动作键：action_type 是规范键，action 只读兼容 ----------------
+# 历史问题：运行时读 action_type、校验器与关系图读 action，两处一旦不同就是
+# 「校验器放行、运行时静默跳过」。现在读法只有 actions.trigger_action_type 一处。
+from dungeon.actions import trigger_action_type  # noqa: E402
+
+check("动作键：三种写法读到同一个动作，两键并存时 action_type 优先",
+      trigger_action_type({"action_type": "goto"}) == "goto"
+      and trigger_action_type({"action": "goto"}) == "goto"
+      and trigger_action_type({"action_data": {"type": "goto"}}) == "goto"
+      and trigger_action_type({"action_type": "insert", "action": "goto"}) == "insert"
+      and trigger_action_type({}) == "none"
+      and trigger_action_type("不是字典") == "none")
+
+_legacy_only = {
+    "chapters": [{"name": "开场", "start": True}],
+    "triggers": [{"name": "旧键跳转", "action": "goto",
+                  "action_data": {"chapter": "不存在的章节"}}],
+}
+_legacy_diags = validate_scenario_config(_legacy_only)
+check("旧键 action 照样参与动作校验（不再被校验器漏看）",
+      any(d.level == "error" and d.path == "triggers[0].action_data.chapter"
+          for d in _legacy_diags),
+      format_diagnostics(_legacy_diags, include_info=True))
+check("旧键 action 被提示为待迁移的旧字段",
+      any(d.level == "info" and d.path == "triggers[0].action"
+          and "旧版字段" in d.message for d in _legacy_diags),
+      format_diagnostics(_legacy_diags, include_info=True))
+
+_conflict = {
+    "chapters": [{"name": "开场", "start": True}],
+    "triggers": [{"name": "两键并存", "action": "insert", "action_type": "goto",
+                  "action_data": {"chapter": "不存在的章节"}}],
+}
+_conflict_diags = validate_scenario_config(_conflict)
+check("两键并存时校验按 action_type 走（与运行时一致）",
+      any(d.level == "error" and d.path == "triggers[0].action_data.chapter"
+          for d in _conflict_diags)
+      and not any(d.path == "triggers[0].action_data.text" for d in _conflict_diags),
+      format_diagnostics(_conflict_diags, include_info=True))
+check("两键不一致被单独提示（作者按 action 改会改不动）",
+      any(d.level == "warning" and d.path == "triggers[0].action_type"
+          and "不一致" in d.message for d in _conflict_diags),
+      format_diagnostics(_conflict_diags, include_info=True))
+check("两键取值相同时不报旧字段噪音",
+      not [d for d in validate_scenario_config({
+          "chapters": [{"name": "开场", "start": True}],
+          "triggers": [{"name": "冗余", "action": "none", "action_type": "none"}],
+      }) if d.path in ("triggers[0].action", "triggers[0].action_type")],
+      "取值相同的 action 仍在报噪音")
+
+_migrated_cfg = schema.empty_scenario_config()
+_migrated_cfg["triggers"] = [
+    {"name": "旧键", "action": "goto", "action_data": {"chapter": "开场"}},
+    {"name": "两键", "action": "insert", "action_type": "goto",
+     "action_data": {"chapter": "开场"}},
+]
+repo.save_config("migrated", _migrated_cfg)
+_migrated = repo.load_config("migrated")["triggers"]
+check("迁移：旧键 action 并到 action_type 并从配置里移除",
+      _migrated[0].get("action_type") == "goto" and "action" not in _migrated[0],
+      _migrated[0])
+check("迁移：两键并存时保留 action_type 的原值（不按 action 改写）",
+      _migrated[1].get("action_type") == "goto" and "action" not in _migrated[1],
+      _migrated[1])
 
 # ---------------- 6. 演化规则：配置矩阵/步长真的生效 ----------------
 # 曾经 transition_matrix 与 section_steps 只写进 config.json、从未进运行时，

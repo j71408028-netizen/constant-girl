@@ -182,7 +182,7 @@ check("未知视效键有诊断", any(l == "warning" and p == "triggers[1].actio
                              for l, p in msgs), str(msgs))
 check("时长越界有诊断", any(p == "triggers[1].action_data.duration" for _l, p in msgs), str(msgs))
 check("强度越界有诊断", any(p == "triggers[1].action_data.intensity" for _l, p in msgs), str(msgs))
-check("旧版 ending 报 LEGACY warning", any(l == "warning" and p == "triggers[2].action"
+check("旧版 ending 报 LEGACY warning", any(l == "warning" and p == "triggers[2].action_type"
                                           for l, p in msgs), str(msgs))
 
 # ---------------- 8. 条件一层或/且组合 ----------------

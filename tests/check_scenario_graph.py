@@ -82,16 +82,16 @@ NORMAL = {
         {"name": "终局", "ending": True},
     ],
     "triggers": [
-        {"name": "开场", "chapter": "序章", "action": "insert",
+        {"name": "开场", "chapter": "序章", "action_type": "insert",
          "action_data": {"text": "开篇"}},
-        {"name": "入场", "chapter": "序章", "action": "goto",
+        {"name": "入场", "chapter": "序章", "action_type": "goto",
          "action_data": {"chapter": "中庭"}, "precondition_names": ["开场"],
          "condition": {"operator": "and",
                        "rules": [{"key": "步数", "comparator": ">=", "value": 3}]}},
-        {"name": "收尾", "chapter": "中庭", "action": "goto",
+        {"name": "收尾", "chapter": "中庭", "action_type": "goto",
          "action_data": {"chapter": "终局"}},
-        {"name": "旁白", "chapter": "", "action": "fx", "action_data": {"fx": "flash"}},
-        {"name": "按旁白结果分支", "chapter": "中庭", "action": "none",
+        {"name": "旁白", "chapter": "", "action_type": "fx", "action_data": {"fx": "flash"}},
+        {"name": "按旁白结果分支", "chapter": "中庭", "action_type": "none",
          "condition": {"operator": "and",
                        "rules": [{"key": "选择:旁白", "comparator": ">=", "value": 1}]}},
     ],
@@ -153,8 +153,8 @@ for junk in ({}, {"chapters": "x", "triggers": 3}, {"chapters": [None], "trigger
 STALE = {
     "chapters": [{"name": "序章", "start": True}],
     "triggers": [
-        {"name": "孤儿", "chapter": "已删章节", "action": "none"},
-        {"name": "悬空跳", "chapter": "序章", "action": "goto",
+        {"name": "孤儿", "chapter": "已删章节", "action_type": "none"},
+        {"name": "悬空跳", "chapter": "序章", "action_type": "goto",
          "action_data": {"chapter": "也不存在"}},
     ],
 }
@@ -175,7 +175,7 @@ check("占位章节不参与「章节走不到」的报错",
 _conditional = build_graph({
     "chapters": [{"name": "甲", "start": True}, {"name": "乙"}],
     "triggers": [
-        {"name": "有条件的跳转", "chapter": "甲", "action": "goto",
+        {"name": "有条件的跳转", "chapter": "甲", "action_type": "goto",
          "action_data": {"chapter": "乙"},
          "condition": {"operator": "and",
                        "rules": [{"key": "介入度", "comparator": ">=", "value": 99}]}},
@@ -194,9 +194,9 @@ check("章节层投影把 goto 折算成「触发器所在章节 → 目标章�
 CHAIN = {
     "chapters": [{"name": "序章", "start": True}],
     "triggers": [
-        {"name": "甲", "chapter": "序章", "action": "none"},
-        {"name": "乙", "chapter": "序章", "action": "none", "precondition_names": ["甲"]},
-        {"name": "丙", "chapter": "序章", "action": "none", "precondition_names": ["乙"]},
+        {"name": "甲", "chapter": "序章", "action_type": "none"},
+        {"name": "乙", "chapter": "序章", "action_type": "none", "precondition_names": ["甲"]},
+        {"name": "丙", "chapter": "序章", "action_type": "none", "precondition_names": ["乙"]},
     ],
 }
 chain = build_graph(CHAIN)
@@ -209,11 +209,11 @@ check("链式前置没有循环依赖", chain.deadlock_sccs() == ())
 LOCK = {
     "chapters": [{"name": "序章", "start": True}],
     "triggers": [
-        {"name": "互锁甲", "chapter": "序章", "action": "none",
+        {"name": "互锁甲", "chapter": "序章", "action_type": "none",
          "precondition_names": ["互锁乙"]},
-        {"name": "互锁乙", "chapter": "序章", "action": "none",
+        {"name": "互锁乙", "chapter": "序章", "action_type": "none",
          "precondition_names": ["互锁甲"]},
-        {"name": "依赖互锁", "chapter": "序章", "action": "none",
+        {"name": "依赖互锁", "chapter": "序章", "action_type": "none",
          "precondition_names": ["互锁甲"]},
     ],
 }
@@ -230,7 +230,7 @@ check("依赖互锁的第三方也不可触发",
 
 SELF = build_graph({
     "chapters": [{"name": "序章", "start": True}],
-    "triggers": [{"name": "自环", "chapter": "序章", "action": "none",
+    "triggers": [{"name": "自环", "chapter": "序章", "action_type": "none",
                   "precondition_names": ["自环"]}],
 })
 check("自环（自己以自己为前置）算互锁",
@@ -264,7 +264,7 @@ check("骨架方案的 info 仍在（结束章节无图标这类提示不受影�
 R1 = {
     "chapters": [{"name": "序章", "start": True}, {"name": "中庭"}, {"name": "荒废"}],
     "triggers": [
-        {"name": "去中庭", "chapter": "序章", "action": "goto",
+        {"name": "去中庭", "chapter": "序章", "action_type": "goto",
          "action_data": {"chapter": "中庭"}},
     ],
 }
@@ -277,7 +277,7 @@ check("R1 不可达章节：error 级、定位到 chapters[i].name",
 # R1 抑制一：没有起始章节时不报（顶层已有 error，逐章刷是噪音）
 no_start = lint_graph(build_graph({
     "chapters": [{"name": "甲"}, {"name": "乙"}],
-    "triggers": [{"name": "跳", "chapter": "甲", "action": "goto",
+    "triggers": [{"name": "跳", "chapter": "甲", "action_type": "goto",
                   "action_data": {"chapter": "乙"}}],
 }))
 check("R1 抑制：没有起始章节时不逐章报不可达",
@@ -287,7 +287,7 @@ check("R1 抑制：没有起始章节时不逐章报不可达",
 r2 = lint_graph(build_graph({
     "chapters": [{"name": "甲", "start": True}, {"name": "乙"},
                  {"name": "终局", "ending": True}],
-    "triggers": [{"name": "绕开终局", "chapter": "甲", "action": "goto",
+    "triggers": [{"name": "绕开终局", "chapter": "甲", "action_type": "goto",
                   "action_data": {"chapter": "乙"}}],
 }))
 check("R2 结束章节一个都走不到：warning、定位到 chapters",
@@ -300,7 +300,7 @@ check("R2 生效时结束章节不再逐条报 R1（同一原因不刷两遍）"
 r1b = lint_graph(build_graph({
     "chapters": [{"name": "甲", "start": True}, {"name": "乙", "ending": True},
                  {"name": "丙", "ending": True}],
-    "triggers": [{"name": "去乙", "chapter": "甲", "action": "goto",
+    "triggers": [{"name": "去乙", "chapter": "甲", "action_type": "goto",
                   "action_data": {"chapter": "乙"}}],
 }))
 check("有可达结束章节时，多余的结束章节仍按 R1 报 error",
@@ -321,9 +321,9 @@ check("R3 不给互锁分量成员重复报（由 R5 统一报）",
 r4 = lint_graph(build_graph({
     "chapters": [{"name": "序章", "start": True}],
     "triggers": [
-        {"name": "原地跳", "chapter": "序章", "action": "goto",
+        {"name": "原地跳", "chapter": "序章", "action_type": "goto",
          "action_data": {"chapter": "序章"}},
-        {"name": "离场", "chapter": "", "action": "goto", "action_data": {"chapter": ""}},
+        {"name": "离场", "chapter": "", "action_type": "goto", "action_data": {"chapter": ""}},
     ],
 }))
 check("R4 自跳转：warning、定位到 action_data.chapter",
@@ -344,11 +344,11 @@ check("R5 循环依赖：warning、文案点明「自己以自己为前置」",
 RACE = {
     "chapters": [{"name": "序章", "start": True}, {"name": "别处"}],
     "triggers": [
-        {"name": "抢跳甲", "chapter": "序章", "action": "goto",
+        {"name": "抢跳甲", "chapter": "序章", "action_type": "goto",
          "action_data": {"chapter": "别处"}},
-        {"name": "抢跳乙", "chapter": "序章", "action": "goto",
+        {"name": "抢跳乙", "chapter": "序章", "action_type": "goto",
          "action_data": {"chapter": "别处"}},
-        {"name": "单独选项", "chapter": "序章", "action": "option",
+        {"name": "单独选项", "chapter": "序章", "action_type": "option",
          "action_data": {"options": [{"text": "a"}]}},
     ],
 }
@@ -371,11 +371,11 @@ check("恒真且靠后的那条被标为永远轮不到",
 late = build_graph({
     "chapters": [{"name": "序章", "start": True}],
     "triggers": [
-        {"name": "带条件", "chapter": "序章", "action": "option",
+        {"name": "带条件", "chapter": "序章", "action_type": "option",
          "action_data": {"options": [{"text": "a"}]},
          "condition": {"operator": "and",
                        "rules": [{"key": "步数", "comparator": ">=", "value": 1}]}},
-        {"name": "恒真", "chapter": "序章", "action": "option",
+        {"name": "恒真", "chapter": "序章", "action_type": "option",
          "action_data": {"options": [{"text": "b"}]}},
     ],
 })
@@ -390,9 +390,9 @@ check("两位动作（选项 / 小游戏）算同一个位次，标签点明两�
 scoped = build_graph({
     "chapters": [{"name": "甲", "start": True}, {"name": "乙"}],
     "triggers": [
-        {"name": "甲跳", "chapter": "甲", "action": "goto",
+        {"name": "甲跳", "chapter": "甲", "action_type": "goto",
          "action_data": {"chapter": "乙"}},
-        {"name": "乙跳", "chapter": "乙", "action": "goto",
+        {"name": "乙跳", "chapter": "乙", "action_type": "goto",
          "action_data": {"chapter": "甲"}},
     ],
 })
@@ -400,8 +400,30 @@ check("同位置但不同章节不算竞争（各自成组，组内只有一条�
       scoped.same_position_groups() == (),
       str([(g.scope, _names(g.members)) for g in scoped.same_position_groups()]))
 
-# ---------------- 5. 与既有诊断体系一致 ----------------
+# 动作键的三种写法在建图里等价：action_type 是规范键，action 是早期声明的键，
+# 两键并存时以 action_type 为准（与运行时同一个读法，见 actions.trigger_action_type）
+_LEGACY_ACTION = {
+    "chapters": [{"name": "甲", "start": True}, {"name": "乙"}],
+    "triggers": [
+        {"name": "规范键", "chapter": "甲", "action_type": "goto",
+         "action_data": {"chapter": "乙"}},
+        {"name": "旧键", "chapter": "甲", "action": "goto",
+         "action_data": {"chapter": "乙"}},
+        {"name": "两键并存", "chapter": "甲", "action": "insert",
+         "action_type": "goto", "action_data": {"chapter": "乙"}},
+    ],
+}
+_legacy_graph = build_graph(_LEGACY_ACTION)
+_goto_edges = [edge for edge in _legacy_graph.edges if edge.kind == EDGE_GOTO]
+check("三种动作键写法建出同样的跳转边（两键并存时 action_type 优先）",
+      sorted(edge.src for edge in _goto_edges)
+      == sorted(trigger_node_id(name) for name in ("规范键", "旧键", "两键并存")),
+      str([(edge.src, edge.dst) for edge in _goto_edges]))
+check("旧键的触发器动作类型归一后与规范键一致",
+      _legacy_graph.node(trigger_node_id("旧键")).action_type == "goto"
+      and _legacy_graph.node(trigger_node_id("两键并存")).action_type == "goto")
 
+# ---------------- 5. 与既有诊断体系一致 ----------------
 merged = validate_scenario_config(R1)
 check("图校验结果并入了 validate_scenario_config 的诊断列表",
       any(d.level == "error" and d.path == "chapters[2].name" for d in merged),
