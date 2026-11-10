@@ -18,12 +18,16 @@
 3. **不猜**：字段缺失与「显式空值」区分开（``custom_after`` 缺失 = 不改状态，
    空字典 = 状态确实为空），显示前缀缺失时按类型现算，但记录的 ``type_prefix``
    （含空串「本段不显示前缀」）优先。
+
+同一份语法也负责写：:func:`to_config_fragment` 把章节 / 触发器记录还原成配置
+片段，供「回放 → 配置」的回溯改写使用。读入口径统一在 :func:`parse_all`
+（旧格式的 ``goto`` 记录会被展开成章节进入记录）。
 """
 
 from dataclasses import dataclass
 
 from dungeon.actions import trigger_action_type
-from dungeon.audio.chapters import normalize_bgm
+from dungeon.audio.chapters import normalize_background, normalize_bgm
 from dungeon.audio.voice_fx import normalize_voice_fx
 from dungeon.models import (PREFIX_ENDING, DungeonTextType)
 
@@ -88,9 +92,6 @@ class TriggerRecord:
     action_type: str
     action_data: dict
     step: int
-    chapter_background: dict
-    chapter_bgm: dict
-    chapter_voice_fx: dict
     choice_index: int | None
     choice_text: str
     option_prompt: str
@@ -219,7 +220,7 @@ def _parse_chapter(raw: dict) -> ChapterRecord:
     return ChapterRecord(
         name=_text(raw.get("name")),
         step=_whole(raw.get("step")),
-        background=_mapping(raw.get("background")),
+        background=normalize_background(raw.get("background")),
         bgm=normalize_bgm(raw.get("bgm")),
         voice_fx=normalize_voice_fx(raw.get("voice_fx")),
     )
@@ -235,9 +236,6 @@ def _parse_trigger(raw: dict) -> TriggerRecord:
         action_type=str(action_type or "none").strip(),
         action_data=action_data,
         step=_whole(raw.get("step")),
-        chapter_background=_mapping(raw.get("chapter_background")),
-        chapter_bgm=normalize_bgm(raw.get("chapter_bgm")),
-        chapter_voice_fx=normalize_voice_fx(raw.get("chapter_voice_fx")),
         choice_index=_optional_whole(raw.get("choice_index")),
         choice_text=_text(raw.get("choice_text")),
         option_prompt=_text(raw.get("option_prompt")),
@@ -292,13 +290,86 @@ def parse(raw):
     return _PARSERS[kind](raw)
 
 
-def parse_all(raws) -> list:
-    """整份回放 → Record 列表（逐条容错，坏记录直接丢弃）。"""
+#: 旧记录把跳转目标章节的环境塞在 ``goto`` 触发器记录的三个平级键里，
+#: 与 ``kind:"chapter"`` 是同一事件的两套写法；读入时统一展开成章节记录。
+_LEGACY_ENV_KEYS = ("chapter_background", "chapter_bgm", "chapter_voice_fx")
+
+
+def _expand(raw, record) -> list:
+    """一条记录 → 一串 Record（旧格式的 ``goto`` 拆成「章节进入 + 触发器」两条）。"""
+    if not isinstance(record, TriggerRecord) or record.action_type != "goto":
+        return [record]
+    if not any(key in raw for key in _LEGACY_ENV_KEYS):
+        return [record]
+    return [
+        ChapterRecord(
+            name=str(record.action_data.get("chapter") or "").strip(),
+            step=record.step,
+            background=normalize_background(raw.get("chapter_background")),
+            bgm=normalize_bgm(raw.get("chapter_bgm")),
+            voice_fx=normalize_voice_fx(raw.get("chapter_voice_fx")),
+        ),
+        record,
+    ]
+
+
+def parse_all(raws, on_drop=None) -> list:
+    """整份回放 → Record 列表（逐条容错，坏记录直接丢弃）。
+
+    ``on_drop`` 可选，收到每一条无法解析的原始记录（调用方用来记日志）。
+
+    旧格式在这里收敛：``goto`` 触发器记录曾把目标章节的 ``background`` /
+    ``bgm`` / ``voice_fx`` 写在三个平级键上，现在一律展开成一条
+    :class:`ChapterRecord` 加原来的 :class:`TriggerRecord`，读取方只认一种形态。
+    """
     if not isinstance(raws, (list, tuple)):
         return []
     records = []
     for raw in raws:
         record = parse(raw)
-        if record is not None:
-            records.append(record)
+        if record is None:
+            if on_drop is not None:
+                on_drop(raw)
+            continue
+        records.extend(_expand(raw, record))
     return records
+
+
+# ---------------- 反向：记录 → 配置片段 ----------------
+
+def _chapter_fragment(record: ChapterRecord) -> dict:
+    fragment = {"name": record.name} if record.name else {}
+    # 没配的维度不写空字典（与配置侧「没配就不摊默认值」同一套约定）
+    for key in ("background", "bgm", "voice_fx"):
+        value = getattr(record, key)
+        if value:
+            fragment[key] = dict(value)
+    return fragment
+
+
+def _trigger_fragment(record: TriggerRecord) -> dict:
+    # 只写规范键：``action`` 已由 scenario_repo._migrate 单向并入 ``action_type``，
+    # 同一语义不再写两份（见 docs/designs/dungeon/script.md §4）
+    return {
+        "name": record.name,
+        "action_type": record.action_type,
+        "action_data": dict(record.action_data),
+    }
+
+
+def to_config_fragment(record):
+    """Record → 配置侧的片段；没有配置对应物的记录返回 ``None``。
+
+    「回放 → 配置」的回溯改写走这里：章节记录还原成 ``{name, background, bgm,
+    voice_fx}``，触发器记录还原成 ``{name, action_type, action_data}``，两者的
+    内嵌配置都已经是归一后的形态，并回方案配置后与编辑器写出的同形。
+
+    步进记录是正文（配置里没有对应字段），账本快照是当时的运行态（不是方案
+    的人物表），结局正文是生成结果（配置里只有 ``icon_path`` 这类章节字段，
+    无法确定归属章节）：这三种返回 ``None``。
+    """
+    if isinstance(record, ChapterRecord):
+        return _chapter_fragment(record)
+    if isinstance(record, TriggerRecord):
+        return _trigger_fragment(record)
+    return None

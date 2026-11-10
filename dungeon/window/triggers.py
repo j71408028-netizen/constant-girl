@@ -508,14 +508,12 @@ class TriggerHandler:
                 process_log.log(f"[Trigger] 跳转触发器 {trigger['name']} 已处于章节「{target or '无章节'}」，已跳过")
                 action_accepted = False
             else:
-                self._enter_chapter(target)
+                # 章节进入一律由 kind:"chapter" 记录承载（与起始章节、超限跳转同形），
+                # 触发器记录只说「谁触发了跳转」，不再各塞一份环境
+                self._enter_chapter(target, record=True)
                 process_log.log(f"[Trigger] 已触发: {trigger['name']}，"
                       f"跳转章节：{target or '离开章节'}")
-                self._record_trigger_action(
-                    trigger, action_type, action_data,
-                    chapter_background=dict((chapter or {}).get("background") or {}),
-                    chapter_bgm=dict((chapter or {}).get("bgm") or {}),
-                    chapter_voice_fx=dict((chapter or {}).get("voice_fx") or {}))
+                self._record_trigger_action(trigger, action_type, action_data)
         elif action_type == ENDING_ACTION:
             # 旧版结局触发器已退场：新方案由「结束章节」承担，这里只留一行提示
             process_log.log(f"[Trigger] 结局触发器 {trigger['name']} 是旧版配置，"
@@ -610,12 +608,11 @@ class TriggerHandler:
         action_data = record.action_data
         name = record.name
         if action_type == "goto":
-            self._enter_chapter(str(action_data.get("chapter") or ""),
-                                record=False,
-                                background=record.chapter_background,
-                                bgm=record.chapter_bgm,
-                                voice_fx=record.chapter_voice_fx,
-                                allow_unknown=True)
+            # 章节环境由紧随的 kind:"chapter" 记录落地（旧格式在解析层已展开成
+            # 同形）。这里只做兜底：更早的回放没有那条记录，章节名会没跟上。
+            target = str(action_data.get("chapter") or "").strip()
+            if self.current_chapter != (target or None):
+                self._enter_chapter(target, record=False, allow_unknown=True)
             process_log.log(f"[Replay] 复现章节跳转: {name}")
         elif action_type == "effect":
             overrides = parse_overrides(action_data)

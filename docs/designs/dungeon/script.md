@@ -285,7 +285,7 @@ AI 生成**（`normalize_fixed_text` 把缺路径的配置归一成空 dict，�
 | 固定文本章节 | 进入时把脚本推进位置归零（`_reset_script_progress`）并作废预生成；本章按 `fixed_text` 逐段推进而不走 AI，见 §2.5 |
 | 离开章节（跳到空目标） | 不清零属性、不切换背景，只是不再有章节效果；**背景音乐会停掉**（音乐是「身处其中」的一部分，留着上一章的曲子只会串味） |
 | 音乐随章节走 | 跳到没配 `bgm` 的章节 = 停播；回放记录里带着当时的 `bgm` 配置，回放时按当时的曲目复现，不依赖当前方案 |
-| 语音效果随章节走 | `_apply_chapter_voice_fx` 把 `voice_fx` 塞进语音导演（两档：她 / 其他人）；跳到没配效果的章节 = 清空效果（与音乐同一套语义）；回放记录与 `goto` 触发器记录都带着当时的配置复现 |
+| 语音效果随章节走 | `_apply_chapter_voice_fx` 把 `voice_fx` 塞进语音导演（两档：她 / 其他人）；跳到没配效果的章节 = 清空效果（与音乐同一套语义）；回放时按章节进入记录里的当时配置复现（无论进入是起始、跳转还是超限触发） |
 | 起始章节 | 唯一的自动进入点；它描述初始状态，不是判定，不违反「章节无条件字段」 |
 | 超限跳转 | 节内计数达到 `max_paragraphs` 时，在 `_finish_step` 末尾（触发器判定**之后**）自动跳到 `overflow_target`；空串 = 离开章节 |
 | 上限只是兜底 | 触发器的 `goto` / `option` 仍可在达到上限**之前**离开章节 |
@@ -548,25 +548,33 @@ Dungeon 关系图文档 `scenario_graph.md` §3。
 | 记录 | 说明 |
 |---|---|
 | 普通步进（无 `kind`） | `text` 一律是剥离显示层标记的净文本；`highlight` 记「本段有高亮」，回放按整段高亮复现（显示层的高亮单位是显示段落，回放只出整段）；`type_prefix` 是当时的显示前缀（空串 = 本段不显示前缀，固定文本里没声明类型的段落就是这样），缺失时回放按 `type` 现算、`ending_chapter` 为真时按「结局」 |
-| `kind: "chapter"` | 章节进入，带当时的 `background` / `bgm` / `voice_fx`，回放不依赖当前方案；`goto` 触发器记录额外带 `chapter_background` / `chapter_bgm` / `chapter_voice_fx` 三个平级键 |
+| `kind: "chapter"` | 章节进入，带当时的 `background` / `bgm` / `voice_fx`，回放不依赖当前方案。**章节进入只有这一种写法**：起始章节、`goto` 触发器、超限跳转都写它，触发器记录只说「谁触发了跳转」 |
 | `kind: "trigger"` | 触发器触发，回放时走 `_replay_trigger`；分支动作额外带 `choice_index` / `choice_text` / `option_prompt`、`game_result` / `choice_value`、`ending_text` |
 | `kind: "characters"` | 文件头部的人物账本快照（`_init_replay` 整本还原成只读视图），不参与步进，也不进档案导出的正文 |
 | `kind: "ending"` | 结局正文 + `icon_path`：回放到此为止（再点一次关窗）。旧回放没有这条记录，末段即结束 |
 
-记录的语法在 `dungeon/replay.py`：`classify()` / `parse()` 产出 Record
+记录的语法在 `dungeon/replay.py`：`classify()` / `parse()` / `parse_all()` 产出 Record
 （`StepRecord` / `ChapterRecord` / `TriggerRecord` / `CharactersRecord` /
-`EndingRecord`），窗口层只吃 Record，不再各自 `dict.get`。三条约定：
+`EndingRecord`），窗口层只吃 Record，不再各自 `dict.get`。四条约定：
 
-- **内嵌配置复用配置侧归一器**（`normalize_bgm` / `normalize_voice_fx` /
-  `normalize_action_type`）：记录里存的是当时的环境，重新拼成配置时必须与
-  编辑器写出的同形（legacy `volume` 折算成档位、非法预设归一为「不加效果」、
-  只写在 `action_data.type` 里的动作类型照样认）；
+- **内嵌配置复用配置侧归一器**（`normalize_background` / `normalize_bgm` /
+  `normalize_voice_fx` / `trigger_action_type`）：记录里存的是当时的环境，重新拼成
+  配置时必须与编辑器写出的同形（legacy `volume` 折算成档位、非法预设归一为
+  「不加效果」、只写在 `action_data.type` 里的动作类型照样认）；
 - **容错在解析层**：缺键给默认、类型不符给默认，整条坏记录（非字典 / 未知
   `kind` / 没有正文的步进）返回 `None` 由调用方跳过——一条脏记录不该让整段
   回放卡在半路（回放文件来自「所有文件」选择框，内容不由本程序保证）；
 - **`effect` 覆盖的时长以步计**：实时在 `_finish_step` 里消耗，回放没有那一步，
   所以 `_replay_step` 每段收尾同样消耗一次（否则滤镜 / 语音 / 音乐音量一旦被
-  覆盖就持续到换章）。
+  覆盖就持续到换章）；
+- **旧格式在 `parse_all` 收敛**：早前的 `goto` 触发器记录把目标章节的环境写在
+  `chapter_background` / `chapter_bgm` / `chapter_voice_fx` 三个平级键上，读入时
+  展开成「`ChapterRecord` + `TriggerRecord`」两条，读取方只认章节记录这一种形态。
+
+反向出口 `to_config_fragment(record)` 把 `ChapterRecord` 还原成
+`{name, background, bgm, voice_fx}`、`TriggerRecord` 还原成
+`{name, action_type, action_data}`（只写规范动作键，见 §4），供「回放 → 配置」的
+回溯改写使用；步进 / 账本快照 / 结局正文在配置里没有对应字段，返回 `None`。
 
 ### 9.4 剧情压缩（提示词上下文）
 

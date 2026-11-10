@@ -10,7 +10,9 @@
 3. 回放步进：显示前缀随记录走（结束章节 =「结局」）、状态快照还原、
    ``effect`` 覆盖按步到期（含音乐档位这一维）；
 4. 结局记录：``_record_ending`` 只记一次，回放时复现正文 + 图标并终止；
-5. 档案导出：账本快照不画、结局记录画成结局块、meta 计数只数真步进 / 真触发。
+5. 同一事件的唯一写法：章节环境只由 ``kind:"chapter"`` 承载（旧格式的
+   ``goto`` 平级键在解析层展开），反向 ``to_config_fragment`` 与解析成对；
+6. 档案导出：账本快照不画、结局记录画成结局块、meta 计数只数真步进 / 真触发。
 """
 
 import os
@@ -19,6 +21,7 @@ import tempfile
 from collections import deque
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # tests/：兄弟模块 _trigger_host
 
 _report_path = os.path.join(tempfile.mkdtemp(prefix="replay_parse_"), "report.txt")
 _log = open(_report_path, "w", encoding="utf-8")
@@ -71,6 +74,16 @@ except Exception as exc:                     # noqa: BLE001 - 这里就是要它
 check("脏记录不抛异常", crashed is None, repr(crashed))
 check("非字典 / 未知 kind / 无正文整条丢弃", dropped == [],
       [type(r).__name__ for r in dropped])
+
+_dropped_raw = []
+_expanded = replay.parse_all(
+    [{"kind": "trigger", "name": "跳", "action_type": "goto",
+      "action_data": {"chapter": "B"}, "chapter_bgm": {"path": "b.mp3"}},
+     "坏", {"type": "dialog", "text": "一段"}],
+    on_drop=_dropped_raw.append)
+check("on_drop 只收到真丢掉的记录（旧格式展开不算丢弃）",
+      len(_dropped_raw) == 1 and len(_expanded) == 3,
+      (len(_dropped_raw), len(_expanded)))
 
 _loose = replay.parse_all([
     {"kind": "trigger", "action_data": "不是字典"},
@@ -311,7 +324,7 @@ check("到期后再走一步不重复刷新",
       and host.bg_calls.count(("a.png", False, "smooth")) == 1,
       host.bg_calls)
 
-# ---------- 3.4 章节跳转记录 ----------
+# ---------- 3.4 旧格式的章节跳转记录 ----------
 _jump = ReplayHost(_CHAPTER_A + [
     {"kind": "trigger", "name": "跳", "action_type": "goto",
      "action_data": {"chapter": "B"},
@@ -319,7 +332,7 @@ _jump = ReplayHost(_CHAPTER_A + [
      "chapter_bgm": {"path": "b.mp3", "volume": 40}}])
 _jump._replay_next_step()
 _jump._replay_next_step()
-check("跳转记录复现目标章节环境（bgm 同样归一）",
+check("旧格式跳转记录（环境在平级键里）仍复现目标章节环境（bgm 同样归一）",
       _jump.current_chapter == "B" and _jump.current_background_path == "b.png"
       and _jump.chapter_filter == "emboss"
       and _jump.chapter_bgm.get("level") == buses.step_from_level(40),
@@ -365,7 +378,85 @@ check("旧版 ending 触发记录仍能复现结局（含图标）",
       _old_ending.ending_text == "旧正文" and _old_ending.icon_calls == ["old.png"]
       and _old_ending.dungeon_ended is True, _old_ending.story_history)
 
-# ---------------- 5. 档案导出 ----------------
+# ---------------- 5. 同一事件唯一写法 + 反向片段 ----------------
+from _trigger_host import TriggerHost  # noqa: E402
+from dungeon.audio.chapters import normalize_chapter  # noqa: E402
+from dungeon.validate import validate_scenario_config  # noqa: E402
+
+# 旧格式：章节环境塞在 goto 触发器记录的三个平级键里
+_legacy_goto = replay.parse_all([{
+    "kind": "trigger", "name": "跳", "action_type": "goto",
+    "action_data": {"chapter": "B"},
+    "chapter_background": {"image_path": "b.png", "filter_effect": "blur"},
+    "chapter_bgm": {"path": "b.mp3", "volume": 40}}])
+check("旧格式 goto 在解析层展开成「章节进入 + 触发器」",
+      [type(r).__name__ for r in _legacy_goto] == ["ChapterRecord", "TriggerRecord"]
+      and _legacy_goto[0].name == "B"
+      and _legacy_goto[0].bgm.get("level") == buses.step_from_level(40),
+      [type(r).__name__ for r in _legacy_goto])
+
+# 新格式：写侧只留一条章节记录（环境）+ 一条触发器记录（谁触发的）
+_CH_A = {"name": "A", "background": {"image_path": "a.png"},
+         "bgm": {"path": "a.mp3", "level": 2}}
+_CH_B = {"name": "B",
+         "background": {"image_path": "b.png", "filter_effect": "emboss"},
+         "bgm": {"path": "b.mp3", "volume": 40},
+         "voice_fx": {"her": {"preset": "giant_boom", "intensity": 60}}}
+_writer_goto = TriggerHost(
+    [{"name": "跳", "chapter": "", "action_type": "goto",
+      "action_data": {"chapter": "B"}, "repeatable": True}],
+    chapters=[_CH_A, _CH_B], current_chapter="A")
+_writer_goto._begin_trigger_round()
+_writer_goto.check_triggers()
+check("写侧：跳转只写「章节进入 + 触发器」两条",
+      [entry.get("kind") for entry in _writer_goto.replay_data]
+      == ["chapter", "trigger"], _writer_goto.replay_data)
+check("写侧：环境只出现在章节记录里（触发器记录不再带平级键）",
+      _writer_goto.replay_data[0]["background"] == _CH_B["background"]
+      and all(key not in _writer_goto.replay_data[1]
+              for key in ("chapter_background", "chapter_bgm", "chapter_voice_fx")),
+      _writer_goto.replay_data)
+
+_written = ReplayHost(_writer_goto.replay_data)
+_written._replay_next_step()
+_written._replay_next_step()
+check("写出的两条记录回放后落在同一环境（goto 不重复进入）",
+      _written.current_chapter == "B" and _written.current_background_path == "b.png"
+      and _written.chapter_bgm.get("level") == buses.step_from_level(40)
+      and _written.bg_calls.count(("b.png", True, "emboss")) == 1,
+      (_written.current_chapter, _written.chapter_bgm, _written.bg_calls))
+
+# 反向：记录 → 配置片段（回溯改写的出口）
+_cfg_chapter = normalize_chapter(dict(_CH_B))
+_chapter_rec = replay.parse({"kind": "chapter", "name": "B",
+                             "background": _cfg_chapter["background"],
+                             "bgm": _cfg_chapter["bgm"],
+                             "voice_fx": _cfg_chapter["voice_fx"]})
+_fragment = replay.to_config_fragment(_chapter_rec)
+check("章节记录 → 片段：并回章节后与配置侧归一结果同形",
+      normalize_chapter(dict(_cfg_chapter, **_fragment)) == _cfg_chapter, _fragment)
+check("片段不写没配的维度（不摊空字典）",
+      set(replay.to_config_fragment(replay.parse(
+          {"kind": "chapter", "name": "A"}))) == {"name"})
+
+_trig_rec = replay.parse({"kind": "trigger", "name": "窗", "action_type": "fx",
+                          "action_data": {"fx": "invert", "duration": 2,
+                                          "intensity": 50}})
+_trig_fragment = replay.to_config_fragment(_trig_rec)
+check("触发器记录 → 片段：只写规范动作键（不再拼 action / action_data.type）",
+      set(_trig_fragment) == {"name", "action_type", "action_data"}, _trig_fragment)
+check("片段并回方案后校验零 error",
+      not [d for d in validate_scenario_config(
+          {"chapters": [{"name": "A", "start": True}],
+           "triggers": [dict(_trig_fragment, chapter="")]})
+          if d.level == "error"],
+      _trig_fragment)
+check("步进 / 账本 / 结局记录没有配置对应物",
+      replay.to_config_fragment(replay.parse({"type": "dialog", "text": "x"})) is None
+      and replay.to_config_fragment(replay.parse({"kind": "characters"})) is None
+      and replay.to_config_fragment(replay.parse({"kind": "ending", "name": "E"})) is None)
+
+# ---------------- 6. 档案导出 ----------------
 from services.character.archive_export import (_render_replay_entries,  # noqa: E402
                                                _replay_counts)
 

@@ -93,6 +93,17 @@ def normalize_sensitivity_effect(raw: dict) -> dict:
     }
 
 
+def normalize_background(raw) -> dict:
+    """把章节背景补全为 ``{image_path, smooth_transition, filter_effect}``。
+
+    只保留这三个键（其余手写键丢弃），没配的键不补——与 ``bgm`` / ``voice_fx``
+    同一套约定。没配任何键时返回空字典。
+    """
+    raw = raw if isinstance(raw, dict) else {}
+    return {key: raw[key] for key in ("image_path", "smooth_transition", "filter_effect")
+            if raw.get(key) is not None}
+
+
 def bgm_level(raw) -> int:
     """取背景音乐的音量档位：优先新键 ``level``，回退旧 0-100 ``volume``。
 
@@ -215,13 +226,7 @@ def normalize_chapter(raw, index: int = 0) -> dict:
     chapter["icon_path"] = str(chapter.get("icon_path") or "")
 
     background = chapter.get("background")
-    if not isinstance(background, dict):
-        background = {}
-    clean_bg = {}
-    for key in ("image_path", "smooth_transition", "filter_effect"):
-        if background.get(key) is not None:
-            clean_bg[key] = background[key]
-    chapter["background"] = clean_bg
+    chapter["background"] = normalize_background(background)
 
     chapter["bgm"] = normalize_bgm(chapter.get("bgm"))
 

@@ -751,10 +751,11 @@ class DungeonWindowBase:
     def _init_replay(self, replay_data):
         """回放模式：仅重放数据，不创建 AI 客户端与提示词构建器。"""
         # 解析在领域层做（dungeon.replay）：坏记录在那里被丢弃，这里的记录都已归一
-        records = replay.parse_all(replay_data)
-        skipped = len(replay_data or []) - len(records)
-        if skipped:
-            process_log.log(f"[Replay] 跳过 {skipped} 条无法解析的回放记录")
+        # （旧格式的 goto 记录会在那里展开成两条，条数与原始记录不等是正常的）
+        dropped = []
+        records = replay.parse_all(replay_data, on_drop=dropped.append)
+        if dropped:
+            process_log.log(f"[Replay] 跳过 {len(dropped)} 条无法解析的回放记录")
         # 回放数据可能以触发器记录开头（如开局即触发的背景触发器），
         # 取第一条步进记录还原初始属性；若全为触发器记录则使用默认值。
         first_step = next((r for r in records if isinstance(r, replay.StepRecord)), None)

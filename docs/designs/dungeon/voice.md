@@ -95,7 +95,7 @@ Solea / Bulla 耦合等级的对话分支会给每句台词标 `@说话人@`（�
 | 环节 | 位置 |
 |---|---|
 | 换章时切效果（没配 = 清空） | `window/triggers.py::_apply_chapter_voice_fx`；配置挂在 `window/base.py::current_voice_fx` |
-| 回放复现 | `kind: "chapter"` 记录带 `voice_fx`，`goto` 触发器记录带 `chapter_voice_fx` |
+| 回放复现 | 章节进入只写 `kind: "chapter"` 一条记录，带着当时的 `voice_fx` |
 | 按说话人分档 | `speech.py::_speak_job`（`VoiceCaster.role_of` 是她 → `her` 档，否则 `others`） |
 | 施加效果 | `speech.py::_play` → `voice_fx.render_wav`（离线渲染）/ `voice_fx.PlaybackFx`（分拍 + 音量包络）/ 原声 |
 | 响度对齐 | `voice_fx.loudness_target`（预设声明的 dB）× `_match_loudness`（渲染链末尾按实测 RMS 对齐，再让 `_limit` 守峰值）；播放侧按 `playback_trim` 衰减 |
