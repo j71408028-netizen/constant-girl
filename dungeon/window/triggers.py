@@ -24,7 +24,7 @@ from dungeon.overrides import (active_override, describe as describe_overrides,
 from dungeon.models import DungeonState, DungeonTextType, PREFIX_ENDING
 from dungeon.response import canonical_history_entry
 from dungeon.rules import TriggerRules
-from dungeon.splitter import split_full_text, strip_display_markers
+from dungeon.splitter import strip_display_markers
 from dungeon.window.fx import parse_fx_params
 from dungeon.window.minigame import BACKEND_PY, resolve_mini_game
 
@@ -568,6 +568,9 @@ class TriggerHandler:
         self.story_history.append(
             {"type_str": "【小游戏】", "text": summary, "highlight": True, "speaker": None})
         self._update_text_display()
+        # 这一行是整句直出的（不走游标），同样要登记自动播放的停留，
+        # 否则自动播放会立刻翻页把它闪过去
+        self._on_reveal_finished(summary)
         if record is not None:
             record["game_result"] = dict(result) if isinstance(result, dict) \
                 else {"value": result}
@@ -602,8 +605,12 @@ class TriggerHandler:
                             allow_unknown=True)
         process_log.log(f"[Replay] 复现章节进入: {name or '无章节'}")
 
-    def _replay_trigger(self, record):
-        """回放时复现触发器动作（不判定条件、不弹选项，选择作为一步直接展示）。"""
+    def _replay_trigger(self, record) -> bool:
+        """回放时复现触发器动作（不判定条件、不弹选项，选择作为一步直接展示）。
+
+        返回「这次动作有没有往故事区落东西」：``_replay_next_step`` 据此决定
+        要不要为它停一次点击（选项 / 小游戏 / 旧结局有，跳转与效果覆盖没有）。
+        """
         action_type = record.action_type
         action_data = record.action_data
         name = record.name
@@ -614,7 +621,8 @@ class TriggerHandler:
             if self.current_chapter != (target or None):
                 self._enter_chapter(target, record=False, allow_unknown=True)
             process_log.log(f"[Replay] 复现章节跳转: {name}")
-        elif action_type == "effect":
+            return False
+        if action_type == "effect":
             overrides = parse_overrides(action_data)
             if overrides and not invalid_filter(overrides):
                 try:
@@ -623,16 +631,18 @@ class TriggerHandler:
                     duration = 1
                 self._push_effect_override(overrides, duration)
             process_log.log(f"[Replay] 复现章节效果覆盖: {name}")
-        elif action_type == "fx":
+            return False
+        if action_type == "fx":
             # 窗口视效按时长自消，回放按记录原样重放一次
             fx_key, duration, intensity = parse_fx_params(action_data)
             if fx_key in WINDOW_FX_KEYS:
                 self._window_fx.start(fx_key, duration, intensity)
             process_log.log(f"[Replay] 复现窗口视效: {name}")
-        elif action_type == "option":
+            return False
+        if action_type == "option":
             idx = record.choice_index
             if idx is None:
-                return  # 未完成选择，跳过
+                return False  # 未完成选择，跳过
             options = action_data.get("options") or []
             chosen = options[idx] if 0 <= idx < len(options) else {}
             text = (record.choice_text
@@ -647,33 +657,39 @@ class TriggerHandler:
             self.story_history.append({"type_str": "【选择】", "text": text,
                                        "highlight": True, "speaker": None})
             self._update_text_display()
+            # 选择行整句直出，同样登记停留：自动播放要在这里停一下再往下播
+            self._on_reveal_finished(text)
             process_log.log(f"[Replay] 复现选项触发器: {name} → 选择 {idx}")
-        elif action_type == "mini_game":
+            return True
+        if action_type == "mini_game":
             result = record.game_result
             if not result:
                 process_log.log(f"[Replay] 复现小游戏触发器: {name}（无结果，跳过）")
-                return
+                return False
             value = record.choice_value
             if value is None:
                 value = _mini_game_return_value(result)
             # 返回值进选择记录，与实时结算同构；跳转由回放的关联触发器完成
             self.trigger_choices.setdefault(name, []).append(value)
+            summary = f"小游戏「{name}」结束（返回值 {value}）"
             self.story_history.append({
-                "type_str": "【小游戏】",
-                "text": f"小游戏「{name}」结束（返回值 {value}）",
+                "type_str": "【小游戏】", "text": summary,
                 "highlight": True, "speaker": None})
             self._update_text_display()
+            self._on_reveal_finished(summary)
             process_log.log(f"[Replay] 复现小游戏触发器: {name} → 返回值 {value}")
-        elif action_type == ENDING_ACTION:
+            return True
+        if action_type == ENDING_ACTION:
             # 旧存档的结局触发器：正文本体由 kind:"ending" 记录承担，这里只为兼容
             self._replay_ending(replay.EndingRecord(
                 name=name,
                 text=record.ending_text,
                 icon_path=str((action_data or {}).get("icon_path") or ""),
                 step=record.step))
-        else:
-            # insert / sensitivity / none：效果已随文本步骤与属性快照复现
-            process_log.log(f"[Replay] 触发器动作无需额外复现: {name} [{action_type}]")
+            return True
+        # insert / sensitivity / none：效果已随文本步骤与属性快照复现
+        process_log.log(f"[Replay] 触发器动作无需额外复现: {name} [{action_type}]")
+        return False
 
     # ------------------ 插入段落 ------------------
     def _peek_pending_insertion(self):
@@ -696,27 +712,13 @@ class TriggerHandler:
             text_type = DungeonTextType.BACKGROUND
         # 插入段文本可以直接写显示层标记（@说话人@ / ==...==），与旧版触发器的
         # 「高亮」字段取并集。与 AI / 固定文本段落同构：分句器解析标记并把正文
-        # 切成显示段落，首句立即上屏、其余排队等点击；标记只作用于显示层，
+        # 切成显示段落，首句起游标、其余排队等点击；标记只作用于显示层，
         # 对话历史与回放存净文本
-        units = split_full_text(item["text"])
         clean_text = strip_display_markers(item["text"])
-        if bool(item.get("highlight")):
-            units = [u._replace(highlight=True) for u in units]
-        first = units[0] if units else None
-
-        # 插入段同样走限速上屏：先空文本上屏，再由游标逐字揭开
-        anim_item = {
-            "type_str": self._display_type_prefix(text_type),
-            "text": first.text if first is not None else "",
-            "highlight": first.highlight if first is not None else False,
-            "speaker": first.speaker if first is not None else None,
-        }
-        self.story_history.append(anim_item)
-        self._update_text_display()
-        if anim_item["text"]:
-            self._reveal_start(anim_item, anim_item["text"])
-        self._pending_units = list(units[1:])
-        self._speak_item(anim_item)
+        prefix = self._display_type_prefix(text_type)
+        units = self._present_paragraph(
+            clean_text, prefix=prefix, highlight=bool(item.get("highlight")),
+            display_text=item["text"])
 
         # 与一般段落一样进入对话历史，后续 AI 生成时可见。
         # 用规范 JSON 形状（dungeon.response.canonical_history_entry）：
@@ -745,7 +747,7 @@ class TriggerHandler:
             "type": text_type.value,
             "text": clean_text,
             "highlight": any(u.highlight for u in units),
-            "type_prefix": anim_item["type_str"],
+            "type_prefix": prefix,
             "intrusion_before": before_state.intrusion,
             "destruction_before": before_state.destruction,
             "custom_before": before_state.custom_attrs.copy(),

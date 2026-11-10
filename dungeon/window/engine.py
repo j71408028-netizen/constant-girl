@@ -26,17 +26,20 @@ class DungeonStoryEngine:
         # （鼠标点击由 _on_mouse_click 处理为「关闭覆盖层」）
         if self.overlay_open():
             return
+        if self._click_debounced():
+            return
         if self.is_replay:
+            self._last_click_time = time.time()
+            # 回放与实时共用同一条点击机：点一下补满当前段，再点才揭下一句；
+            # 队列见底才去取下一条记录
+            if self._try_advance_paragraph():
+                return
             self._replay_next_step()
             return
 
-        import time
-        current_time = time.time()
-        if getattr(self, "_last_click_time", None) is not None and (current_time - self._last_click_time) < 0.4:
-            return
         if self._generating:
             return
-        self._last_click_time = current_time
+        self._last_click_time = time.time()
 
         if self.pending_option is not None:
             return  # 选项弹窗进行中，打断正常的生成过程
@@ -62,6 +65,14 @@ class DungeonStoryEngine:
             self._advance_script()
         else:
             self._generate_next_text()
+
+    def _click_debounced(self) -> bool:
+        """0.4 秒内的第二次推进视为同一次点击（实时与回放共用）。
+
+        回放也吃这条：没有它，连点会连着跨过好几条记录。
+        """
+        last = getattr(self, "_last_click_time", None)
+        return last is not None and (time.time() - last) < 0.4
 
     def _generate_next_text(self):
         if self._generating:
@@ -358,22 +369,10 @@ class DungeonStoryEngine:
         # 没写段落类型的段落不显示类型前缀（纯叙述），有类型的照常显示
         prefix = (self._display_type_prefix(display_type)
                   if directive.text_type is not None else "")
-        units = split_full_text(paragraph.text)
-        self._pending_units = list(units[1:])
-        first = units[0] if units else None
         # 脚本正文里的高亮标记同样只作用于显示层，对话历史与回放存净文本
         clean_text = strip_display_markers(paragraph.text)
-        item = {
-            "type_str": prefix,
-            "text": first.text if first is not None else clean_text,
-            "speaker": first.speaker if first is not None else None,
-            "highlight": first.highlight if first is not None else False,
-        }
-        self.story_history.append(item)
-        self._update_text_display()
-        if item["text"]:
-            self._reveal_start(item, item["text"])
-        self._speak_item(item)
+        units = self._present_paragraph(clean_text, prefix=prefix,
+                                        display_text=paragraph.text)
 
         custom_directions = directive.custom_directions
         # 固定文本段与 AI 段落一样进对话历史，后续 AI 章节才接得上上下文；
@@ -765,35 +764,49 @@ class DungeonStoryEngine:
         self.dungeon_state.casualty_evolution.append(increase)
         return increase
 
-    def _replay_next_step(self):
+    def _replay_next_step(self, auto_close: bool = True):
+        """推进到下一个「看得见东西」的记录，一次点击只消耗这么一条。
+
+        章节进入、跳转、效果覆盖、窗口视效这些记录没有正文，随同一次点击落地
+        后继续往下取——否则玩家会连点几次却看不到任何反应（开场若首条是章节
+        记录，画面就一直停在上一条）。可见记录是正文、选项行、小游戏行与结局。
+
+        ``auto_close`` 为假时（刚进入回放的那一次调用）播完记录也不关窗：整份
+        记录只有环境、没有正文时（例如开局就中断的短回放），一开窗就自动关闭
+        看起来像闪退；留给玩家自己点关。
+        """
+        def finish(message):
+            process_log.log(message)
+            if auto_close:
+                self._request_close()
+
         if self.dungeon_ended:
-            process_log.log("回放结束")
-            self._request_close()
+            finish("回放结束")
             return
-        if self.current_replay_index >= len(self.loaded_replay):
-            process_log.log("回放结束（记录已播完）")
-            self._request_close()
+        while self.current_replay_index < len(self.loaded_replay):
+            record = self.loaded_replay[self.current_replay_index]
+            self.current_replay_index += 1
+            # 账本快照已在 _init_replay 里还原，步进时跳过
+            if isinstance(record, replay.CharactersRecord):
+                continue
+            if isinstance(record, replay.ChapterRecord):
+                self._replay_chapter(record)
+                continue
+            if isinstance(record, replay.TriggerRecord):
+                if self._replay_trigger(record):
+                    return
+                continue
+            if isinstance(record, replay.EndingRecord):
+                self._replay_ending(record)
+                return
+            self._replay_step(record)
             return
-        record = self.loaded_replay[self.current_replay_index]
-        self.current_replay_index += 1
-        # 账本快照已在 _init_replay 里还原，步进时跳过
-        if isinstance(record, replay.CharactersRecord):
-            return
-        if isinstance(record, replay.ChapterRecord):
-            self._replay_chapter(record)
-            return
-        if isinstance(record, replay.TriggerRecord):
-            self._replay_trigger(record)
-            return
-        if isinstance(record, replay.EndingRecord):
-            self._replay_ending(record)
-            return
-        self._replay_step(record)
+        finish("回放结束（记录已播完）")
 
     def _replay_step(self, record):
         """复现一个逻辑段落：正文 + 状态快照，并按一步消耗效果覆盖时长。"""
-        self._display_text(record.text, record.text_type,
-                           highlight=record.highlight, prefix=record.prefix)
+        self._present_paragraph(record.text, prefix=record.prefix,
+                                highlight=record.highlight)
         state = self.dungeon_state
         if record.intrusion_after is not None:
             state.intrusion = record.intrusion_after

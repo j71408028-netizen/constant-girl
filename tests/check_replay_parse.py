@@ -168,7 +168,9 @@ class _Frame:
 class ReplayHost(DungeonStoryEngine, TriggerHandler, EndingHandler):
     """回放宿主：真 mixin + 少量替身（无窗口、无音频设备、无 AI）。
 
-    ``_display_text`` 照 ``window/ui.py`` 的同名方法写：前缀优先用传入值。
+    ``_present_paragraph`` 在这里是整段直出的替身：本文件断言的是解析、前缀与
+    状态，上屏节奏（限速 / 逐句 / 跳过不可见记录）由
+    ``check_replay_playback.py`` 用真实现覆盖。
     """
 
     def __init__(self, records=None):
@@ -240,10 +242,9 @@ class ReplayHost(DungeonStoryEngine, TriggerHandler, EndingHandler):
     def _request_close(self):
         self.closed = True
 
-    def _display_text(self, text, text_type, highlight=False, speaker=None, prefix=None):
-        prefix = self._display_type_prefix(text_type) if prefix is None else prefix
+    def _present_paragraph(self, text, *, prefix, highlight=False, display_text=None):
         self.story_history.append({"type_str": prefix, "text": text,
-                                   "highlight": highlight, "speaker": speaker})
+                                   "highlight": highlight, "speaker": None})
 
 
 # ---------- 3.1 显示前缀随记录走 ----------
@@ -297,15 +298,16 @@ _effect_records = _CHAPTER_A + [
     {"type": "dialog", "text": "三步", "type_prefix": "【对话】"},
 ]
 host = ReplayHost(_effect_records)
-host._replay_next_step()                       # 章节
+host._replay_next_step()                       # 章节 + 覆盖 + 第 1 步
 check("回放进入章节：音乐按记录复现（legacy 也能取到档位）",
       host.chapter_bgm.get("level") == 3 and host.current_background_path == "a.png",
       host.chapter_bgm)
-host._replay_next_step()                       # 覆盖
 check("回放复现覆盖（滤镜 + 档位）",
       host._applied_visual_filter == "blur" and host._applied_bgm_level == 1,
       (host._applied_visual_filter, host._applied_bgm_level))
-host._replay_next_step()                       # 第 1 步
+check("不可见记录不占点击：一次点击落在第 1 步正文上",
+      [item.get("text") for item in host.story_history] == ["一步"],
+      host.story_history)
 check("覆盖第 1 步后仍生效",
       bool(host.effect_overrides) and host._applied_visual_filter == "blur"
       and host._applied_bgm_level == 1,
@@ -330,8 +332,7 @@ _jump = ReplayHost(_CHAPTER_A + [
      "action_data": {"chapter": "B"},
      "chapter_background": {"image_path": "b.png", "filter_effect": "emboss"},
      "chapter_bgm": {"path": "b.mp3", "volume": 40}}])
-_jump._replay_next_step()
-_jump._replay_next_step()
+_jump._replay_next_step()                       # 章节 + 跳转：都是不可见记录
 check("旧格式跳转记录（环境在平级键里）仍复现目标章节环境（bgm 同样归一）",
       _jump.current_chapter == "B" and _jump.current_background_path == "b.png"
       and _jump.chapter_filter == "emboss"

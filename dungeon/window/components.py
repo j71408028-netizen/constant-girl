@@ -256,13 +256,24 @@ class ComponentHandler:
         return inset
 
     def session_waiting_for_input(self):
-        """当前是否在等玩家输入（继续指示与自动播放共用同一判定）。
+        """当前是否在等玩家输入（继续指示用）。
 
-        生成中 / 上屏游标进行中 / 结局已达成 / 有待选选项或待触发结局都不算等待。
+        生成中 / 上屏游标进行中 / 分句队列还有货 / 结局已达成 / 有待选选项或
+        待触发结局都不算等待。``_pending_units`` 在这里算阻塞（还有句子没上屏，
+        回合没走完），但自动播放不能这么判——它正是要把队里的句子播完。
+        """
+        return (self._session_can_advance()
+                and not self._reveal_active()
+                and not getattr(self, "_pending_units", None))
+
+    def _session_can_advance(self):
+        """会话层面能否推进（只看生成与终局，不含上屏游标与分句队列）。
+
+        自动播放用它而不是 ``session_waiting_for_input``：队列里还有没上屏的
+        显示段落时，会话其实也在等玩家点击，自动播放正是要接着把这些句子播完。
+        游标与队列的状态由调用方各自判定。
         """
         return (not getattr(self, "_generating", False)
-                and not self._reveal_active()
-                and not getattr(self, "_pending_units", None)
                 and not getattr(self, "dungeon_ended", False)
                 and getattr(self, "pending_option", None) is None
                 and getattr(self, "pending_ending", None) is None)

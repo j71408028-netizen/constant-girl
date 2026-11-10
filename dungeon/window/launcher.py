@@ -386,7 +386,7 @@ class DungeonLaunchStages:
             self._init_components()
             self._build_components()
             self._relayout()
-            self._replay_next_step()
+            self._replay_next_step(auto_close=False)
         else:
             self._enter_start_chapter()
             # 会话启动是第一轮判定的开轮点（见 triggers._begin_trigger_round）

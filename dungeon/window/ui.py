@@ -88,6 +88,7 @@ from imgui_bundle import hello_imgui, imgui
 
 from dungeon import process_log
 from dungeon.models import DungeonTextType
+from dungeon.splitter import split_full_text
 from dungeon.window import gl_util
 from dungeon.window import gpu_textures
 from dungeon.window import imgui_util as iu
@@ -1449,7 +1450,9 @@ class DungeonWindowUI:
         """自动播放采样：真正的节奏由 _advance_due（上屏收尾 + 停留）决定。
 
         本 tick 只是廉价采样，三重复查后才推进：
-        1. 会话 / 覆盖层 / 等待条件（与继续指示同源，含生成中、结局、选项）；
+        1. 会话层面可推进——与继续指示同源，但**不看分句队列**：队列里还有没
+           上屏的显示段落时自动播放正是要接着播（用 ``session_waiting_for_input``
+           会在这里永久停住，每段只播首句）；
         2. 上屏游标必须已收尾——游标还在推进说明本段没上完屏，等它自己走完；
         3. 上屏收尾后的停留期已过——长句多停一点，避免刚上完屏就翻页。
         """
@@ -1457,8 +1460,7 @@ class DungeonWindowUI:
             return
         if self.overlay_open():
             return
-        # 与继续指示的等待条件同源（组件服务面 session_waiting_for_input）
-        if not self.session_waiting_for_input():
+        if not self._session_can_advance():
             return
         state = getattr(self, "_reveal", None)
         if state is not None and state["pos"] < len(state["target"]):
@@ -1593,14 +1595,36 @@ class DungeonWindowUI:
         if not self._closing:
             self._update_text_display()
 
-    def _display_text(self, text: str, text_type: DungeonTextType, highlight: bool = False,
-                      speaker: str = None, prefix: str = None):
-        # 固定文本段落自带类型前缀（没写类型的段落前缀为空串，回放按记录复现）；
-        # 其余调用方不传 prefix，仍按段落类型算
-        prefix = self._display_type_prefix(text_type) if prefix is None else prefix
-        self.story_history.append({"type_str": prefix, "text": text,
-                                   "highlight": highlight, "speaker": speaker})
+    def _present_paragraph(self, text: str, *, prefix: str, highlight: bool = False,
+                           display_text: str = None) -> list:
+        """把一个已定稿的逻辑段落按显示段落上屏（首段限速揭开，其余排队等点击）。
+
+        三种拿得到全文的段落共用这一条通路：固定文本段、插入段、回放步进。
+        真流式的 chunk 逐段到达，走 ``_update_stream_units`` 那条，不经过这里。
+
+        ``display_text`` 是带显示层标记（``@说话人@`` / ``==``）的原文，缺省时
+        用净文本 ``text`` 切分（说话人为空，高亮只能靠 ``highlight`` 整段给）。
+        ``highlight`` 为真时整段标亮，与正文里的标记取并集。返回切出的显示段落，
+        调用方拿它做高亮汇总与角色观察（不重复切一遍）。
+        """
+        units = split_full_text(display_text or text)
+        if highlight:
+            units = [u._replace(highlight=True) for u in units]
+        first = units[0] if units else None
+        first_text = first.text if first is not None else text
+        item = {"type_str": prefix,
+                "text": first_text,
+                "speaker": first.speaker if first is not None else None,
+                "highlight": first.highlight if first is not None else False}
+        self.story_history.append(item)
+        self._pending_units = list(units[1:])
         self._update_text_display()
+        if first_text:
+            # 交给游标从零揭开：整句先露一下再回退会闪一帧，游标才是进度真相源
+            item["text"] = ""
+            self._reveal_start(item, first_text)
+        self._speak_item(item)
+        return units
 
     def _try_advance_paragraph(self) -> bool:
         """点击驱动的显示段落推进：三态判定，返回 True 表示本次点击已消化。
@@ -1634,6 +1658,8 @@ class DungeonWindowUI:
         item = {"type_str": "", "text": unit.text, "speaker": unit.speaker,
                 "highlight": bool(getattr(unit, "highlight", False))}
         self.story_history.append(item)
+        # 交给游标从零揭开：整句先露一下再回退会闪一帧（与 _present_paragraph 同）
+        item["text"] = ""
         self._reveal_start(item, unit.text)
         self._speak_item(item)
 
@@ -1642,11 +1668,18 @@ class DungeonWindowUI:
 
         只有 Solea/Bulla 对话分支里带 ``speaker`` 的台词会念（叙述句不念）；
         合成与播放都在语音线程上，这里只入队，不占帧循环。
+
+        念的是整句而不是眼下已上屏的那几个字：游标会把 ``item["text"]`` 改写成
+        已上屏前缀，所以当前段的目标文本优先。
         """
         director = getattr(self, "_speech", None)
         if director is None or not item.get("speaker"):
             return
-        director.speak(item.get("speaker"), item.get("text"))
+        text = item.get("text") or ""
+        state = getattr(self, "_reveal", None)
+        if state is not None and state.get("item") is item:
+            text = state.get("target") or text
+        director.speak(item.get("speaker"), text)
 
     # ---------- 上屏游标（仿流式输出） ----------
     #
@@ -1670,7 +1703,8 @@ class DungeonWindowUI:
 
     def _reveal_start(self, item, text: str):
         """新起一段上屏：接管游标，从头逐字揭开 text。"""
-        self._reveal_snap()          # 旧游标若有，先封口（它已不再是当前段）
+        # 旧游标若有，先封口（它已不再是当前段；不登记停留，本段还没播完）
+        self._reveal_snap(finished=False)
         if not text:
             return
         state = {"item": item, "target": text, "pos": 0, "frac": 0.0}
@@ -1726,10 +1760,13 @@ class DungeonWindowUI:
             state["pos"] = len(text)
             state["item"]["text"] = text
 
-    def _reveal_snap(self, item=None):
+    def _reveal_snap(self, item=None, *, finished=True):
         """把当前段立即补满到 100%（点击加速 / 段落收尾）。
 
         传入 item 时只在该游标属于该段落时生效；不传则无条件补满。
+        ``finished`` 为真时按「本段已播完」登记自动播放的停留到期时刻：点击补满
+        与定稿收尾都要，否则停留期会沿用上一段、补满后立刻翻下一句；只有
+        ``_reveal_start`` 顶掉旧游标的那种补满不算播完。
         """
         state = getattr(self, "_reveal", None)
         if not state:
@@ -1743,6 +1780,8 @@ class DungeonWindowUI:
         if frame is not None:
             frame.cancel(_REVEAL_TASK)
         self._schedule_text_update()
+        if finished:
+            self._on_reveal_finished(state["target"])
 
     def _on_reveal_finished(self, text: str):
         """上屏收尾钩子：为自动播放登记「本段停留到何时」。"""

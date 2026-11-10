@@ -156,9 +156,7 @@ class EndingHandler:
             self._frame.call(self._update_ending_icon)
         if record.text:
             self.ending_text = record.text
-            self.story_history.append({"type_str": PREFIX_ENDING, "text": record.text,
-                                       "highlight": True, "speaker": None})
-            self._update_text_display()
+            self._present_paragraph(record.text, prefix=PREFIX_ENDING, highlight=True)
         self.pending_ending = None
         self.dungeon_ended = True
         process_log.log(f"[Replay] 复现结局: {record.name or '结局'}")
