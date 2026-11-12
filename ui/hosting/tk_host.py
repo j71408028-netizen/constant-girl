@@ -328,6 +328,8 @@ class TkHost(HostPort):
 
         窗口内切换回放意味着选文件时副本窗口还开着（宿主处于 hide 状态）。
         Tk 的原生文件对话框会以自己的方式置顶，调用前无需额外处理显隐。
+
+        返回 ``(记录, 路径)``：路径供窗口从文件名认出方案（旧回放没有身份记录）。
         """
         from tkinter import filedialog
         try:
@@ -349,7 +351,7 @@ class TkHost(HostPort):
         if not isinstance(data, list) or not data:
             self.dialogs.showerror("错误", "回放文件格式错误")
             return None
-        return data
+        return data, file_path
 
     # ---------------- 活动窗口登记 ----------------
     def register_active_window(self, window):

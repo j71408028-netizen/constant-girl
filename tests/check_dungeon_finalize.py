@@ -7,7 +7,9 @@
 1. ``persistence/json_store``：原子写、覆盖前留 .bak、损坏回退、无残留 .tmp；
 2. ``persistence/scenario_repo``：正常读写 + 主文件损坏时自愈读 .bak；
 3. ``DungeonPersistence._finalize``：未完成路径（落盘「未完成」回放与报告、
-   不写 endings.json、不记结局索引、幂等、异常汇总）与完成路径（结算 + 结局索引）。
+   不写 endings.json、不记结局索引、幂等、异常汇总）与完成路径（结算 + 结局索引）；
+4. 回放身份记录（写侧）：头部 meta 取方案信封的 id / 版本 / 内容哈希，
+   ``assets`` 只记记录里用到的文件与字节数。
 """
 
 import json
@@ -152,7 +154,10 @@ check("未完成回放已落盘", len(files) == 1, files)
 check("回放文件名带「未完成」且后缀不变",
       bool(files) and "_未完成" in files[0] and files[0].endswith(".replay.json"), files)
 replay_payload = json.load(open(os.path.join(replay_dir, files[0]), encoding="utf-8"))
-check("回放内容仍是记录数组", replay_payload == stub.replay_data)
+check("回放仍是记录数组，头部先写身份记录",
+      replay_payload[0].get("kind") == "meta", replay_payload[:1])
+check("身份记录之后是原样的记录本体",
+      replay_payload[1:] == stub.replay_data, replay_payload[1:])
 report_dir = os.path.join(session_root, "archives", "测试角色_unit", "报告")
 reports = os.listdir(report_dir) if os.path.exists(report_dir) else []
 report_text = open(os.path.join(report_dir, reports[0]), encoding="utf-8").read() if reports else ""
@@ -187,6 +192,52 @@ stub3.story_history = []
 stub3._finalize(completed=False, reason="未触发结局就退出")
 check("空会话不落盘", len(os.listdir(replay_dir)) == 1, os.listdir(replay_dir))
 check("空会话有提示", any(c[0] == "info" and "没有生成任何内容" in c[2] for c in dialog_calls))
+
+# ---------------- 4. 回放身份记录（写侧） ----------------
+from paths import APP_VERSION  # noqa: E402
+
+scenario_root = os.path.join(tmp, "scenarios")
+scenario_dir = os.path.join(scenario_root, "unit_scenario")
+os.makedirs(os.path.join(scenario_dir, "images"), exist_ok=True)
+with open(os.path.join(scenario_dir, "images", "a.png"), "wb") as f:
+    f.write(b"0123456789")
+write_json_atomic(os.path.join(scenario_dir, "unit_scenario.meta.json"), {
+    "schema": "gg.scenarios/1", "id": "unit_scenario",
+    "version": "1.3.0", "content_hash": "sha256:abc"})
+
+
+class FakeScenarioRepo:
+    """只实现回放身份需要的两个方法。"""
+
+    def scenario_dir(self, scenario_id):
+        return scenario_dir if scenario_id == "unit_scenario" else ""
+
+
+meta_stub = StubSession(with_character=False)
+meta_stub.scenario_id = "unit_scenario"
+meta_stub.scenario_repo = FakeScenarioRepo()
+meta_stub.replay_data = [
+    {"kind": "chapter", "name": "A",
+     "background": {"image_path": "images/a.png"}},
+    {"step": 1, "type": "dialog", "text": "你好"},
+]
+meta_path = meta_stub._write_user_replay_file()
+meta_payload = json.load(open(meta_path, encoding="utf-8"))
+meta_head = meta_payload[0]
+check("回放头部第一条是身份记录", meta_head.get("kind") == "meta", meta_head)
+check("身份记录取自方案信封（id / 版本 / 内容哈希）",
+      meta_head.get("scenario", {}).get("id") == "unit_scenario"
+      and meta_head["scenario"].get("version_tag") == "1.3.0"
+      and meta_head["scenario"].get("content_hash") == "sha256:abc",
+      meta_head)
+check("身份记录带应用版本与保存时间",
+      meta_head.get("app") == APP_VERSION and bool(meta_head.get("saved_at")),
+      meta_head)
+check("素材清单只记用到的文件与其字节数",
+      meta_head["scenario"].get("assets") == [{"path": "images/a.png", "size": 10}],
+      meta_head["scenario"].get("assets"))
+check("身份记录之后是记录本体",
+      meta_payload[1:] == meta_stub.replay_data, meta_payload[1:])
 
 # 3.5 会话异常汇总进未完成报告
 stub4 = StubSession(errors=["ValueError: 模型返回空", "TimeoutError: 超时"])

@@ -90,7 +90,7 @@ TriggerHandler, OptionHandler, EndingHandler, DungeonPersistence, ComponentHandl
 ```
 __init__
 ├─ 保存参数（每个构造参数都必须存到 self 上，见 §5-C3）
-├─ 回放模式？ → _init_replay()（不建 AI 客户端；按记录里的素材反查所属方案）
+├─ 回放模式？ → _init_replay()（不建 AI 客户端；按身份记录 / 文件名 / 素材认所属方案）
 │   无入口阶段？ → _init_session()（立即初始化）
 │   有 scenario_ids？ → 延迟到入口选择后再初始化（_session_initialized 标记）
 
@@ -247,7 +247,7 @@ run() → SessionResult
 | **结束章节** | 段落类型固定为「结局」（前缀 `【结局】`），步进 0（`evolve_attributes(step_override=0.0)`），触发器不能跳出或弹选项；节内段落数达到 `max_paragraphs` 时终止并结算 |
 | **章节上限兜底** | 普通章节节内段落数达到 `max_paragraphs`（默认 99）时，在 `_finish_step` 末尾（触发器判定之后）自动跳到 `overflow_target`（空串 = 离开章节） |
 | **剧情压缩** | `StorySummarizer` 按块（默认 20 段）与换章时机压缩；`build_turn` 注入「全部压缩概要 + 关键事实 + 关键事件」。近期原文不再注入——对话历史（窗口大小即 `story_recent_count` 设置，`_message_window_size`）已逐字携带最近剧情，重复注入只会推高 prefill 与首字延迟。AI 额外输出 `facts`（跨块去重成事实卡）；确定性关键事件（章节进出、选项选择、介入度 / 破坏性跨整数阈值）由代码直接登记 |
-| **回放模式** | 不建 AI 客户端；`_init_replay` 用 `dungeon.replay.parse_all` 把记录解析成 Record（坏记录在这里被丢弃，旧格式的 `goto` 平级环境键在这里展开成章节记录），紧接着 `_resolve_replay_scenario` **反查回放所属的方案**——回放文件不带方案标识，而章节背景 / 音乐 / 结局图标都是相对方案目录的路径，少了 `scenario_id` 这些素材一律解析失败（开场停在入口背景、音乐不响）；做法是拿记录里出现的素材路径在全部方案目录里逐条命中计数，取命中最多的那个（调用方显式给了 `scenario_id` 就不猜）。`_replay_next_step` 逐条分派：`ChapterRecord` → `_replay_chapter`、`TriggerRecord` → `_replay_trigger`（`goto` 只兜底对章节名，环境由章节记录落地）、`EndingRecord` → `_replay_ending`、`CharactersRecord` 跳过、其余 → `_replay_step`（正文 + 状态快照 + 覆盖到期）。**播放节奏与实时同构**：正文走 `_present_paragraph` 的限速游标与分句队列，点击走同一条三态机（含 0.4 秒防抖），`_replay_next_step` 循环跳过不产生正文的记录（章节 / 跳转 / 覆盖 / 视效），所以一次点击必有反应；段落走完同样登记 `_advance_due`，自动播放对回放一样有效。刚进入回放的那一次调用带 `auto_close=False`：整份记录只有环境、没有正文时（开局即中断的短回放）不自动关窗。记录的字段与容错约定见 [副本剧本 §9.3](../designs/dungeon/script.md) |
+| **回放模式** | 不建 AI 客户端；`_init_replay` 用 `dungeon.replay.parse_all` 把记录解析成 Record（坏记录在这里被丢弃，旧格式的 `goto` 平级环境键在这里展开成章节记录），紧接着 `_resolve_replay_scenario` **认回放所属的方案**——章节背景 / 音乐 / 结局图标都是相对方案目录的路径，少了 `scenario_id` 这些素材一律解析失败（开场停在入口背景、音乐不响）。判定链：调用方显式给的 `scenario_id` > 身份记录 `kind:"meta"` 的 `scenario.id`（且方案还在）> user 回放文件名前缀（`<方案 id>_回放_<时间>`）> 素材路径在全部方案目录里命中计数最多者；最后一级只照顾不认识 `meta` 的旧文件（同名素材会静默错配），`meta.assets` 的字节数与现盘对不上时只记一行过程日志。`_replay_next_step` 逐条分派：`ChapterRecord` → `_replay_chapter`、`TriggerRecord` → `_replay_trigger`（`goto` 只兜底对章节名，环境由章节记录落地）、`EndingRecord` → `_replay_ending`、`CharactersRecord` / `ScenarioRecord` 跳过、其余 → `_replay_step`（正文 + 状态快照 + 覆盖到期）。**播放节奏与实时同构**：正文走 `_present_paragraph` 的限速游标与分句队列，点击走同一条三态机（含 0.4 秒防抖），`_replay_next_step` 循环跳过不产生正文的记录（章节 / 跳转 / 覆盖 / 视效），所以一次点击必有反应；段落走完同样登记 `_advance_due`，自动播放对回放一样有效。刚进入回放的那一次调用带 `auto_close=False`：整份记录只有环境、没有正文时（开局即中断的短回放）不自动关窗。记录的字段与容错约定见 [副本剧本 §9.3](../designs/dungeon/script.md) |
 | **过程日志（proc_log 组件）** | 右上角日志面板是官方组件包里的 `proc_log` 组件：方案在 `components` 里声明才构建（`_default` 已声明），默认收起，**F12** 切换展开 / 收起。数据源是 `dungeon/process_log.py`：组件 build 时订阅并取走缓冲积压（构造 / 会话初始化阶段的报错也会补显），此后任意线程的 `log()` 经订阅回调 → `ctx._frame.call()` 进主线程追加（上限 300 行，自动滚底）；组件 destroy 时退订。方案未配置该组件时按 F12 弹通知「日志查看已禁用」 |
 | **文本组件功能工具条** | 三种文本组件（text / text_card / text_nvl）各自在合适位置挂一条悬浮工具条（基类统一创建，圆角低透明度容器 + 四个图标按钮——图标为程序化生成的小纹理，无底色仅悬停色，常驻不可关）：播放（自动播放，A）/ 相机（截图，F2）/ 列表（过程日志面板，F12）/ 齿轮（副本设置，O），悬停有文字提示。渐变文本栏放渐变区右下角（继续指示 ▼ 左移让位），卡片文本栏骑在卡片右上角，NVL 顶部居中。按钮只转调窗口同名服务，与快捷键等效；自动播放由帧时钟任务采样（`toggle_autoplay` 挂 `every(_AUTOPLAY_INTERVAL = 0.2)`，只是采样频率），真正的推进节奏由**事件驱动**：上屏游标自然走完时 `_on_reveal_finished` 登记 `_advance_due = now + _AUTOPLAY_DWELL(0.5s) + _AUTOPLAY_DWELL_PER_CHAR(0.012) × 句长`，`_autoplay_tick` 三重检查（会话可推进 → 游标已收尾 → 停留期已过）后才 `_on_next_step`，长句多停一点、不再固定 1.2 秒。**分句队列不是阻塞项**：只剩「生成中 / 结局 / 选项」三类硬阻塞（`_session_can_advance`，与继续指示同源但**不看游标与队列**）——队列里还有没上屏的显示段落时自动播放要接着把这些句子播完，若拿 `session_waiting_for_input` 当闸门就会每段只播首句后永久停住。点击补满（`_reveal_snap`）与整句直出的行（回放的选择 / 小游戏行、小游戏结算行）同样登记 `_advance_due`，自动播放不会在这些地方一闪而过。自动播放中播放图标转金色。窗口 `_on_mouse_click` 用 `toolbar_hovered()` 区分点按钮与点屏幕推进剧情。截图经 `RunnerParams.callbacks.after_swap` 的 `on_capture` 钩子（`glReadPixels` 抓整帧）交给 `PixelWorker` 存到 `data/user/screenshots/`（通知延后弹出，避免通知条被截进画面）。正文颜色为固定常量（`_DEFAULT_TEXT_COLOR`），可配置的是标签 / 高亮 / 渐变底色（见组件包 `param_specs`） |
 | **轻通知窗** | 主窗口顶部居中的通知条（`ui.py::_notify`），窗口级常驻、**不受组件配置影响**；显示约 3 秒自动隐藏（`after` 同 key 任务互斥，连续通知覆盖前一条并重置计时）。副本内需要「提示但不必确认」的场景都可用它 |
@@ -354,7 +354,7 @@ viewport drawlist 不渲染、动态纹理同 tag 重建复用旧 GL 存储导�
 | `pump_events()` | 帧循环里处理一次宿主事件（宿主不冻结） | `widget.update()` |
 | `discard_pending_quit()` | 丢弃视口原生关闭（X）留下的退出残留消息（见 §5-C12） | Win32 下 `PeekMessageW(..., WM_QUIT, WM_QUIT, PM_REMOVE)` |
 | `dialog(kind, title, message)` | 收尾提示 / 询问（`info`/`warning`/`error`/`ask`） | `ui.ctk.dialogs.*` |
-| `open_replay_file()` | 入口页加载回放；缺省实现返回 `None`（等价于用户取消） | `filedialog` + JSON 校验（解析在适配器侧） |
+| `open_replay_file()` | 入口页加载回放；返回记录列表或 `(记录, 文件路径)`（路径供文件名认方案），缺省实现返回 `None`（等价于用户取消） | `filedialog` + JSON 校验（解析在适配器侧） |
 | `launch_mini_game()` | 打开 **web 后端**小游戏窗口（`mini_game` 触发器按 manifest 分派；`py` 后端走会话内覆盖层舞台 `dungeon/window/minigame/`，不经端口）；结果经回调回传；缺省实现返回 `False` | 独立**子进程**跑 pywebview/WebView2（`ui/hosting/mini_game_host.py`，pywebview 强制占主线程），结果写 JSON 文件、watch 线程回调 |
 | `register_active_window()` / `unregister_active_window()` | 让宿主整体退出时能找到活动副本窗口 | 沿 `master/parent` 链找持有 `_active_dungeon_window` 的主窗口 |
 | `default_font()` | 段落字体缺省家族 | `ui.ctk.fonts.dungeon_font_default()` |

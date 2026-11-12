@@ -146,7 +146,8 @@ deadline 轮询），子进程的结论行打印后立即 flush——「已通�
 
 协议（`multiprocessing.Pipe` 双向，JSON 安全 dict）：子 → 父发
 `show_window` / `dialog` / `open_replay_file`（带请求 id）/ 最终 `result`；
-父 → 子发 `{"reply": id, "answer": ...}` 与 `{"req": "close"}`（父进程整体退出前请
+父 → 子发 `{"reply": id, "answer": ...}`（`open_replay_file` 的应答额外带
+`path`，供窗口从文件名认出方案）与 `{"req": "close"}`（父进程整体退出前请
 子进程走帧边界收尾）。子进程的弹框请求在父进程泵循环里用调用方自己的弹框实现
 代答（专业版 `ui.ctk.dialogs`、挂件版 `MiniDialogs`）——子进程内因此没有任何
 Tk 代码，`tests/check_mini_layering.py` 白名单放行 `dungeon_spawner` 的依据正是它

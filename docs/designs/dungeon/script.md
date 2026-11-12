@@ -552,10 +552,13 @@ Dungeon 关系图文档 `scenario_graph.md` §3。
 | `kind: "trigger"` | 触发器触发，回放时走 `_replay_trigger`；分支动作额外带 `choice_index` / `choice_text` / `option_prompt`、`game_result` / `choice_value`、`ending_text` |
 | `kind: "characters"` | 文件头部的人物账本快照（`_init_replay` 整本还原成只读视图），不参与步进，也不进档案导出的正文 |
 | `kind: "ending"` | 结局正文 + `icon_path`：回放到此为止（再点一次关窗）。旧回放没有这条记录，末段即结束 |
+| `kind: "meta"` | 文件头部的**回放身份**：`scenario`（`id` / `content_hash` / `version_tag` / `assets`）+ `app` + `saved_at`。不参与步进，也不进档案导出 |
 
 记录的语法在 `dungeon/replay.py`：`classify()` / `parse()` / `parse_all()` 产出 Record
 （`StepRecord` / `ChapterRecord` / `TriggerRecord` / `CharactersRecord` /
-`EndingRecord`），窗口层只吃 Record，不再各自 `dict.get`。四条约定：
+`EndingRecord` / `ScenarioRecord`），窗口层只吃 Record，不再各自 `dict.get`。
+写侧同一个模块：`meta_record()` 产出身份记录，`material_paths()` 给出记录里用到的
+方案素材路径（写 `meta.assets` 与读侧反查共用这一份）。约定：
 
 - **内嵌配置复用配置侧归一器**（`normalize_background` / `normalize_bgm` /
   `normalize_voice_fx` / `trigger_action_type`）：记录里存的是当时的环境，重新拼成
@@ -574,14 +577,17 @@ Dungeon 关系图文档 `scenario_graph.md` §3。
   走与实时同一条限速游标（首段逐字上屏、其余等点击），因此回放的阅读节奏与
   当场游玩一致；没有正文的记录（章节进入 / 跳转 / 覆盖 / 视效）不占点击，
   `_replay_next_step` 会把它们随一次点击连续落地。
-- **回放文件不带方案标识**：`background.image_path` / `bgm.path` / `icon_path`
-  都是相对方案目录的路径，加载时由 `_init_replay` 拿这些路径在全部方案里反查
-  所属方案（命中最多者），否则背景与音乐一律解析失败。
+- **回放文件自带身份**：`kind:"meta"` 记下所属方案的 `id`、`content_hash`（整方案
+  摘要，只回答「是不是同一版方案」）与 `assets`（记录里用到的图 / 音频的相对路径
+  + 当时字节数，最多 8 条，用来发现同名文件被重新导入）。素材本身**不拷进回放**，
+  仍然只有记录里那一份。加载时的判定链是「调用方显式传入 > `meta.scenario.id`（且
+  方案还在）> user 回放文件名前缀 `_回放_` > 素材反查」，最后一级只照顾不认识
+  `meta` 的旧文件；`assets` 大小对不上只记一行过程日志，不弹窗、不中断回放。
 
 反向出口 `to_config_fragment(record)` 把 `ChapterRecord` 还原成
 `{name, background, bgm, voice_fx}`、`TriggerRecord` 还原成
 `{name, action_type, action_data}`（只写规范动作键，见 §4），供「回放 → 配置」的
-回溯改写使用；步进 / 账本快照 / 结局正文在配置里没有对应字段，返回 `None`。
+回溯改写使用；步进 / 账本快照 / 结局正文 / 身份记录在配置里没有对应字段，返回 `None`。
 
 ### 9.4 剧情压缩（提示词上下文）
 

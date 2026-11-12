@@ -3,16 +3,17 @@
 import datetime
 import os
 
-from dungeon import process_log
+from dungeon import process_log, replay
 from dungeon.characters import CharacterLedger
 from dungeon.window.host import (DIALOG_ASK, DIALOG_INFO, DIALOG_WARNING,
                                  HostPort)
-from paths import data_dir
+from paths import APP_VERSION, data_dir
 from core.logic import compute_casualty
 from core.models import CharacterSnapshot
 from persistence.json_store import load_json_with_backup, write_json_atomic, write_text_atomic
+from persistence.resources.envelope import load_envelope
 from dungeon.scene import landing_position
-from dungeon.terms import scenario_id_of
+from dungeon.terms import SCENARIO_RESOURCE_KEY, scenario_id_of
 from services.state_service import StateService
 
 
@@ -273,13 +274,8 @@ class DungeonPersistence:
         filename = f"{char.name}_回放_{timestamp}{marker}.replay.json"
         path = os.path.join(replay_dir, filename)
         try:
-            # 原子写：半截回放文件不会被读到（后缀仍为 .replay.json，回放加载照旧）。
-            # 头部带一条角色账本快照，回放时整本还原（只读），人物档案与实际一致
-            payload = list(self.replay_data)
-            snapshot = self._characters_snapshot_record()
-            if snapshot is not None:
-                payload.insert(0, snapshot)
-            write_json_atomic(path, payload, backup=False)
+            # 原子写：半截回放文件不会被读到（后缀仍为 .replay.json，回放加载照旧）
+            write_json_atomic(path, self._replay_payload(), backup=False)
         except Exception as e:
             process_log.log(f"[Replay] 回放保存失败: {e}")
             return ""
@@ -313,15 +309,55 @@ class DungeonPersistence:
         filename = f"{scenario_key}_回放_{timestamp}{marker}.replay.json"
         path = os.path.join(replay_dir, filename)
         try:
-            payload = list(self.replay_data)
-            snapshot = self._characters_snapshot_record()
-            if snapshot is not None:
-                payload.insert(0, snapshot)
-            write_json_atomic(path, payload, backup=False)
+            write_json_atomic(path, self._replay_payload(), backup=False)
         except Exception as e:
             process_log.log(f"[Replay] 用户回放保存失败: {e}")
             return ""
         return path
+
+    def _replay_payload(self) -> list:
+        """回放文件的内容：身份记录 → 人物账本快照 → 记录本体。
+
+        头部两条都不参与步进：身份记录让回放不必靠素材反查猜方案（``_init_replay``
+        先取它），快照让回放里的人物档案与实际一致。
+        """
+        payload = [self._replay_meta_record(), *self.replay_data]
+        snapshot = self._characters_snapshot_record()
+        if snapshot is not None:
+            payload.insert(1, snapshot)
+        return payload
+
+    def _replay_meta_record(self) -> dict:
+        """回放身份：所属方案 + 当时的版本 + 用到的素材。
+
+        方案侧取 ``<id>.meta.json`` 信封里已有的 ``id`` / ``version`` /
+        ``content_hash``（不重新算哈希：整目录摘要的开销与噪声都不值当）。
+        ``assets`` 只记记录里真正引用的那几张图 / 音频的字节数，用来发现同名文件
+        被重新导入——那是唯一「路径还在、内容已换」的失效，存在性检查抓不到。
+        """
+        scenario_id = str(getattr(self, "scenario_id", "") or "")
+        scenario = {"id": scenario_id} if scenario_id else {}
+        repo = getattr(self, "scenario_repo", None)
+        if scenario_id and repo is not None:
+            directory = repo.scenario_dir(scenario_id)
+            envelope = load_envelope(directory, SCENARIO_RESOURCE_KEY, scenario_id)
+            scenario["content_hash"] = envelope.get("content_hash") or ""
+            scenario["version_tag"] = envelope.get("version") or ""
+            scenario["assets"] = self._replay_asset_entries(directory)
+        return replay.meta_record(
+            scenario=scenario, app=APP_VERSION,
+            saved_at=datetime.datetime.now().isoformat(timespec="seconds"))
+
+    def _replay_asset_entries(self, directory) -> list:
+        """记录里用到的方案素材：``[{"path", "size"}]``（读不到大小的跳过）。"""
+        entries = []
+        for path in replay.material_paths(replay.parse_all(self.replay_data)):
+            try:
+                size = os.path.getsize(os.path.join(directory, path))
+            except OSError:
+                continue
+            entries.append({"path": path, "size": size})
+        return entries
 
     def _write_user_report_file(self, incomplete: bool = False,
                                 reason: str = "") -> str:

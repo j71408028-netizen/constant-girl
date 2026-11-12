@@ -130,6 +130,11 @@ class DungeonWindowBase:
         self.is_replay = is_replay
         self.loaded_replay = replay_data
         self.scenario_id = scenario_id
+        # 回放文件的来源路径（入口页选文件时由宿主给出）：文件名里带方案 id，
+        # 是不认识身份记录的旧回放的次优依据（见 _resolve_replay_scenario）
+        self.replay_source_path = ""
+        # 回放身份记录（kind:"meta"，旧回放没有）：所属方案 / 版本 / 用到的素材
+        self.replay_meta = None
         # 副本独占设置（音量 / 段落字体 / 记忆窗口 / 自动保存回放 / 帧率上限）：
         # 与主程序共用的 settings 分开，由 ``dungeon_settings_repo`` 注入（子进程里
         # 由 ChildHost 侧按数据目录自建并读取，见 dungeon/settings.py）。缺省空表
@@ -756,9 +761,11 @@ class DungeonWindowBase:
         records = replay.parse_all(replay_data, on_drop=dropped.append)
         if dropped:
             process_log.log(f"[Replay] 跳过 {len(dropped)} 条无法解析的回放记录")
-        # 素材（章节背景 / 音乐 / 结局图标）都是相对方案目录的路径，而回放文件不带
-        # 方案标识——先把所属方案反查出来，否则这些素材一律解析失败
-        self._resolve_replay_scenario(records)
+        # 身份记录（kind:"meta"）先取出来：素材（章节背景 / 音乐 / 结局图标）都是
+        # 相对方案目录的路径，认不出所属方案这些素材一律解析失败
+        meta = next((r for r in records if isinstance(r, replay.ScenarioRecord)), None)
+        self.replay_meta = meta
+        self._resolve_replay_scenario(records, meta)
         # 回放数据可能以触发器记录开头（如开局即触发的背景触发器），
         # 取第一条步进记录还原初始属性；若全为触发器记录则使用默认值。
         first_step = next((r for r in records if isinstance(r, replay.StepRecord)), None)
@@ -790,38 +797,48 @@ class DungeonWindowBase:
         # 回放也照方案配置朗读（音色可能只有默认值——回放数据里没有主角称呼）
         self._configure_voice(getattr(self, "scenario_config", None))
 
-    #: 回放反查方案时最多取样的素材路径条数
-    _REPLAY_SCENARIO_PATH_LIMIT = 8
+    #: 回放反查方案时最多取样的素材路径条数（与写入 meta.assets 的上限同一处定义）
+    _REPLAY_SCENARIO_PATH_LIMIT = replay.MATERIAL_PATH_LIMIT
 
-    def _resolve_replay_scenario(self, records):
-        """按记录里的素材路径反查回放所属的方案。
+    #: user 回放文件名里方案段与时间戳段的分隔（``<方案 id>_回放_<时间>.replay.json``）
+    _REPLAY_NAME_MARKER = "_回放_"
 
-        回放文件只存记录、不带方案标识，而章节背景 / 背景音乐 / 结局图标都是相对
-        方案目录的路径。少了 ``scenario_id``，这些素材一律解析失败：开场背景停在
-        入口画面、音乐不响。这里取记录中出现的素材路径，在全部方案目录里逐条命中
-        计数，命中最多的方案即视为所属方案；一条都不命中（素材已删、全是绝对路径）
-        就保持原样，由各处的缺省分支处理。
+    def _resolve_replay_scenario(self, records, meta=None):
+        """确定回放所属的方案（``scenario_id``），依据越明确越优先。
 
-        调用方显式给的 ``scenario_id`` 优先——那是明确的上下文，不猜。
+        回放里的背景 / 音乐 / 图标都是相对方案目录的路径，没有 ``scenario_id``
+        一律解析失败：开场背景停在入口画面、音乐不响。判定链：
+
+        1. 调用方显式给的 ``scenario_id``——明确的上下文，不猜；
+        2. 记录里的身份记录 ``meta.scenario.id``（方案还在本机）；
+        3. user 回放的文件名前缀——只对不认识身份记录的旧文件起作用；
+        4. 记录里的素材路径在全部方案目录里逐条命中计数，命中最多的方案即视为
+           所属方案。
+
+        第 4 级是旧文件兼容层：素材同名（都用 ``images/01.jpg``）时它会静默错配，
+        所以有身份记录时不再走。一条都不命中（素材已删、全是绝对路径）就保持
+        原样，由各处的缺省分支处理。
         """
         repo = getattr(self, "scenario_repo", None)
         if self.scenario_id or repo is None or not records:
             return
-        paths = []
-        for record in records:
-            if isinstance(record, replay.ChapterRecord):
-                candidates = ((record.background or {}).get("image_path"),
-                              (record.bgm or {}).get("path"))
-            elif isinstance(record, replay.EndingRecord):
-                candidates = (record.icon_path,)
-            else:
-                continue
-            for candidate in candidates:
-                path = str(candidate or "").strip().lstrip("/\\")
-                if path and not os.path.isabs(path) and path not in paths:
-                    paths.append(path)
-            if len(paths) >= self._REPLAY_SCENARIO_PATH_LIMIT:
-                break
+        if meta is None:
+            meta = next((r for r in records
+                         if isinstance(r, replay.ScenarioRecord)), None)
+        declared = str(getattr(meta, "scenario_id", "") or "")
+        if declared:
+            if repo.exists(declared):
+                self.scenario_id = declared
+                process_log.log(f"[Replay] 回放所属方案：{declared}（记录声明）")
+                self._note_replay_asset_drift(meta, declared)
+                return
+            process_log.log(f"[Replay] 记录声明的方案「{declared}」已不在本机，改按文件名与素材判断")
+        from_name = self._replay_scenario_from_filename()
+        if from_name and repo.exists(from_name):
+            self.scenario_id = from_name
+            process_log.log(f"[Replay] 回放所属方案：{from_name}（取自文件名）")
+            return
+        paths = replay.material_paths(records, self._REPLAY_SCENARIO_PATH_LIMIT)
         if not paths:
             return
         best, best_hits = "", 0
@@ -834,6 +851,45 @@ class DungeonWindowBase:
             self.scenario_id = best
             process_log.log(
                 f"[Replay] 回放所属方案：{best}（素材命中 {best_hits}/{len(paths)}）")
+
+    def _replay_scenario_from_filename(self) -> str:
+        """从回放文件名还原方案 id：``<方案 id>_回放_<时间戳>.replay.json``。
+
+        档案目录里的回放是 ``<角色名>_回放_<时间戳>``，不含方案 id；还原出来的是
+        角色名，由调用方的 ``exists`` 挡掉。
+        """
+        name = os.path.basename(str(getattr(self, "replay_source_path", "") or ""))
+        head, marker, _ = name.partition(self._REPLAY_NAME_MARKER)
+        return head.strip() if marker else ""
+
+    def _note_replay_asset_drift(self, meta, scenario_id):
+        """素材与记录当时不一样时记一行日志（不弹窗、不中断回放）。
+
+        ``meta.assets`` 存的是那时用到的几张图 / 音频的字节数：路径还在、大小变了
+        就是同名文件被重新导入——存在性检查发现不了的那一类失效。整方案摘要
+        （``content_hash``）只回答「是不是同一版方案」，噪声太大，不拿来做判据。
+        """
+        assets = getattr(meta, "assets", ()) or ()
+        repo = getattr(self, "scenario_repo", None)
+        if not assets or repo is None:
+            return
+        root = repo.scenario_dir(scenario_id)
+        changed = []
+        for item in assets:
+            path = str(item.get("path") or "")
+            size = item.get("size")
+            if not path or size is None:
+                continue
+            try:
+                actual = os.path.getsize(os.path.join(root, path))
+            except OSError:
+                changed.append(f"{path}（已不在）")
+                continue
+            if actual != size:
+                changed.append(path)
+        if changed:
+            process_log.log("[Replay] 回放用到的素材与当时不同："
+                            + "、".join(changed))
 
     def _message_window_size(self) -> int:
         """对话历史保留的消息条数（不含系统提示；可在设置中调整，默认 20）。

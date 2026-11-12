@@ -465,8 +465,8 @@ def _render_ending_record(entry: dict) -> str:
 def _replay_counts(entries: list) -> tuple:
     """回放文件的（步进段数, 触发器次数）。
 
-    章节进入、人物账本快照、结局记录都不是「段」也不是「次触发」——早前用
-    ``len(entries) - steps`` 顶替，快照（文件头部那条）会被多算一次。
+    章节进入、人物账本快照、回放身份、结局记录都不是「段」也不是「次触发」——
+    早前用 ``len(entries) - steps`` 顶替，快照（文件头部那条）会被多算一次。
     """
     steps = sum(1 for e in entries
                 if isinstance(e, dict) and not e.get("kind"))
@@ -481,8 +481,8 @@ def _render_replay_entries(entries: list) -> str:
         if not isinstance(entry, dict):
             continue
         kind = entry.get("kind")
-        if kind == "characters":
-            # 人物账本快照不是剧情，导出不画（它也不是一次"触发"）
+        if kind in ("characters", "meta"):
+            # 人物账本快照与回放身份都不是剧情，导出不画（它们也不是一次"触发"）
             continue
         if kind == "trigger":
             blocks.append(f"<div class='rp-item rp-trigger'>{_render_trigger_record(entry)}</div>")

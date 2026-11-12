@@ -306,17 +306,27 @@ class DungeonLaunchStages:
 
     # ------------------ 窗口内切换回放（L4） ------------------
     def _pick_replay_file(self):
-        """让宿主弹文件选择框并读取回放数据；取消/宿主不支持返回 None。"""
+        """让宿主弹文件选择框并读取回放数据，返回 ``(记录, 文件路径)``。
+
+        路径可能为空（宿主只回数据 / 宿主不支持）：文件名里带方案 id，是识别
+        旧回放所属方案的次优依据，缺了它还有素材反查兜底。
+        """
         picker = getattr(self.host, "open_replay_file", None)
         if not callable(picker):
-            return []
+            return [], ""
         try:
-            return picker()
+            picked = picker()
         except Exception as e:
             process_log.log(f"[Replay] 读取回放文件失败: {e}")
-            return []
+            return [], ""
+        # 端口允许两种返回：裸记录列表（旧实现）或 (记录, 路径)
+        if isinstance(picked, tuple) and len(picked) == 2:
+            data, path = picked
+        else:
+            data, path = picked, ""
+        return data, str(path or "")
 
-    def _enter_replay_phase(self, replay_data):
+    def _enter_replay_phase(self, replay_data, source_path=""):
         """入口页直接切到回放：**同一个窗口、同一次窗口生命周期**。
 
         L4 之前入口页选"加载回放"只能把窗口关掉，把 choice 交给调用方，再由调用
@@ -326,6 +336,7 @@ class DungeonLaunchStages:
         """
         self.is_replay = True
         self.loaded_replay = list(replay_data or [])
+        self.replay_source_path = source_path or ""
         self.current_replay_index = 0
         self.replay_data = []
         self.pending_insertions.clear()
@@ -426,11 +437,11 @@ class DungeonLaunchStages:
         窗口生命周期；现在只是"什么都没发生"。
         """
         self._launch_choice = REPLAY_MARK
-        replay_data = self._pick_replay_file()
+        replay_data, source_path = self._pick_replay_file()
         if not replay_data:
             self._launch_choice = None
             return
-        self._enter_replay_phase(replay_data)
+        self._enter_replay_phase(replay_data, source_path)
 
     def _on_entry_cancel(self, sender=None, app_data=None, user_data=None):
         self._launch_choice = None

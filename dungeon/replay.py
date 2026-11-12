@@ -1,12 +1,13 @@
 """回放记录的语法：分类、归一与容错解析（纯领域层：无 IO / UI / AI）。
 
-回放文件是一串记录，四种形态（写在哪见 ``docs/designs/dungeon/script.md`` §9.3）：
+回放文件是一串记录，几种形态（写在哪见 ``docs/designs/dungeon/script.md`` §9.3）：
 
 - **步进**（无 ``kind``）：一个逻辑段落的正文与它前后的状态快照；
 - ``kind:"chapter"``：进入章节，带当时的环境（背景 / 音乐 / 语音效果）；
 - ``kind:"trigger"``：触发器动作，分支动作额外带选择结果 / 小游戏返回值；
 - ``kind:"characters"``：文件头部的人物账本快照（不参与步进）；
-- ``kind:"ending"``：结局正文（结束章节走完后的收尾记录）。
+- ``kind:"ending"``：结局正文（结束章节走完后的收尾记录）；
+- ``kind:"meta"``：回放身份（所属方案 / 版本 / 用到的素材），同样不参与步进。
 
 读取方只吃本模块产出的 Record，不再各自 ``dict.get``。三条约定：
 
@@ -20,10 +21,11 @@
    （含空串「本段不显示前缀」）优先。
 
 同一份语法也负责写：:func:`to_config_fragment` 把章节 / 触发器记录还原成配置
-片段，供「回放 → 配置」的回溯改写使用。读入口径统一在 :func:`parse_all`
-（旧格式的 ``goto`` 记录会被展开成章节进入记录）。
+片段，供「回放 → 配置」的回溯改写使用；:func:`meta_record` 产出回放身份记录。
+读入口径统一在 :func:`parse_all`（旧格式的 ``goto`` 记录会被展开成章节进入记录）。
 """
 
+import os
 from dataclasses import dataclass
 
 from dungeon.actions import trigger_action_type
@@ -38,9 +40,17 @@ KIND_TRIGGER = "trigger"
 #: 人物账本快照；盘上沿用历史字面值 "characters"（旧回放文件不迁移）
 KIND_CHARACTERS = "characters"
 KIND_ENDING = "ending"
+#: 回放身份（所属方案），见 :class:`ScenarioRecord`
+KIND_META = "meta"
 
-_KINDS = (KIND_CHAPTER, KIND_TRIGGER, KIND_CHARACTERS, KIND_ENDING)
+_KINDS = (KIND_CHAPTER, KIND_TRIGGER, KIND_CHARACTERS, KIND_ENDING, KIND_META)
 _TEXT_TYPES = {text_type.value: text_type for text_type in DungeonTextType}
+
+#: 身份记录的语法版本（写法变了才加，读取侧据此决定怎么解释）
+META_VERSION = 1
+
+#: 素材路径的采集上限（反查所属方案与写入 meta.assets 同源，取同一个数）
+MATERIAL_PATH_LIMIT = 8
 
 
 # ---------------- Record ----------------
@@ -115,6 +125,25 @@ class EndingRecord:
     text: str
     icon_path: str
     step: int
+
+
+@dataclass(frozen=True)
+class ScenarioRecord:
+    """回放身份：这份回放属于哪个方案、当时的版本、用到了哪些素材。
+
+    只记身份，不记素材清单的副本——背景 / 音乐 / 图标仍然只有记录里那一份，
+    这里只多一个「这些路径在当时有多大」，用来发现同名文件被重新导入
+    （路径还在、内容已换，是唯一不能靠存在性发现的失效）。``content_hash``
+    是整方案摘要，只回答「是不是同一版方案」。
+    """
+
+    scenario_id: str
+    content_hash: str
+    version_tag: str
+    app: str
+    saved_at: str
+    #: ``({"path", "size"}, …)``；``size`` 为 ``None`` 表示记录里没写
+    assets: tuple
 
 
 # ---------------- 容错取数 ----------------
@@ -260,12 +289,42 @@ def _parse_ending(raw: dict) -> EndingRecord:
     )
 
 
+def _assets(value) -> tuple:
+    """素材清单：只留路径非空的条目，超出上限的部分丢掉（写侧同样限这么多）。"""
+    if not isinstance(value, (list, tuple)):
+        return ()
+    result = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        path = _text(item.get("path")).strip().lstrip("/\\")
+        if not path:
+            continue
+        result.append({"path": path, "size": _optional_whole(item.get("size"))})
+        if len(result) >= MATERIAL_PATH_LIMIT:
+            break
+    return tuple(result)
+
+
+def _parse_meta(raw: dict) -> ScenarioRecord:
+    scenario = _mapping(raw.get("scenario"))
+    return ScenarioRecord(
+        scenario_id=_text(scenario.get("id")).strip(),
+        content_hash=_text(scenario.get("content_hash")),
+        version_tag=_text(scenario.get("version_tag")),
+        app=_text(raw.get("app")),
+        saved_at=_text(raw.get("saved_at")),
+        assets=_assets(scenario.get("assets")),
+    )
+
+
 _PARSERS = {
     KIND_STEP: _parse_step,
     KIND_CHAPTER: _parse_chapter,
     KIND_TRIGGER: _parse_trigger,
     KIND_CHARACTERS: _parse_characters,
     KIND_ENDING: _parse_ending,
+    KIND_META: _parse_meta,
 }
 
 
@@ -335,6 +394,36 @@ def parse_all(raws, on_drop=None) -> list:
     return records
 
 
+# ---------------- 素材路径（身份与反查同源） ----------------
+
+def material_paths(records, limit: int = MATERIAL_PATH_LIMIT) -> list:
+    """记录里引用的方案素材相对路径（去重保序，最多 ``limit`` 条）。
+
+    回放里真正来自方案文件的只有三处：章节背景 / 音乐、结局图标、旧版 ``ending``
+    动作的图标。绝对路径不参与（它本来就不依赖方案目录）。写入侧的
+    ``meta.assets`` 与读取侧的方案反查都从这里取，两边不会各列一份。
+    """
+    paths = []
+    for record in records:
+        if isinstance(record, ChapterRecord):
+            candidates = ((record.background or {}).get("image_path"),
+                          (record.bgm or {}).get("path"))
+        elif isinstance(record, EndingRecord):
+            candidates = (record.icon_path,)
+        elif isinstance(record, TriggerRecord) and record.action_type == "ending":
+            candidates = (record.action_data.get("icon_path"),)
+        else:
+            continue
+        for candidate in candidates:
+            path = str(candidate or "").strip().lstrip("/\\")
+            if not path or os.path.isabs(path) or path in paths:
+                continue
+            paths.append(path)
+            if len(paths) >= limit:
+                return paths
+    return paths
+
+
 # ---------------- 反向：记录 → 配置片段 ----------------
 
 def _chapter_fragment(record: ChapterRecord) -> dict:
@@ -366,10 +455,44 @@ def to_config_fragment(record):
 
     步进记录是正文（配置里没有对应字段），账本快照是当时的运行态（不是方案
     的人物表），结局正文是生成结果（配置里只有 ``icon_path`` 这类章节字段，
-    无法确定归属章节）：这三种返回 ``None``。
+    无法确定归属章节），身份记录说的是「这份文件属于哪个目录」：这四种返回
+    ``None``。
     """
     if isinstance(record, ChapterRecord):
         return _chapter_fragment(record)
     if isinstance(record, TriggerRecord):
         return _trigger_fragment(record)
     return None
+
+
+# ---------------- 正向：身份记录 ----------------
+
+def meta_record(*, scenario=None, app: str = "", saved_at: str = "") -> dict:
+    """回放身份记录（:data:`KIND_META`）。
+
+    ``scenario`` 认 ``id`` / ``content_hash`` / ``version_tag`` / ``assets``，
+    与读取侧的 :class:`ScenarioRecord` 一一对应：没值的键不写（空串与
+    「不知道」是两回事，不在这里混）。``assets`` 超过
+    :data:`MATERIAL_PATH_LIMIT` 条的部分丢掉——它只用于发现同名素材被替换，
+    不是素材清单的副本。
+    """
+    source = dict(scenario or {})
+    payload = {}
+    scenario_id = _text(source.get("id")).strip()
+    if scenario_id:
+        payload["id"] = scenario_id
+    for key in ("content_hash", "version_tag"):
+        value = _text(source.get(key)).strip()
+        if value:
+            payload[key] = value
+    assets = _assets(source.get("assets"))
+    if assets:
+        payload["assets"] = [dict(item) for item in assets]
+    record = {"kind": KIND_META, "version": META_VERSION}
+    if payload:
+        record["scenario"] = payload
+    if app:
+        record["app"] = app
+    if saved_at:
+        record["saved_at"] = saved_at
+    return record

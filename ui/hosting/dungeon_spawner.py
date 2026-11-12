@@ -235,8 +235,9 @@ def _wait_loop(host_window, dialogs, conn, proc, send_lock):
                 _answer_dialog(conn, send_lock, dialogs, msg)
                 continue
             if msg.get("req") == "open_replay_file":
-                data = _read_replay_file(host_window, dialogs)
-                _send(conn, send_lock, {"reply": msg.get("id"), "answer": data})
+                data, path = _read_replay_file(host_window, dialogs)
+                _send(conn, send_lock,
+                      {"reply": msg.get("id"), "answer": data, "path": path})
                 continue
 
         if result_data is not None or not pipe_open:
@@ -285,7 +286,10 @@ def _send(conn, send_lock, msg):
 
 
 def _read_replay_file(host_window, dialogs):
-    """回放文件选择的父进程实现（对齐 ``TkHost.open_replay_file``）。"""
+    """回放文件选择的父进程实现（对齐 ``TkHost.open_replay_file``）。
+
+    返回 ``(记录, 路径)``；取消 / 失败返回 ``(None, "")``。
+    """
     import json
     from tkinter import filedialog
 
@@ -295,19 +299,19 @@ def _read_replay_file(host_window, dialogs):
             filetypes=[("副本回放", "*.replay.json"), ("所有文件", "*.*")])
     except Exception as exc:
         dialogs.showerror("错误", f"打开文件选择框失败：{exc}")
-        return None
+        return None, ""
     if not file_path:
-        return None
+        return None, ""
     try:
         with open(file_path, "r", encoding="utf-8") as handle:
             data = json.load(handle)
     except Exception as exc:
         dialogs.showerror("错误", f"加载回放失败：{exc}")
-        return None
+        return None, ""
     if not isinstance(data, list) or not data:
         dialogs.showerror("错误", "回放文件格式错误")
-        return None
-    return data
+        return None, ""
+    return data, file_path
 
 
 # ==================== 窗口显隐与登记 ====================

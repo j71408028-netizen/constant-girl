@@ -786,8 +786,9 @@ class DungeonStoryEngine:
         while self.current_replay_index < len(self.loaded_replay):
             record = self.loaded_replay[self.current_replay_index]
             self.current_replay_index += 1
-            # 账本快照已在 _init_replay 里还原，步进时跳过
-            if isinstance(record, replay.CharactersRecord):
+            # 账本快照与身份记录都不参与步进（前者已在 _init_replay 里还原，
+            # 后者在那里已经用于确定所属方案）
+            if isinstance(record, (replay.CharactersRecord, replay.ScenarioRecord)):
                 continue
             if isinstance(record, replay.ChapterRecord):
                 self._replay_chapter(record)

@@ -12,7 +12,9 @@
 4. 结局记录：``_record_ending`` 只记一次，回放时复现正文 + 图标并终止；
 5. 同一事件的唯一写法：章节环境只由 ``kind:"chapter"`` 承载（旧格式的
    ``goto`` 平级键在解析层展开），反向 ``to_config_fragment`` 与解析成对；
-6. 档案导出：账本快照不画、结局记录画成结局块、meta 计数只数真步进 / 真触发。
+6. 回放身份：``kind:"meta"`` 的写读一轮、坏形状容错、素材路径同源、不占点击、
+   不进档案导出；
+7. 档案导出：账本快照不画、结局记录画成结局块、meta 计数只数真步进 / 真触发。
 """
 
 import os
@@ -457,11 +459,105 @@ check("步进 / 账本 / 结局记录没有配置对应物",
       and replay.to_config_fragment(replay.parse({"kind": "characters"})) is None
       and replay.to_config_fragment(replay.parse({"kind": "ending", "name": "E"})) is None)
 
-# ---------------- 6. 档案导出 ----------------
+# ---------------- 6. 回放身份（kind:"meta"） ----------------
+check("身份记录是一种独立 kind",
+      replay.classify({"kind": "meta"}) == replay.KIND_META)
+
+_meta_raw = {
+    "kind": "meta", "version": 1,
+    "scenario": {"id": "juying_lincheng", "content_hash": "sha256:abc",
+                 "version_tag": "1.2.0",
+                 "assets": [{"path": "/images/01.jpg", "size": 2048},
+                            {"path": "", "size": 1},
+                            "坏条目",
+                            {"path": "music/theme.mp3", "size": "x"}]},
+    "app": "2.0.0", "saved_at": "2026-11-10T10:51:13"}
+_meta = replay.parse(_meta_raw)
+check("身份记录解析出方案 / 版本 / 时间",
+      _meta.scenario_id == "juying_lincheng" and _meta.content_hash == "sha256:abc"
+      and _meta.version_tag == "1.2.0" and _meta.app == "2.0.0"
+      and _meta.saved_at == "2026-11-10T10:51:13", _meta)
+check("素材清单去掉空路径 / 坏条目，路径去前导斜杠，算不出的尺寸留空",
+      _meta.assets == ({"path": "images/01.jpg", "size": 2048},
+                       {"path": "music/theme.mp3", "size": None}), _meta.assets)
+
+_meta_loose = replay.parse_all([
+    {"kind": "meta"},
+    {"kind": "meta", "scenario": "不是字典"},
+    {"kind": "meta", "scenario": {"id": "x", "assets": "不是列表"}},
+])
+check("身份记录的缺键 / 坏形状不抛异常（退化成空值）",
+      [r.scenario_id for r in _meta_loose] == ["", "", "x"]
+      and all(r.assets == () for r in _meta_loose),
+      _meta_loose)
+check("旧版本读到 meta 只是多一条可识别记录（不丢别的记录）",
+      len(replay.parse_all([_meta_raw, {"type": "dialog", "text": "旧"}]) ) == 2)
+
+_built = replay.meta_record(
+    scenario={"id": "abc", "content_hash": "sha256:ff", "version_tag": "0.9",
+              "assets": [{"path": "images/a.png", "size": 10}]},
+    app="2.0.0", saved_at="2026-11-10T10:51:13")
+check("写出的身份记录是文档里的形状",
+      _built == {"kind": "meta", "version": replay.META_VERSION,
+                 "scenario": {"id": "abc", "content_hash": "sha256:ff",
+                              "version_tag": "0.9",
+                              "assets": [{"path": "images/a.png", "size": 10}]},
+                 "app": "2.0.0", "saved_at": "2026-11-10T10:51:13"}, _built)
+_round = replay.parse(_built)
+check("写→读一轮不丢字段",
+      (_round.scenario_id, _round.content_hash, _round.version_tag,
+       _round.app, _round.saved_at, _round.assets)
+      == ("abc", "sha256:ff", "0.9", "2.0.0", "2026-11-10T10:51:13",
+          ({"path": "images/a.png", "size": 10},)), _round)
+check("没有方案信息的身份记录不写空 scenario 键",
+      replay.meta_record(app="2.0.0") == {"kind": "meta",
+                                          "version": replay.META_VERSION,
+                                          "app": "2.0.0"})
+
+# 素材路径：反查方案与写 meta.assets 同源
+_material = replay.material_paths(replay.parse_all([
+    {"kind": "chapter", "name": "A",
+     "background": {"image_path": "/images/a.png"}, "bgm": {"path": "music/a.mp3"}},
+    {"kind": "ending", "name": "E", "icon_path": "icons/e.png"},
+    {"kind": "trigger", "name": "旧结局", "action_type": "ending",
+     "action_data": {"icon_path": "icons/old.png"}},
+    {"type": "dialog", "text": "正文不参与"},
+]))
+check("素材路径来自章节环境 / 结局图标 / 旧版 ending 动作的图标",
+      _material == ["images/a.png", "music/a.mp3", "icons/e.png", "icons/old.png"],
+      _material)
+check("绝对路径不参与、重复只留一条",
+      replay.material_paths(replay.parse_all([
+          {"kind": "chapter", "background": {"image_path": os.path.abspath("a.png")}},
+          {"kind": "chapter", "background": {"image_path": "images/a.png"}},
+          {"kind": "chapter", "background": {"image_path": "images/a.png"}},
+      ])) == ["images/a.png"])
+check("素材路径最多 8 条（与反查上限同一处定义）",
+      len(replay.material_paths(replay.parse_all([
+          {"kind": "chapter", "background": {"image_path": f"images/{i}.png"}}
+          for i in range(20)]))) == replay.MATERIAL_PATH_LIMIT)
+
+# 身份记录不参与步进：不占点击、不进档案导出
+_host_meta = _play([
+    _meta_raw,
+    {"type": "dialog", "text": "第一段"},
+    {"kind": "meta", "scenario": {"id": "另一个方案"}},
+    {"type": "dialog", "text": "第二段"},
+])
+check("身份记录不占点击（一次点击落在正文上）",
+      [item.get("text") for item in _host_meta.story_history] == ["第一段"],
+      _host_meta.story_history)
+_host_meta._replay_next_step()
+check("中间的身份记录同样跳过",
+      [item.get("text") for item in _host_meta.story_history] == ["第一段", "第二段"],
+      _host_meta.story_history)
+
+# ---------------- 7. 档案导出 ----------------
 from services.character.archive_export import (_render_replay_entries,  # noqa: E402
                                                _replay_counts)
 
 _entries = [
+    {"kind": "meta", "version": 1, "scenario": {"id": "x"}},
     {"kind": "characters", "snapshot": {"members": []}},
     {"type": "dialog", "text": "第一段", "step": 1},
     {"kind": "trigger", "name": "跳", "action_type": "goto", "action_data": {}},
@@ -469,7 +565,8 @@ _entries = [
     {"kind": "ending", "name": "真结局", "text": "END"},
 ]
 _html = _render_replay_entries(_entries)
-check("账本快照不画成空块", "text-unknown" not in _html and "【未知】" not in _html, _html)
+check("账本快照与身份记录不画成空块",
+      "text-unknown" not in _html and "【未知】" not in _html, _html)
 check("结局记录画成结局块", "真结局" in _html and "END" in _html)
 check("meta 计数只数真步进与真触发", _replay_counts(_entries) == (1, 1),
       _replay_counts(_entries))

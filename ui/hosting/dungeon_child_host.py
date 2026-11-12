@@ -18,7 +18,7 @@ X11 连接——子进程内的上下文销毁只影响它自己的 GL 栈，父
 ``pump_events``       空操作（子进程不再泵宿主事件，见下）
 ``discard_pending_quit``  空操作（本进程只有 GLFW 一个 GUI，消息归自己）
 ``dialog``            协议请求，父进程用界面自己的弹框实现代问
-``open_replay_file``  协议请求，父进程弹文件框并回传回放数据
+``open_replay_file``  协议请求，父进程弹文件框并回传回放数据与文件路径
 ``launch_mini_game``  与 ``TkHost`` 同款：孙进程跑 ``mini_game_host``，
                       结果写文件、watch 线程回调（子进程没有 Tk 弹框，
                       失败只记过程日志）
@@ -35,7 +35,8 @@ X11 连接——子进程内的上下文销毁只影响它自己的 GL 栈，父
 - 子 → 父：``{"req": "show_window"}``、``{"req": "dialog", "id", "kind",
   "title", "message"}``、``{"req": "open_replay_file", "id"}``、
   ``{"result": {...}}``（最后一局的结果，发完即收）；
-- 父 → 子：``{"reply": id, "answer": ...}``、``{"req": "close"}``（父进程
+- 父 → 子：``{"reply": id, "answer": ...}``（回放文件选择额外带 ``path``）、
+  ``{"req": "close"}``（父进程
   整体退出前请子进程走帧边界收尾，:meth:`DungeonSessionWindow.request_close`）。
 
 **父进程死亡检测**：管道由一个专职读线程独占（``recv`` 不能多线程并发），
@@ -89,6 +90,7 @@ class ChildHost(HostPort):
                 box = self._pending.pop(reply_id, None)
                 if box is not None:
                     box["answer"] = msg.get("answer")
+                    box["path"] = msg.get("path")
                     box["event"].set()
                 continue
             if msg.get("req") == "close":
@@ -103,8 +105,12 @@ class ChildHost(HostPort):
         self._closed.set()
         os._exit(0)
 
-    def _request(self, msg: dict):
-        """发一条协议请求并等待父进程应答；父进程死亡时进程直接终结。"""
+    def _request(self, msg: dict, with_extras: bool = False):
+        """发一条协议请求并等待父进程应答；父进程死亡时进程直接终结。
+
+        ``with_extras`` 为真时返回整个应答盒（应答里的可选键，如回放文件路径），
+        否则只返回 ``answer``。
+        """
         with self._send_lock:
             self._request_seq += 1
             req_id = self._request_seq
@@ -116,7 +122,7 @@ class ChildHost(HostPort):
                 self._pending.pop(req_id, None)
                 return None
         box["event"].wait()
-        return box["answer"]
+        return box if with_extras else box["answer"]
 
     # ---------------- 尺寸与 DPI ----------------
     def viewport_metrics(self):
@@ -153,8 +159,14 @@ class ChildHost(HostPort):
 
     # ---------------- 回放文件选择 ----------------
     def open_replay_file(self):
-        data = self._request({"req": "open_replay_file"})
-        return data if isinstance(data, list) else None
+        """协议请求父进程弹文件框；回 ``(记录, 路径)``（路径供文件名还原方案）。"""
+        box = self._request({"req": "open_replay_file"}, with_extras=True)
+        if not isinstance(box, dict):
+            return None
+        data = box.get("answer")
+        if not isinstance(data, list):
+            return None
+        return data, str(box.get("path") or "")
 
     # ---------------- 内置小游戏 ----------------
     def launch_mini_game(self, game_id, config=None, on_result=None) -> bool:
