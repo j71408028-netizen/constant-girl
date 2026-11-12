@@ -16,6 +16,12 @@ def get_challenge_packs(settings_repo):
     return cm.get_available_packs()
 
 
+def challenge_pack_titles(settings_repo, packs) -> dict:
+    """``{包文件名: 显示名}``；只读兄弟信封，不打开包。"""
+    cm = ChallengeService(settings_repo)
+    return {name: cm.pack_title(name) for name in packs}
+
+
 def _open_challenge_pack(settings_repo, pack_name):
     cm = ChallengeService(settings_repo)
     file_path = os.path.join(cm.storage_dir, pack_name)

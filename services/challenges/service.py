@@ -18,6 +18,10 @@ from typing import Optional, List, Dict, Tuple
 
 from dungeon.terms import scenario_id_of
 from persistence.json_store import load_json_with_backup, write_json_atomic
+from persistence.resources.envelope import envelope_path, envelope_title, set_title
+
+#: 挑战包在资源声明里的类型 id（信封按它取 schema，与主文件后缀无关）
+CHALLENGE_TYPE_ID = "challenges"
 
 
 class ChallengeService:
@@ -361,7 +365,7 @@ class ChallengeService:
 
     def create_challenge(self, character_id: str, landmark_styles: List[str],
                          scenario_id: str,
-                         intro: str, pack_name: str) -> str:
+                         intro: str, pack_name: str, title: str = "") -> str:
         """
         创建一个新的挑战包
 
@@ -372,7 +376,8 @@ class ChallengeService:
         :param landmark_styles: 地标风格组列表
         :param scenario_id: 副本方案ID
         :param intro: 挑战包简介
-        :param pack_name: 包名（不含扩展名或含扩展名均可）
+        :param pack_name: 包 id（不含扩展名或含扩展名均可），同时是文件名
+        :param title: 界面显示名；空则表示与 id 相同
         :return: 生成的秘钥字符串
         :raises ValueError: 缺少必要仓库、角色或副本加载失败等
         """
@@ -448,6 +453,10 @@ class ChallengeService:
 
         # 注册秘钥
         self._register_key(pack_name, key)
+        # 显示名写兄弟信封：改名不动 .chal 文件名，秘钥与包 id 都不会错位
+        if str(title or "").strip():
+            set_title(self.storage_dir, CHALLENGE_TYPE_ID,
+                      os.path.splitext(pack_name)[0], title)
         return key
 
     def open_challenge(self, file_path: str, password: str = None) -> Optional[dict]:
@@ -547,6 +556,8 @@ class ChallengeService:
             "filename": filename,
             "file_path": file_path,
             "pack_base": pack_base,
+            "title": envelope_title(os.path.dirname(file_path),
+                                    CHALLENGE_TYPE_ID, pack_base),
             "bundled": self._is_bundled_path(file_path),
             "intro": data.get("intro", ""),
             "character_name": data.get("character_data", {}).get("name", "未知"),
@@ -583,6 +594,24 @@ class ChallengeService:
             if meta:
                 metas.append(meta)
         return metas
+
+    def pack_title(self, filename: str, file_path: str = None) -> str:
+        """挑战包的显示名：只读兄弟信封，不打开包（列表刷新用）。"""
+        base = os.path.splitext(filename)[0]
+        if file_path is None:
+            file_path = self.resolve_pack_path(filename)
+        if not file_path:
+            return ""
+        return envelope_title(os.path.dirname(file_path), CHALLENGE_TYPE_ID, base)
+
+    def delete_pack(self, file_path: str):
+        """删除挑战包文件及其显示名信封（世界包附带的包由调用方先挡掉）。"""
+        base = os.path.splitext(os.path.basename(file_path))[0]
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        envelope = envelope_path(os.path.dirname(file_path), base)
+        if os.path.exists(envelope):
+            os.remove(envelope)
 
     def import_pack(self, source_path: str, key: str) -> str:
         """

@@ -6,6 +6,7 @@
 """
 
 from services.challenges.imports import (
-    get_challenge_packs, import_landmark_challenge_pack, import_quip_challenge_pack,
+    challenge_pack_titles, get_challenge_packs,
+    import_landmark_challenge_pack, import_quip_challenge_pack,
 )
 from services.challenges.service import ChallengeService
