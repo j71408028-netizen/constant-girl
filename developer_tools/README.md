@@ -22,11 +22,12 @@
 ## 面向谁 / 现状
 
 改动的来源不只有核心开发者：**描述风格与小游戏的改动都可能来自资源开发者**，他们改完也要
-有个地方立刻看效果。四项工具当前的开放程度并不一致：
+有个地方立刻看效果。这些工具当前的开放程度并不一致：
 
 | 工具 | 对应的改动 | 现状 |
 |---|---|---|
-| `quip_report.py` | 描述风格（quip 语料） | ✅ 描述风格改动可能来自资源开发者，直接可用 |
+| `quip_report.py` | 描述风格（quip 语料） | ✅ 描述风格改动可能来自资源开发者，直接可用；判据与主程序描述管理页的「校验」按钮是同一套（`services/exploration/quip_lint.py`）。人改语料用界面更快，脚本与本机 Agent 走 `--json` |
+| `quip_draft_bench.py` | 描述素材草稿（出题 / 写 / 收卷 / 校正） | ✅ 题材数据在 `quip_profiles/`，换世界观不用改代码；人写、AI+人审、agent 全自动三条路共用同一套判定。场景卡与题面的口径见下方「用途」与 [`quip_profiles/README.md`](quip_profiles/README.md) |
 | `minigame_preview.py` | 小游戏 | ✅ 小游戏改动可能来自资源开发者，直接可用 |
 | `archive_preview.py` | 角色档案导出 | ⏸ **HTML 档案模板暂不开放**——当前只服务核心开发者调模板，尚不作为资源开发者的扩写点 |
 | `evolution_dump.py` | 演化模型 | ✅ 可加载行为包（`--pack` / `--world`）——不用建世界包、不用开局，直接看行为包对演化的覆盖效果；不指定包时只反映核心演化模型自身的改动 |
@@ -34,12 +35,13 @@
 
 ## 命名：`<领域>_<输出>.py`
 
-文件名 = **检查领域** + **运行输出**，下划线相连。输出固定三类，它决定工具「怎么把结论
+文件名 = **检查领域** + **运行输出**，下划线相连。输出固定四类，它决定工具「怎么把结论
 交给你」——也决定要不要落盘：
 
 | 输出类别 | 后缀 | 形态 | 落盘 |
 |---|---|---|---|
 | 打开预览 | `_preview` | 起窗口 / 起本地 HTTP / 控制台交互，人眼看、可实时刷新 | 无 |
+| 控制台工作台 | `_bench` | 控制台交互 + 反复产出素材：出题、写、校验、落盘 | 写 `_out/`（或用 `--csv` 指定） |
 | 简略报告 | `_report` | 往 stdout 打结论（可 `--json`） | 无 |
 | 详细产物 | `_dump` | 出文件：PNG / md / txt / dmp / json | 写 `_out/` |
 
@@ -47,7 +49,8 @@
 |---|---|---|---|
 | `archive_preview.py` | 角色档案导出 | 打开预览 | 改 `services/character/archive_export.py` 后起个小服务，F5 即用最新代码重渲染角色档案 |
 | `minigame_preview.py` | 小游戏舞台 | 打开预览 | 不进副本，直接在独立 imgui 窗口跑一个小游戏；帧时钟 / 输入层 / 纹理上传与副本同一套 |
-| `quip_report.py` | quip 语料 | 简略报告 | 检查 `data/packs/quips/<风格>/` 的 `quips.csv`、`config.json` 类型 meta、标记格式，以及类型替换的**组合级语法风险**并双向溯源。**一次只查一个风格的一个尺寸档** |
+| `quip_report.py` | quip 语料 | 简略报告 | 检查 `data/packs/quips/<风格>/` 的 `quips.csv`、`config.json` 类型 meta、标记格式、单条文本排版，以及类型替换的**组合级语法风险**并双向溯源。**一次只查一个风格的一个尺寸档**。判据全在 `services/exploration/quip_lint.py`——主程序描述管理页的「校验」按钮走同一个 `lint_style`，本脚本只负责读盘与呈现。缺省文本只出结论（一条一行，组合级问题附缩进溯源链）；meta 表与语法统计这类调判据用的详细视图只在 `--json` 里。不带风格跑命令会列可选分组（每档的坐标/条目/标记数），加 `--json` 给机器读的同一份清单 |
+| `quip_draft_bench.py` | 描述素材草稿 | 控制台工作台 | 按隐坐标轮换场景卡出题、校验、落盘，事后可人工校正坐标。**一次只做一个观测等级**：目标跨等级直接报错，`--band` 挑一个（等级内部自洽，跨等级写出来的东西事后按坐标改不回来；一个等级约 20~100 条，正好是一次写的上限）。**每级 14 格**：(1,4)、(4,1) 两根轴的端点互相否定、不存在；写哪几格看 `status` 的缺口，用 `--cell 档位:主轴:副轴` 指定。三种写手走同一管道：`write` 人逐条写、`draft` AI 生成后人工逐条裁决、`fill` agent 无人值守（带失败原因重试）；`prompt` 只出提示词不调 API。AI 的两条路一次调用写一组（`--batch`，默认 3 条相邻的卡），`--seed` 默认每次随机。题面形态（着重部位 · 动作类型 · 落到哪一步 · 视角 · 可接触范围）与各字段含义见 [`quip_profiles/README.md`](quip_profiles/README.md)。题材数据在 `quip_profiles/`，`--profile` 切换；判定口径随 profile 走 |
 | `behavior_hooks_report.py` | 行为包钩子 | 简略报告 | 把 `runtime.catalog()` 按 scope 分组打到 stdout（细度 / 层级 / 签名 / 常量默认值），可 `--scope` 过滤、`--json` 机器可读 |
 | `lens_preview.py` | 聊天话题视角 | 简略报告 | 改完 `services/chat/topic_kinds.py`（类型定义）或 `topic_lens.py`（字段目录）后，对真实存档逐类型打印"此刻给 AI 的信息"，附取用/挡掉账本；`--kind X --full` 可看整份系统提示词，`--out` 另存到 `_out/lens_preview/` |
 | `chat_session_preview.py` | 聊天会话 | 打开预览（控制台） | 在控制台里跟角色**实际聊天**，每轮打印视角账本（取用/挡掉/预算）、话题变化、属性与原始 JSON；`/topic` 锁定类型、`/attitude` 验证隐藏介绍门槛、`/reroll` 同前提重掷。默认在 `_out/` 沙盒里聊，**不写 `data/`** |
@@ -62,6 +65,7 @@
 | `_out/evolution/` | `evolution_dump.py`（`--out` 可改写别处；带 `--pack` / `--world` 时嵌一层 `pack_<名>/`，与基线目录并排对比） |
 | `_out/lens_preview/` | `lens_preview.py --out <文件名>`（不传 `--out` 时只打 stdout） |
 | `_out/chat_session_preview/` | `chat_session_preview.py`：`sandbox/<角色ID>/` 是会话用的数据副本（档案 + 聊天记录，`--fake` 另开 `sandbox_fake/`），`logs/` 存放 `--log` 写出的会话记录 |
+| `_out/quip_draft/` | `quip_draft_bench.py`：默认 CSV（`<profile>.csv`）、`write` 存的草稿 `drafts-*.jsonl`、`plan --out` 的题面 |
 
 好处：根 `.gitignore` **一行**就够（`/developer_tools/_out/`）——新增工具无论写多少种后缀
 的产物都不必再动忽略规则。`_out/` 本身不入库，克隆后不存在，首次运行时由脚本自动创建
@@ -71,6 +75,9 @@
 stdout，都不产生需要排除的文件。例外是 `chat_session_preview.py`：它需要一份可写的
 数据副本才能真聊，默认把档案复制到 `_out/chat_session_preview/sandbox/`（仍在 `_out/`
 之内，不碰 `data/`），`--data-dir` 才会改用别处。
+
+`_bench` 本来就是产出工具，落盘是常态：`quip_draft_bench.py` 默认写
+`_out/quip_draft/<profile>.csv`，要读写仓库里的现成语料必须显式 `--csv`。
 
 ## 新增文件请照这 8 条
 
@@ -92,11 +99,13 @@ stdout，都不产生需要排除的文件。例外是 `chat_session_preview.py`
    确实需要私有依赖（如 `evolution_dump.py` 的 matplotlib）就在 docstring 里写明，并在
    import 处给一句可读的安装提示，而不是抛原始 `ImportError`。
 7. **命名**：顶层工具叫 `<领域>_<输出>.py`（`quip_report.py`，不要 `check2.py`；后缀只准
-   `_preview` / `_report` / `_dump` 三种）。带下划线前缀的特殊集合（如 `scripts/dpg_probe/`
+   `_preview` / `_bench` / `_report` / `_dump` 四种）。`_preview` 是「看效果就走」，`_bench`
+   是「反复出题—写—校验—落盘」的工作台，两者都不改变用户数据。带下划线前缀的特殊集合（如 `scripts/dpg_probe/`
    的 `_probe_*`）另有自己的约定，写在它那一侧的 README 里。
-8. **要长期维护的判定逻辑搬进 `tests/`**：这里可以"很笨"，但别让门禁反过来 import
-   developer_tools。`quip_report.py --selftest` 只为自己做回归，**不**挂进
-   `tests/run_checks.py`。
+8. **要长期维护的判定逻辑搬进 `services/` 或 `tests/`**：这里可以"很笨"，但别让门禁反过来
+   import developer_tools。描述语料的判据在 `services/exploration/quip_lint.py`（命令行与
+   主程序共用），回归在 `tests/check_quip_lint.py`，已挂 `tests/run_checks.py`——新增检查项
+   请改那两处，不要在本目录再养一份只在命令行生效的判定。
 
 ## 入库范围
 
@@ -108,7 +117,7 @@ stdout，都不产生需要排除的文件。例外是 `chat_session_preview.py`
 
 ## 附录：现有文件的 module docstring 覆盖
 
-规范第 1 条是硬要求，本目录 7 个 `.py` 目前 **全部有模块 docstring**，新增文件请保持。
+规范第 1 条是硬要求，本目录 8 个 `.py` 目前 **全部有模块 docstring**，新增文件请保持。
 核对方法：
 
 ```bash
@@ -129,3 +138,12 @@ PY
 的入口、也不会反复拿来"看"，不符合本目录的判据。其产物随之落 `scripts/_out/dpg_probe/`，
 说明见 [`scripts/README.md`](../scripts/README.md)。DPG 专属的 5 支探针已在 2026-11-09
 随 `dearpygui` 依赖移除一并删除，只留通用的 Windows 原生崩溃工具。
+
+`quip_filler.py`（旧「描述填充」GUI）2026-08 起曾在本目录，随目录清理删除。它的 GUI 部分
+**没有恢复**：选题、AI 提示词组装、响应容错解析、保存前校验这四件事已经并进
+`quip_draft_bench.py`（`draft` / `fill` / `prompt`），且不再依赖 customtkinter。
+`quip_profiles/` 是纯数据目录，不是工具，不受「`<领域>_<输出>.py`」命名约束。其中只有
+`template.json`（通用起点，从作者本机的 `giantess.json` 复制）入库；具体的题材数据各人写各人的，
+已在根 `.gitignore` 里排除。档位的名字与区间（`small`…`colossal`）由主程序
+`core/logic/sizing.py` 定，profile 只填每档的 `can` / `anchor` / `limits`，`doctor` 会与主程序比对；
+写哪几档随题材，缺档位不报错，只提示。

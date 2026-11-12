@@ -223,6 +223,14 @@ data/static/behaviors/imperial_units/imperial_units.py:45
 （`quips/<id>`）不再读取，导入或激活旧世界包会得到明确的成员缺失错误，需先用
 一次性迁移转换。
 
+描述语料的静态校验只有一套判据：`services/exploration/quip_lint.py::lint_style`
+（meta 声明 / 标记格式 / 替换池 / 接缝语法 / 单条文本排版）。命令行体检
+（`developer_tools/quip_report.py`）与描述管理页的「校验」按钮都调用它，两者只
+呈现方式不同（stdout / 诊断对话框），不各写一份规则；组合级结论的定位用
+`(尺寸档, 坐标, 条目下标, 偏移)` 溯源，界面据此直接回到那条描述。回归在
+`tests/check_quip_lint.py`。**一次只查一个风格的一个尺寸档**是两处共守的口径：
+池按档分裂，全量结论读不动。
+
 代价是编辑器不再按后缀识别语言：.vscode 未提交关联配置，用 VS Code 直接看这些
 文件时需手动 `Change Language Mode → JSON`（或用 `files.associations` 关联
 `data/packs/topics/*`）。跨过这一层，`<id>` 与 `<id>.addr.json` 谁是需要编辑的

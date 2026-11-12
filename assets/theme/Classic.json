@@ -1021,6 +1021,9 @@
     "QUIP_ERR_HOVER": {
       "$role": "state-danger-tint"
     },
+    "QUIP_WARN": {
+      "$role": "state-warning"
+    },
     "QUIP_TYPEVIEW": {
       "$role": "feature-typeview"
     },

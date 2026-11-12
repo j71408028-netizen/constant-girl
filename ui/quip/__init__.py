@@ -15,6 +15,8 @@ from ui.ctk.widgets import ClickableCard, CTkScrollableDropdownFrame
 from ui.ctk.dialogs import BaseDialog
 from ui.ctk.address_dlg import AddressTextDialog
 from ui.quip.dialogs import QuipDialog, _TargetSelectDialog
+from ui.quip.lint_dialog import QuipLintDialog
+from services.exploration.quip_lint import lint_style
 from core.address_model import format_addr_verbose
 from ui.ctk.theme import (
     QUIP_BG, QUIP_PANEL_BG, QUIP_BORDER_STRONG, QUIP_HOVER,
@@ -316,6 +318,12 @@ class QuipCardManager(CardManager):
         self.type_view_btn = ctk.CTkButton(self.size_row, text="类型视图", width=80,
                                            command=self.toggle_type_view, **_purple_btn)
         self.type_view_btn.pack(side='right', padx=6)
+        # 校验：当前风格 + 当前观测等级，判据与 developer_tools/quip_report.py 同一套
+        ctk.CTkButton(self.size_row, text="校验", width=72,
+                      command=self.run_check,
+                      fg_color="transparent", border_width=1, corner_radius=8,
+                      text_color=QUIP_TEXT_SOFT, hover_color=QUIP_HOVER,
+                      border_color=QUIP_BORDER_STRONG).pack(side='right', padx=6)
 
     # ---------- 排序控件 ----------
     def create_sort_widgets(self, parent):
@@ -389,6 +397,66 @@ class QuipCardManager(CardManager):
             self.type_view.refresh_matches()
         else:
             self.show_first_view()
+
+    # ---------- 校验 ----------
+    def run_check(self):
+        """校验当前风格 + 当前观测等级，结论交给 ``QuipLintDialog``。
+
+        范围与 ``python developer_tools/quip_report.py <风格> <尺寸档>`` 一致：一次只查
+        一档。换档请先关掉结论窗口再切观测等级——全量结论读不动，两边都不提供全档。
+
+        送检的是页面上此刻的数据（``all_items``）而不是再读一遍 CSV：校验看到的必须
+        等于用户看到的，定位也按同一份下标反查。
+        """
+        style = self.style_var.get()
+        size = self.size_var.get()
+        if not style:
+            return
+        self.load_items()
+        matrix = {}
+        for item in self.all_items:
+            matrix.setdefault((item['intrusion'], item['destruction']), []).append({
+                'text': item['text'],
+                'style': item.get('style', style),
+                'step': item.get('step', 1.0),
+                'summary': item.get('summary', ''),
+            })
+        if not matrix:
+            ui.ctk.dialogs.showinfo(
+                "无可校验内容", f"风格 {style} 在 {size} 档下还没有描述。")
+            return
+        data = {size: matrix, "_meta": self.quip_repo.load_meta(style)}
+        report = lint_style(style, data, size_cat=size)
+        QuipLintDialog(self, report, on_locate=self.locate_finding)
+
+    def locate_finding(self, loc):
+        """校验结论 → 对应条目 → 打开编辑框（loc 由 quip_lint 溯源给出）。"""
+        item = self._item_for_loc(loc)
+        if item is None:
+            ui.ctk.dialogs.showwarning(
+                "定位失败", "这条结论对应的描述已不存在（可能刚被改动），请重新校验。")
+            return
+        self.edit_item(item)
+
+    def _item_for_loc(self, loc):
+        """按坐标 + 条目下标反查 ``all_items`` 里的条目。
+
+        条目下标是**该坐标下**的序号（与扫描顺序一致），不是整页的扁平下标。
+        """
+        if not loc:
+            return None
+        try:
+            intr, dest = (int(p) for p in str(loc.get("coord", "")).split("_"))
+        except ValueError:
+            return None
+        same = [item for item in self.all_items
+                if item["intrusion"] == intr and item["destruction"] == dest]
+        idx = loc.get("entry_idx")
+        if not same:
+            return None
+        if idx is None or not (0 <= idx < len(same)):
+            return same[0]
+        return same[idx]
 
     # ---------- 风格 / 体型变更 ----------
     def _set_combo_to_current_style(self):
