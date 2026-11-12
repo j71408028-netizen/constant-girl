@@ -17,7 +17,7 @@ from typing import Any, Dict, Optional, Union
 from core.logic import ALL_PART_NAMES, apply_size_unlock_updates
 from services.exploration.quips import build_size_description
 from core.models import CharacterSnapshot, ReportData
-from persistence.character_repo import CharacterRepo
+from persistence.character_repo import CharacterRepo, make_id
 from services.creation_service import CreationService
 
 
@@ -69,7 +69,8 @@ class CharacterAssembler:
         else:
             core = source
 
-        giantess_id = f"{core['name']}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+        giantess_id = make_id(core['name'],
+                              taken=self.character_repo.list_ids())
         total_casualties = core.get('total_casualties', 0.0)
         from_report = isinstance(source, ReportData)
         state = CharacterSnapshot(

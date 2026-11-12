@@ -10,6 +10,7 @@ from dungeon.window.host import (DIALOG_ASK, DIALOG_INFO, DIALOG_WARNING,
 from paths import APP_VERSION, data_dir
 from core.logic import compute_casualty
 from core.models import CharacterSnapshot
+from persistence.character_repo import id_segment, make_id
 from persistence.json_store import load_json_with_backup, write_json_atomic, write_text_atomic
 from persistence.resources.envelope import load_envelope
 from dungeon.scene import landing_position
@@ -231,8 +232,10 @@ class DungeonPersistence:
     def _create_character_from_session(self) -> CharacterSnapshot:
         # 结局传送目的地：本局在创建角色之前就走到结局时由 _apply_ending_effects 暂存
         exit_position = getattr(self, "_pending_exit_position", "") or ""
+        repo = getattr(self, "character_repo", None)
         char = CharacterSnapshot(
-            giantess_id=f"{self.name}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
+            giantess_id=make_id(self.name,
+                                taken=repo.list_ids() if repo is not None else ()),
             name=self.name,
             nick=self.nick or "",
             original_height=self.original_height or 1.6,
@@ -271,7 +274,7 @@ class DungeonPersistence:
         os.makedirs(replay_dir, exist_ok=True)
         timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         marker = "_未完成" if incomplete else ""
-        filename = f"{char.name}_回放_{timestamp}{marker}.replay.json"
+        filename = f"{id_segment(char.name) or '角色'}_回放_{timestamp}{marker}.replay.json"
         path = os.path.join(replay_dir, filename)
         try:
             # 原子写：半截回放文件不会被读到（后缀仍为 .replay.json，回放加载照旧）
@@ -288,7 +291,7 @@ class DungeonPersistence:
         os.makedirs(report_dir, exist_ok=True)
         timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         marker = "_未完成" if incomplete else ""
-        filename = f"{char.name}_副本报告_{timestamp}{marker}.txt"
+        filename = f"{id_segment(char.name) or '角色'}_副本报告_{timestamp}{marker}.txt"
         path = os.path.join(report_dir, filename)
         try:
             write_text_atomic(

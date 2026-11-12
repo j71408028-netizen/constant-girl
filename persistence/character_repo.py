@@ -1,5 +1,6 @@
 import datetime
 import os
+import re
 import shutil
 from dataclasses import asdict
 from typing import Optional
@@ -7,6 +8,42 @@ from typing import Optional
 from core import imaging
 from core.models import CharacterSnapshot
 from .json_store import load_json_with_backup, write_json_atomic
+
+#: 角色 id 中名字部分的长度上限（给时间戳与去重后缀留余量，远低于路径长度限制）
+_ID_NAME_MAX = 48
+#: 目录名里不能出现的字符：路径分隔符、Windows 保留字符、控制字符。
+#: 显示名可以任意，id 要能当目录名——两者的边界就在这里。
+_ID_ILLEGAL_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_ID_UNDERSCORE_RUN = re.compile(r"_{2,}")
+#: 名字抠空后的兜底（纯符号 / 纯点号的名字仍然要能有档案目录）
+_ID_FALLBACK = "角色"
+
+
+def id_segment(name: str) -> str:
+    """显示名 → 可安全用作目录名的一段文本（保留中文，不做 slug 化）。"""
+    text = _ID_ILLEGAL_CHARS.sub("_", str(name or ""))
+    text = _ID_UNDERSCORE_RUN.sub("_", text)
+    # 结尾的点与空格在 Windows 上会被静默截掉，首尾的装饰字符一并去掉
+    text = text.strip(" ._")[:_ID_NAME_MAX]
+    return text.strip(" ._")
+
+
+def make_id(name: str, now: Optional[datetime.datetime] = None, taken=()) -> str:
+    """按显示名派生角色 id：``<名字段>_<时间戳>``，撞车时追加序号。
+
+    显示名仍原样保存在 ``CharacterSnapshot.name``；id 只作目录名与容器键
+    （档案、聊天、回放都按它找路径），所以这里把路径语义收紧。名字里的
+    ``/`` 不会再切出嵌套目录，Windows 保留字符也不会让保存直接失败。
+    """
+    stamp = (now or datetime.datetime.now()).strftime("%Y%m%d%H%M%S")
+    base = id_segment(name) or _ID_FALLBACK
+    candidate = f"{base}_{stamp}"
+    used = {str(item) for item in (taken or ())}
+    index = 2
+    while candidate in used:
+        candidate = f"{base}_{stamp}_{index}"
+        index += 1
+    return candidate
 
 
 class CharacterRepo:

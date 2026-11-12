@@ -331,6 +331,13 @@ data/
       settings.json  dungeon_settings.json  api_keys.json  address_registry.json
 ```
 
+`<角色档案目录>` 由 `persistence/character_repo.py::make_id()` 派生，形如
+`<名字段>_<时间戳>`。显示名可以是任意文本（原样存在 `info.json` 的 `name`），
+路径语义在这里收紧：路径分隔符、Windows 保留字符、控制字符折成 `_`，首尾的点与
+空格去掉，名字抽空时用「角色」兜底，同秒撞名追加序号。档案里报告 / 回放的文件名
+也用同一段（`id_segment()`），所以名字里的 `/` 不会再切出嵌套目录，也不会让
+Windows 保存失败。旧档的目录名不受影响，id 一经生成即固定。
+
 `settings.json` 只存与主程序**共用**的偏好；副本**独占**的运行时设置（音频总线电平、
 段落字体、记忆窗口大小、自动保存回放、帧率上限、组件代管区停靠侧）住在 `user/dungeon_settings.json`
 （`persistence/dungeon_settings_repo.py`，键名与缺省见 `dungeon/settings.py`）。

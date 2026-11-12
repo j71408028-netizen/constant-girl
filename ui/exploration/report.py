@@ -11,6 +11,7 @@ import customtkinter as ctk
 from core import imaging
 from core.logic import ALL_PART_NAMES, format_size
 from core.models import CharacterSnapshot
+from persistence.character_repo import id_segment
 from ui.ctk.ctk_image import clear_ctk_label_image, format_image
 from ui.ctk.theme import (
     REPORT_PANEL_BG, REPORT_HEADER_BG, REPORT_BORDER, REPORT_BORDER_STRONG,
@@ -215,7 +216,8 @@ class ReportPanel(ctk.CTkFrame):
         os.makedirs(report_dir, exist_ok=True)
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        filename = f"{name}_报告_{timestamp}.txt"
+        # 显示名可以任意，文件名不能：分隔符与 Windows 保留字符在这里兜住
+        filename = f"{id_segment(name) or '角色'}_报告_{timestamp}.txt"
         filepath = os.path.join(report_dir, filename)
 
         with open(filepath, 'w', encoding='utf-8') as f:

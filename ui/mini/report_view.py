@@ -18,6 +18,7 @@ from core.logic import ALL_PART_NAMES, format_size, get_comparisons
 from services.exploration.quips import comparison_lines
 from core.models import CharacterSnapshot, ReportData
 from paths import data_dir
+from persistence.character_repo import id_segment
 from ui.mini import pixel as px
 
 #: 报告分两步给出：先 3 步，看过之后再问一句，答是则再给 2 步。
@@ -365,7 +366,9 @@ class MiniReportView(px.Panel):
         try:
             os.makedirs(report_dir, exist_ok=True)
             timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-            path = os.path.join(report_dir, f"{name}_报告_{timestamp}.txt")
+            # 显示名可以任意，文件名不能：分隔符与 Windows 保留字符在这里兜住
+            path = os.path.join(report_dir,
+                                f"{id_segment(name) or '角色'}_报告_{timestamp}.txt")
             with open(path, 'w', encoding='utf-8') as handle:
                 handle.write(self.last_report.report_text)
         except OSError as e:
