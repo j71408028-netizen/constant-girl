@@ -29,7 +29,7 @@ class EndingHandler:
         self._ending_trigger_index = pending.get("trigger_index", -1)
         self._ending_name = pending.get("name", "")
         # 结局图标：配置了图标才算重要结局，结局生成时一起显示
-        self.ending_icon_path = (pending.get("action_data") or {}).get("icon_path", "") or ""
+        self.ending_icon_path = (pending.get("effects") or {}).get("icon_path", "") or ""
         if self.ending_icon_path:
             self._frame.call(self._update_ending_icon)
         self._ending_thread = threading.Thread(target=self._generate_ending, daemon=True)
@@ -68,7 +68,7 @@ class EndingHandler:
                 return
             name = pending["name"]
             client = getattr(self, "ai_client", None)
-            self.ending_effects = pending.get("action_data", {}) or {}
+            self.ending_effects = pending.get("effects", {}) or {}
 
             current_item = {"type_str": PREFIX_ENDING, "text": "", "highlight": True,
                             "speaker": None}

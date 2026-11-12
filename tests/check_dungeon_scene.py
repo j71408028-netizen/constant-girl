@@ -539,13 +539,13 @@ _from_chapter = _ending_chapter_session()
 DungeonStoryEngine._terminate_from_ending_chapter(
     _from_chapter, {"name": "终章", "ending": True, "exit_address": _CELL})
 check("传送：结束章节把 exit_address 带进结算字段",
-      _from_chapter.pending_ending["action_data"]["exit_address"] == _CELL,
+      _from_chapter.pending_ending["effects"]["exit_address"] == _CELL,
       _from_chapter.pending_ending)
 _no_exit = _ending_chapter_session()
 DungeonStoryEngine._terminate_from_ending_chapter(
     _no_exit, {"name": "终章", "ending": True})
 check("传送：没写 exit_address 的结束章节结算字段为空",
-      _no_exit.pending_ending["action_data"]["exit_address"] == "")
+      _no_exit.pending_ending["effects"]["exit_address"] == "")
 
 # ---------------- 9. 同时在场触发（独特地标对比的第二条途径） ----------------
 _TOWER_CHAPTER = {"name": "城里",

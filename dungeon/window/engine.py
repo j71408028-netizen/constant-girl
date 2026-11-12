@@ -691,11 +691,11 @@ class DungeonStoryEngine:
     def _terminate_from_ending_chapter(self, chapter: dict):
         """结束章节段落数耗尽：按章节结算配置生成结局并终止副本。
 
-        结算字段（icon_path / 各增量 / 行动点返还）直接取章节自身配置，
-        与旧「结局触发器」的 action_data 结构一致，复用结局生成管线。
+        结算字段直接取章节自身配置（键名与 :meth:`_apply_ending_effects` 读的那套
+        一致），装进 ``pending_ending`` 交给结局生成管线。
         """
         name = str(chapter.get("name") or "结局").strip()
-        action_data = {
+        effects = {
             "name": name,
             "intrusion_delta": chapter.get("intrusion_delta", 0),
             "destruction_delta": chapter.get("destruction_delta", 0),
@@ -703,10 +703,10 @@ class DungeonStoryEngine:
             "action_points_refund": chapter.get("action_points_refund", 0),
             "custom_deltas": dict(chapter.get("custom_deltas") or {}),
             "icon_path": chapter.get("icon_path", ""),
-            # 与结局触发器的 action_data 同键：结局决定她出来后站在哪
+            # 结局决定她出来后站在哪（见 docs/designs/dungeon_scene.md §8）
             "exit_address": chapter.get("exit_address", ""),
         }
-        self.pending_ending = {"name": name, "action_data": action_data,
+        self.pending_ending = {"name": name, "effects": effects,
                                "trigger_index": -1, "chapter": chapter.get("name")}
         self._start_ending_generation()
 
