@@ -540,7 +540,7 @@ Dungeon 关系图文档 `scenario_graph.md` §3。
 | `chapters.normalize_chapter` | 补齐 `ending` / `max_paragraphs` / `overflow_target` 与结束章节结算字段（旧章节默认 `ending=false`、上限 99、超限离开章节） |
 | 旧配置行为 | 迁移后所有既有触发器都是「任意章节」，也不自动创建章节 |
 | 旧版 `background` / `sensitivity` 动作 | **不再执行**，配置本身不被改写，需要清理时在编辑器里删除 |
-| 旧 `ending` 动作 | **继续执行**；新做结局请改用「结束章节」 |
+| 旧 `ending` 动作 | **运行时不再执行**（仅回放兼容，见 §6）；新做结局请改用「结束章节」 |
 | 演化配置链路 | `window/base.py::_init_session` 把 `transition_matrix` 与 `section_steps` 传给 `EvolutionRules`（同时注入 `StateService.decay_depths`）；这条链路由 `check_scenario_schema.py` 守卫 |
 
 ### 9.3 回放记录
@@ -552,7 +552,7 @@ Dungeon 关系图文档 `scenario_graph.md` §3。
 | `kind: "trigger"` | 触发器触发，回放时走 `_replay_trigger`；分支动作额外带 `choice_index` / `choice_text` / `option_prompt`、`game_result` / `choice_value`、`ending_text` |
 | `kind: "characters"` | 文件头部的人物账本快照（`_init_replay` 整本还原成只读视图），不参与步进，也不进档案导出的正文 |
 | `kind: "ending"` | 结局正文 + `icon_path`：回放到此为止（再点一次关窗）。旧回放没有这条记录，末段即结束 |
-| `kind: "meta"` | 文件头部的**回放身份**：`scenario`（`id` / `content_hash` / `version_tag` / `assets`）+ `app` + `saved_at`。不参与步进，也不进档案导出 |
+| `kind: "meta"` | 文件头部的**回放身份**：`scenario`（`id` / `content_hash` / `version_tag` / `assets`）+ `app` + `saved_at`，另有 `version` 标记录语法版本（`replay.META_VERSION`，当前读取侧不解释）。不参与步进，也不进档案导出 |
 
 记录的语法在 `dungeon/replay.py`：`classify()` / `parse()` / `parse_all()` 产出 Record
 （`StepRecord` / `ChapterRecord` / `TriggerRecord` / `CharactersRecord` /
