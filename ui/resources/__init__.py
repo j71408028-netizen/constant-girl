@@ -664,7 +664,8 @@ class ResourceHubPanel(ctk.CTkFrame):
         self._goto_page("scenario")
         editor = getattr(self.gui_ref, "scenario_editor", None) if self.gui_ref else None
         if editor is not None and scenario_id:
-            editor._load_scenario(scenario_id)
+            # 走编辑器的公共切换入口：它带未保存设置的确认，直接 load 会静默丢弃
+            editor.open_scenario(scenario_id)
 
     # ───────────────── 资源键即时落盘 ─────────────────
     def _persist_resource_keys(self):

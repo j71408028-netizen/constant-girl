@@ -239,6 +239,10 @@ class ScenarioEditor(ctk.CTkFrame):
             ui.ctk.dialogs.showinfo("提示", "该挑战包中没有副本方案")
             return
 
+        # 下面会覆盖/新建方案并重新加载：切到别的方案前，先把当前方案未保存的
+        # 通用设置问一次（目标就是当前方案时，它本来会被包内配置整体替换）
+        if scenario_id != self.current_scenario_id:
+            self._confirm_unsaved_prompts()
         if self._scenario_repo.exists(scenario_id):
             self._scenario_repo.save_config(scenario_id, scenario_config)
         else:
@@ -811,10 +815,13 @@ class ScenarioEditor(ctk.CTkFrame):
             return
         try:
             self._scenario_repo.set_title(scenario_id, dlg.result["title"])
-            self._refresh_scenario_list()
-            self._load_scenario(scenario_id)
         except Exception as e:
             ui.ctk.dialogs.showerror("错误", f"重命名失败: {e}")
+            return
+        # 只重刷下拉与当前项文字。改名不动载荷，重读配置会用磁盘内容盖掉
+        # 尚未保存的通用设置（提示词、准入等），也会把快照重拍成“已保存”。
+        self._refresh_scenario_list()
+        self.scenario_combo.set(self._scenario_display(scenario_id))
 
     def _delete_scenario(self):
         if self.current_scenario_id == DEFAULT_SCENARIO_ID:
@@ -843,6 +850,8 @@ class ScenarioEditor(ctk.CTkFrame):
         if self._scenario_repo.exists(new_id):
             ui.ctk.dialogs.showerror("错误", "副本方案已存在")
             return
+        # 新建后立即切到空白方案：当前方案未保存的通用设置先问一次
+        self._confirm_unsaved_prompts()
         self.character_panel.flush_pending()
         empty_config = {
             "initial_prompt": "",
@@ -884,13 +893,22 @@ class ScenarioEditor(ctk.CTkFrame):
             return
         # 切走前先落盘角色页挂起的防抖保存（否则最近 700ms 的编辑会丢）
         self.character_panel.flush_pending()
-        # 如果提示词有修改，询问是否保存
-        if self._is_prompt_modified():
-            if ui.ctk.dialogs.askyesno("通用设置未保存", "当前通用设置已修改，是否保存？", parent=self):
-                self._save_prompts()
-            # 如果用户选择“否”，则放弃修改（快照不变）
+        self._confirm_unsaved_prompts()
         # 加载新副本方案
         self._load_scenario(choice)
+
+    def open_scenario(self, scenario_id):
+        """外部入口（资源页深跳）切方案：与下拉选择共用同一套未保存检查。"""
+        if scenario_id:
+            self._on_scenario_select(scenario_id)
+
+    def _confirm_unsaved_prompts(self):
+        """离开当前方案前处理未保存的通用设置：保存或明确放弃，避免静默丢弃。"""
+        if not self.current_scenario_id or not self._is_prompt_modified():
+            return
+        if ui.ctk.dialogs.askyesno("通用设置未保存",
+                                   "当前通用设置已修改，是否保存？", parent=self):
+            self._save_prompts()
 
     def _refresh_scenario_list(self):
         dungeon_list = self._scenario_repo.list_all()
