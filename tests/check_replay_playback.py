@@ -263,13 +263,28 @@ _end._on_next_step()
 check("结局上屏后才关窗（再点一次）", _end.closed is True)
 
 # ---------------- 5. 朗读拿的是整句，不是已上屏前缀 ----------------
-# 记录本身还不写显示标记（见 P1），但脚本段 / 插入段的源文本是带标记的：
-# 游标把 item 文本清空后，朗读必须仍拿到整句。
-_sp = _PlaybackHost()
-_sp._present_paragraph("桥还没塌，", prefix="【对话】",
-                       display_text="@李队长@“桥还没塌，")
-check("带说话人的段落朗读整句（不是空串 / 不是前缀）",
-      _sp._speech.spoken == [("李队长", "“桥还没塌")], _sp._speech.spoken)
+# 记录里的净文本没有说话人，朗读靠 display_text 还原（12.2）；游标把 item 文本
+# 清空后，朗读必须仍拿到整句。
+QUOTED = "“桥还没塌，先别过去。”"
+_sp = _PlaybackHost([{"type": "dialog", "text": QUOTED,
+                      "display_text": f"@李队长@{QUOTED}"}])
+_sp._replay_next_step()
+check("带说话人的回放段落进语音导演（念整句，不是空串 / 不是前缀）",
+      _sp._speech.spoken == [("李队长", QUOTED)], _sp._speech.spoken)
+check("说话人也在显示层还原（上屏条目带 speaker）",
+      _sp.story_history[-1].get("speaker") == "李队长", _sp.story_history[-1])
+
+_quiet = _PlaybackHost([{"type": "dialog", "text": "没有标记的叙述。"}])
+_quiet._replay_next_step()
+check("旧记录（无 display_text）不念：逐句渐显照旧",
+      _quiet._speech.spoken == [] and _quiet._reveal_active(),
+      _quiet._speech.spoken)
+
+_sp2 = _PlaybackHost()
+_sp2._present_paragraph("桥还没塌，", prefix="【对话】",
+                        display_text="@李队长@“桥还没塌，")
+check("同一段落的后续句走队列时也带说话人（_present_paragraph 直调）",
+      _sp2._speech.spoken == [("李队长", "“桥还没塌")], _sp2._speech.spoken)
 
 # ---------------- 6. 常量契约 ----------------
 check("回放复用 30 字/秒的上屏速率（未另造一套节奏）",

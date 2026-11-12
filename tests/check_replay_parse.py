@@ -8,7 +8,8 @@
 2. 内嵌配置走配置侧归一器（legacy ``volume``、非法语音预设、只写在
    ``action_data.type`` 里的动作类型）；
 3. 回放步进：显示前缀随记录走（结束章节 =「结局」）、状态快照还原、
-   ``effect`` 覆盖按步到期（含音乐档位这一维）；
+   ``effect`` 覆盖按步到期（含音乐档位这一维）、带显示层标记的原文（``display_text``）
+   随记录往返（说话人是回放朗读的唯一依据）；
 4. 结局记录：``_record_ending`` 只记一次，回放时复现正文 + 图标并终止；
 5. 同一事件的唯一写法：章节环境只由 ``kind:"chapter"`` 承载（旧格式的
    ``goto`` 平级键在解析层展开），反向 ``to_config_fragment`` 与解析成对；
@@ -246,7 +247,8 @@ class ReplayHost(DungeonStoryEngine, TriggerHandler, EndingHandler):
 
     def _present_paragraph(self, text, *, prefix, highlight=False, display_text=None):
         self.story_history.append({"type_str": prefix, "text": text,
-                                   "highlight": highlight, "speaker": None})
+                                   "highlight": highlight, "speaker": None,
+                                   "display_text": display_text})
 
 
 # ---------- 3.1 显示前缀随记录走 ----------
@@ -341,6 +343,29 @@ check("旧格式跳转记录（环境在平级键里）仍复现目标章节环�
       and _jump.chapter_bgm.get("level") == buses.step_from_level(40),
       (_jump.current_chapter, _jump.chapter_bgm))
 
+# ---------- 3.5 显示层原文（朗读与高亮的来源） ----------
+check("写侧：原文带显示层标记才写 display_text",
+      replay.display_text_field("@李队长@“桥还没塌，”") == "@李队长@“桥还没塌，”"
+      and replay.display_text_field("没有标记的叙述") == ""
+      and replay.display_text_field(None) == "")
+_marked = replay.parse({"type": "dialog", "text": "“走。”",
+                        "display_text": "@甲@“走。”"})
+check("解析：display_text 随净文本一起还原",
+      _marked.text == "“走。”" and _marked.display_text == "@甲@“走。”",
+      (_marked.text, _marked.display_text))
+check("旧记录没有 display_text（照旧逐句渐显、只是不念）",
+      replay.parse({"type": "dialog", "text": "一段"}).display_text == "")
+check("对不上的 display_text 不采信（按净文本播）",
+      replay.parse({"type": "dialog", "text": "另一段",
+                    "display_text": "@甲@“走。”"}).display_text == "")
+_play_marked = _play([{"type": "dialog", "text": "“走。”",
+                       "display_text": "@甲@“走。”"}])
+check("回放把带标记的原文交给显示管线（说话人来源）",
+      _play_marked.story_history[-1]["display_text"] == "@甲@“走。”",
+      _play_marked.story_history[-1])
+check("没有该字段的记录把空串交给显示管线（回退净文本）",
+      _plain.story_history[-1]["display_text"] == "")
+
 # ---------------- 4. 结局记录 ----------------
 class _EndingState:
     total_steps = 7
@@ -365,7 +390,8 @@ _ending = ReplayHost([{"kind": "ending", "name": "真结局", "text": "正文",
 _ending._replay_next_step()
 check("回放复现结局：正文 + 标记 + 终止",
       _ending.story_history[-1] == {"type_str": PREFIX_ENDING, "text": "正文",
-                                    "highlight": True, "speaker": None}
+                                    "highlight": True, "speaker": None,
+                                    "display_text": None}
       and _ending.ending_text == "正文" and _ending.dungeon_ended is True,
       _ending.story_history[-1])
 check("回放复现结局图标", _ending.icon_calls == ["icon.png"], _ending.icon_calls)

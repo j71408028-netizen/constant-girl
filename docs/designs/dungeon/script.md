@@ -547,7 +547,7 @@ Dungeon 关系图文档 `scenario_graph.md` §3。
 
 | 记录 | 说明 |
 |---|---|
-| 普通步进（无 `kind`） | `text` 一律是剥离显示层标记的净文本；`highlight` 记「本段有高亮」，回放按整段高亮复现（显示层的高亮单位是显示段落，回放只出整段）；`type_prefix` 是当时的显示前缀（空串 = 本段不显示前缀，固定文本里没声明类型的段落就是这样），缺失时回放按 `type` 现算、`ending_chapter` 为真时按「结局」 |
+| 普通步进（无 `kind`） | `text` 一律是剥离显示层标记的净文本；`highlight` 记「本段有高亮」，回放按整段高亮复现（显示层的高亮单位是显示段落，回放只出整段）；`type_prefix` 是当时的显示前缀（空串 = 本段不显示前缀，固定文本里没声明类型的段落就是这样），缺失时回放按 `type` 现算、`ending_chapter` 为真时按「结局」；`display_text` 只在原文带 `@说话人@` / `==` 时才写（原文与净文本相同就不写这个键），回放靠它还原说话人与高亮——说话人决定这一句念不念、念谁的声音，净文本里没有 |
 | `kind: "chapter"` | 章节进入，带当时的 `background` / `bgm` / `voice_fx`，回放不依赖当前方案。**章节进入只有这一种写法**：起始章节、`goto` 触发器、超限跳转都写它，触发器记录只说「谁触发了跳转」 |
 | `kind: "trigger"` | 触发器触发，回放时走 `_replay_trigger`；分支动作额外带 `choice_index` / `choice_text` / `option_prompt`、`game_result` / `choice_value`、`ending_text` |
 | `kind: "characters"` | 文件头部的人物账本快照（`_init_replay` 整本还原成只读视图），不参与步进，也不进档案导出的正文 |
@@ -558,7 +558,8 @@ Dungeon 关系图文档 `scenario_graph.md` §3。
 （`StepRecord` / `ChapterRecord` / `TriggerRecord` / `CharactersRecord` /
 `EndingRecord` / `ScenarioRecord`），窗口层只吃 Record，不再各自 `dict.get`。
 写侧同一个模块：`meta_record()` 产出身份记录，`material_paths()` 给出记录里用到的
-方案素材路径（写 `meta.assets` 与读侧反查共用这一份）。约定：
+方案素材路径（写 `meta.assets` 与读侧反查共用这一份），`display_text_field()` 决定
+步进记录要不要写 `display_text`（原文剥完标记与净文本相同就不写）。约定：
 
 - **内嵌配置复用配置侧归一器**（`normalize_background` / `normalize_bgm` /
   `normalize_voice_fx` / `trigger_action_type`）：记录里存的是当时的环境，重新拼成
@@ -573,6 +574,12 @@ Dungeon 关系图文档 `scenario_graph.md` §3。
 - **旧格式在 `parse_all` 收敛**：早前的 `goto` 触发器记录把目标章节的环境写在
   `chapter_background` / `chapter_bgm` / `chapter_voice_fx` 三个平级键上，读入时
   展开成「`ChapterRecord` + `TriggerRecord`」两条，读取方只认章节记录这一种形态；
+- **显示层标记只落在 `display_text` 里**：`text` 是净文本，回放重播时不认识
+  `@说话人@`——少了 `display_text`，对话句一律不出声（`_speak_item` 拿不到
+  `speaker`）。写侧只在这一段确实带标记时才写它（`display_text_field`，三个写入点：
+  AI 段落 `step_info`、固定文本段落、插入段落），解析侧反过来只要「剥完标记正好
+  等于 `text`」才采信，对不上按净文本播；旧记录没有这个字段，照旧逐句渐显、只是
+  不念。
 - **步进记录的呈现是播放，不是打印**：回放把 `text` 按内置分句器切成显示段落，
   走与实时同一条限速游标（首段逐字上屏、其余等点击），因此回放的阅读节奏与
   当场游玩一致；没有正文的记录（章节进入 / 跳转 / 覆盖 / 视效）不占点击，

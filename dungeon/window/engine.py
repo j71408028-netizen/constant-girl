@@ -223,6 +223,11 @@ class DungeonStoryEngine:
                 }
                 if step_override is not None:
                     step_info["ending_chapter"] = True
+                # 说话人只活在显示层，回放要靠它才知道这句念不念、念谁的声音；
+                # 没标记的段落不写这个键（多数段落如此）
+                display_text = replay.display_text_field(ai_text)
+                if display_text:
+                    step_info["display_text"] = display_text
 
                 self._observe_characters(final_units, clean_text,
                                          step_info["step"])
@@ -417,6 +422,9 @@ class DungeonStoryEngine:
         }
         if in_ending:
             step_info["ending_chapter"] = True
+        display_text = replay.display_text_field(paragraph.text)
+        if display_text:
+            step_info["display_text"] = display_text
         self._finish_step(display_type, clean_text, step_info)
 
     def _finish_script_chapter(self):
@@ -805,9 +813,15 @@ class DungeonStoryEngine:
         finish("回放结束（记录已播完）")
 
     def _replay_step(self, record):
-        """复现一个逻辑段落：正文 + 状态快照，并按一步消耗效果覆盖时长。"""
+        """复现一个逻辑段落：正文 + 状态快照，并按一步消耗效果覆盖时长。
+
+        ``display_text``（原文带说话人 / 高亮标记时才有）交给同一条显示管线：
+        说话人决定这一句念不念、念谁的声音，高亮按显示段落渲染。旧记录没有这个
+        字段，退回净文本——照旧逐句渐显，只是不念。
+        """
         self._present_paragraph(record.text, prefix=record.prefix,
-                                highlight=record.highlight)
+                                highlight=record.highlight,
+                                display_text=record.display_text)
         state = self.dungeon_state
         if record.intrusion_after is not None:
             state.intrusion = record.intrusion_after

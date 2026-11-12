@@ -2,7 +2,8 @@
 
 回放文件是一串记录，几种形态（写在哪见 ``docs/designs/dungeon/script.md`` §9.3）：
 
-- **步进**（无 ``kind``）：一个逻辑段落的正文与它前后的状态快照；
+- **步进**（无 ``kind``）：一个逻辑段落的正文与它前后的状态快照；正文存净文本，
+  原文带显示层标记时另存 ``display_text``（回放要靠它还原说话人与高亮）；
 - ``kind:"chapter"``：进入章节，带当时的环境（背景 / 音乐 / 语音效果）；
 - ``kind:"trigger"``：触发器动作，分支动作额外带选择结果 / 小游戏返回值；
 - ``kind:"characters"``：文件头部的人物账本快照（不参与步进）；
@@ -32,6 +33,7 @@ from dungeon.actions import trigger_action_type
 from dungeon.audio.chapters import normalize_background, normalize_bgm
 from dungeon.audio.voice_fx import normalize_voice_fx
 from dungeon.models import (PREFIX_ENDING, DungeonTextType)
+from dungeon.splitter import strip_display_markers
 
 #: 步进记录（无 kind）。
 KIND_STEP = "step"
@@ -61,6 +63,10 @@ class StepRecord:
 
     ``*_before`` 供回放起始状态还原，``*_after`` 为 ``None`` 表示该维度当时没有
     快照（旧记录），回放保持当前值不动。
+
+    ``text`` 是剥离显示层标记的净文本（落盘 / 概要 / 对话历史一律用它）。
+    ``display_text`` 只在原文带 ``@说话人@`` / ``==`` 时才写，供回放重新切出
+    显示段落——说话人决定这一句念不念、念谁的声音，净文本里没有。
     """
 
     step: int
@@ -81,6 +87,8 @@ class StepRecord:
     custom_after: dict | None
     total_casualties_after: float | None
     casualty_increase: float
+    #: 带显示层标记的原文；空串 = 与 ``text`` 相同（旧记录一律如此）
+    display_text: str = ""
 
 
 @dataclass(frozen=True)
@@ -219,6 +227,11 @@ def _parse_step(raw: dict) -> StepRecord:
     ending_chapter = bool(raw.get("ending_chapter"))
     intrusion_after = _number(raw.get("intrusion_after"))
     destruction_after = _number(raw.get("destruction_after"))
+    # 带标记的原文只在「剥完标记正好是本段净文本」时采信：对不上说明记录被改过，
+    # 按净文本播比播一段与实际内容不符的文本安全
+    display_text = _text(raw.get("display_text"))
+    if display_text and strip_display_markers(display_text) != text:
+        display_text = ""
     return StepRecord(
         step=_whole(raw.get("step")),
         text_type=text_type,
@@ -242,6 +255,7 @@ def _parse_step(raw: dict) -> StepRecord:
                       if "custom_after" in raw else None),
         total_casualties_after=_number(raw.get("total_casualties_after")),
         casualty_increase=_number(raw.get("casualty_increase"), 0.0),
+        display_text=display_text,
     )
 
 
@@ -463,6 +477,18 @@ def to_config_fragment(record):
     if isinstance(record, TriggerRecord):
         return _trigger_fragment(record)
     return None
+
+
+# ---------------- 正向：步进记录字段 ----------------
+
+def display_text_field(raw: str) -> str:
+    """写侧：步进记录的 ``display_text`` 值。
+
+    原文不带显示层标记（没有说话人也没有高亮）时返回空串，调用方据此不写这个
+    字段——绝大多数段落都是这样，回放文件因此不会整体翻倍。
+    """
+    text = raw if isinstance(raw, str) else ""
+    return text if strip_display_markers(text) != text else ""
 
 
 # ---------------- 正向：身份记录 ----------------

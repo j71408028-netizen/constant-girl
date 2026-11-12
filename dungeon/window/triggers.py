@@ -756,6 +756,9 @@ class TriggerHandler:
         }
         if in_ending:
             step_info["ending_chapter"] = True
+        display_text = replay.display_text_field(item["text"])
+        if display_text:
+            step_info["display_text"] = display_text
 
         self._finish_step(text_type, clean_text, step_info)
         # 插入段消费后下一次点击必然生成：立即补射预生成
