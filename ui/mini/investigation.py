@@ -21,7 +21,8 @@ from typing import Optional, Tuple
 
 from core.address_model import world_of
 from paths import data_dir
-from persistence.material_tables import DEFAULT_MATERIAL_TABLE, list_groups
+from persistence.material_tables import DEFAULT_MATERIAL_TABLE, TYPE_ID, list_groups
+from persistence.resources.registry import display_name
 
 EMPTY_LABEL = "（无）"
 NO_WORLD_LABEL = "未启用"
@@ -36,6 +37,9 @@ class Investigation:
     world_hint_id: Optional[str] = None
     world_hint_name: str = ""
     address_note: str = ""
+    #: 掷选时解析好的显示名（id 只作身份，不上界面）
+    scenario_name: str = ""
+    material_name: str = ""
 
     @property
     def has_scenario(self) -> bool:
@@ -51,10 +55,10 @@ class Investigation:
 
     # ---------- 展示 ----------
     def scenario_text(self) -> str:
-        return self.scenario_id or EMPTY_LABEL
+        return self.scenario_name or self.scenario_id or EMPTY_LABEL
 
     def material_text(self) -> str:
-        return self.material_table or EMPTY_LABEL
+        return self.material_name or self.material_table or EMPTY_LABEL
 
     def world_hint_text(self) -> str:
         return self.world_hint_name or EMPTY_LABEL
@@ -73,6 +77,13 @@ class Investigator:
         inv.scenario_id, inv.address_note = self._roll_scenario(position)
         inv.material_table = self._roll_material()
         inv.world_hint_id, inv.world_hint_name = self._roll_world(position)
+        # 展示名在掷选时定下：界面只认名字，id 留在数据里
+        if inv.scenario_id:
+            inv.scenario_name = self.app._scenario_repo.display_name(inv.scenario_id)
+        if inv.material_table:
+            inv.material_name = display_name(
+                TYPE_ID, inv.material_table, data_dir(),
+                getattr(self.app, "world_state", None))
         return inv
 
     # ==================== 掷选 ====================

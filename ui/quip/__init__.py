@@ -9,7 +9,9 @@ import re
 from core.logic import SIZE_CATEGORIES, size_level_text
 from persistence import QuipRepo
 from persistence.quip_repo import DEFAULT_QUIP_STYLE
-from services.challenges import get_challenge_packs, import_quip_challenge_pack
+from services.challenges import (
+    challenge_pack_titles, get_challenge_packs, import_quip_challenge_pack,
+)
 from ui.ctk.managers import TreeviewManager, CardManager
 from ui.ctk.widgets import ClickableCard, CTkScrollableDropdownFrame
 from ui.ctk.dialogs import BaseDialog
@@ -29,6 +31,8 @@ from ui.ctk import fonts as ui_fonts
 
 
 class QuipCardManager(CardManager):
+    RESOURCE_TYPE = "quips"
+
     SIZE_CATEGORIES = SIZE_CATEGORIES
     SUMMARY_RE = re.compile(r'\s*\[summary:(.*?)\]$')
 
@@ -64,11 +68,14 @@ class QuipCardManager(CardManager):
     def _get_default_style(self):
         return DEFAULT_QUIP_STYLE
 
-    def _create_style_impl(self, name):
-        self.quip_repo.create_style(name)
+    def _create_style_impl(self, style_id, title):
+        self.quip_repo.create_style(style_id, title=title)
 
-    def _rename_style_impl(self, old, new):
-        self.quip_repo.rename_style(old, new)
+    def _set_style_title_impl(self, style_id, title):
+        self.quip_repo.set_title(style_id, title)
+
+    def _style_display_name(self, style_id):
+        return self.quip_repo.display_name(style_id)
 
     def _delete_style_impl(self, name):
         self.quip_repo.delete_style(name)
@@ -119,7 +126,7 @@ class QuipCardManager(CardManager):
             description=(
                 "注册该描述风格所在的地址（仅注册最上面的若干级，维度必填）。\n"
                 "报告生成时，该风格只能用于同一 / 包含它的地标地址之后的描述。\n"
-                "当前风格：" + style
+                "当前风格：" + self.quip_repo.display_name(style)
             ),
             initial=current)
         if dlg.result is not None:
@@ -137,13 +144,24 @@ class QuipCardManager(CardManager):
         return packs
 
     def _build_combined_items(self):
+        """下拉条目：显示名在前（选择回 id），挑战包导入项挂在末尾。"""
         styles = self.quip_repo.get_styles()
         packs = self._get_challenge_packs_with_keys()
-        items = list(styles)
+        items = []
         text_colors = {}
         self._pack_display_map = {}
+        self._style_display_map = {}
+        used = set()
+        for style in styles:
+            display = self._style_display_name(style)
+            if display in used:   # 显示名撞车时补 id，保证每行可区分
+                display = f"{display}（{style}）"
+            used.add(display)
+            items.append(display)
+            self._style_display_map[display] = style
+        titles = challenge_pack_titles(self._settings_repo, packs)
         for pack in packs:
-            display = f"⚔ {os.path.splitext(pack)[0]}"
+            display = f"⚔ {titles.get(pack) or os.path.splitext(pack)[0]}"
             items.append(display)
             text_colors[display] = QUIP_LINK
             self._pack_display_map[display] = pack
@@ -187,8 +205,9 @@ class QuipCardManager(CardManager):
             self.gui.load_combined_quips()
             ui.ctk.dialogs.showinfo("成功", f"已从挑战包导入 {imported} 条描述数据")
         else:
-            if choice != self._get_current_style():
-                self._set_current_style(choice)
+            style = getattr(self, "_style_display_map", {}).get(choice, choice)
+            if style != self._get_current_style():
+                self._set_current_style(style)
                 self.load_items()
                 self._refresh_active_view()
 
@@ -231,12 +250,12 @@ class QuipCardManager(CardManager):
 
     # ---------- 风格控件 ----------
     def edit_custom_types(self, on_saved=None):
-        style = self.style_var.get()
+        style = self._get_current_style()
         meta = self.quip_repo.load_meta(style)
         custom = meta.get("custom_types", {})
 
         dialog = BaseDialog(self)
-        dialog.title(f"编辑自定义类型 - {style}")
+        dialog.title(f"编辑自定义类型 - {self._style_display_name(style)}")
         dialog.geometry("600x320")
         dialog.transient(self)
         # 抓取延到窗口可见之后（X11 要求 viewable，见 BaseDialog._grab_deferred）
@@ -408,7 +427,7 @@ class QuipCardManager(CardManager):
         送检的是页面上此刻的数据（``all_items``）而不是再读一遍 CSV：校验看到的必须
         等于用户看到的，定位也按同一份下标反查。
         """
-        style = self.style_var.get()
+        style = self._get_current_style()
         size = self.size_var.get()
         if not style:
             return
@@ -487,7 +506,7 @@ class QuipCardManager(CardManager):
 
     # ---------- 数据加载与保存 ----------
     def load_items(self):
-        style = self.style_var.get()
+        style = self._get_current_style()
         size = self.size_var.get()
         quips = self.quip_repo.load(style)
         matrix = quips.get(size, {})
@@ -509,7 +528,7 @@ class QuipCardManager(CardManager):
         self.all_items = items
 
     def save_items(self, items):
-        style = self.style_var.get()
+        style = self._get_current_style()
         size = self.size_var.get()
         quips = self.quip_repo.load(style)
         new_matrix = {}
@@ -682,7 +701,7 @@ class QuipCardManager(CardManager):
             ui.ctk.dialogs.showwarning("警告", "不能移动到相同位置")
             return
 
-        style = self.style_var.get()
+        style = self._get_current_style()
         quips = self.quip_repo.load(style)
 
         if target_size not in quips:
@@ -770,7 +789,7 @@ class QuipCardManager(CardManager):
             intrusion=item['intrusion'],
             destruction=item['destruction'],
             summary=item['summary'],
-            style_name=self.style_var.get(),
+            style_name=self._get_current_style(),
             quip_repo=self.quip_repo,
             step=item.get('step', None)
         )
@@ -875,7 +894,7 @@ text_color=QUIP_ERR,
         self.quip_mgr.load_items()
         items = self.quip_mgr.all_items
 
-        style = self.quip_mgr.style_var.get()
+        style = self.quip_mgr._get_current_style()
         meta = self.quip_repo.load_meta(style)
         custom_types = meta.get("custom_types", {})
         builtin_type_names = {'a': '衣着', 'b': '姿势'}

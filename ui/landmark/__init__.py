@@ -9,7 +9,9 @@ import services.worlds.address_registry as address_registry
 import ui.ctk.dialogs
 from core.models import Landmark
 from persistence.landmark_repo import LandmarkRepo, DEFAULT_LANDMARK_STYLE
-from services.challenges import get_challenge_packs, import_landmark_challenge_pack
+from services.challenges import (
+    challenge_pack_titles, get_challenge_packs, import_landmark_challenge_pack,
+)
 from ui.ctk.dialogs import BaseDialog
 from ui.ctk.managers import CardManager
 from ui.ctk.widgets import ClickableCard, CTkScrollableDropdownFrame
@@ -25,6 +27,8 @@ from ui.ctk import fonts as ui_fonts
 
 
 class LandmarkCardManager(CardManager):
+    RESOURCE_TYPE = "landmarks"
+
     SIZE_RANGES = [
         (0, 3, "0~3米"),
         (3, 10, "3~10米"),
@@ -62,11 +66,14 @@ class LandmarkCardManager(CardManager):
     def _get_default_style(self):
         return DEFAULT_LANDMARK_STYLE
 
-    def _create_style_impl(self, name):
-        self.landmark_repo.create_style(name)
+    def _create_style_impl(self, style_id, title):
+        self.landmark_repo.create_style(style_id, title=title)
 
-    def _rename_style_impl(self, old, new):
-        self.landmark_repo.rename_style(old, new)
+    def _set_style_title_impl(self, style_id, title):
+        self.landmark_repo.set_title(style_id, title)
+
+    def _style_display_name(self, style_id):
+        return self.landmark_repo.display_name(style_id)
 
     def _delete_style_impl(self, name):
         self.landmark_repo.delete_style(name)
@@ -117,7 +124,7 @@ class LandmarkCardManager(CardManager):
             description=(
                 "注册该地标风格所在的地址。只能选择已申领的地址"
                 "（详见 docs/designs/address-system/authoring.md）。\n"
-                "当前风格：" + style
+                "当前风格：" + self._style_display_name(style)
             ),
             initial=current, landmark_style=True)
         if dlg.result is not None:
@@ -137,13 +144,24 @@ class LandmarkCardManager(CardManager):
         return packs
 
     def _build_combined_items(self):
+        """下拉条目：显示名在前（选择回 id），挑战包导入项挂在末尾。"""
         styles = self.landmark_repo.get_styles()
         packs = self._get_challenge_packs_with_keys()
-        items = list(styles)
+        items = []
         text_colors = {}
         self._pack_display_map = {}
+        self._style_display_map = {}
+        used = set()
+        for style in styles:
+            display = self._style_display_name(style)
+            if display in used:   # 显示名撞车时补 id，保证每行可区分
+                display = f"{display}（{style}）"
+            used.add(display)
+            items.append(display)
+            self._style_display_map[display] = style
+        titles = challenge_pack_titles(self._settings_repo, packs)
         for pack in packs:
-            display = f"⚔ {os.path.splitext(pack)[0]}"
+            display = f"⚔ {titles.get(pack) or os.path.splitext(pack)[0]}"
             items.append(display)
             text_colors[display] = LM_LINK
             self._pack_display_map[display] = pack
@@ -187,7 +205,7 @@ class LandmarkCardManager(CardManager):
             self.gui.load_combined_landmarks()
             ui.ctk.dialogs.showinfo("成功", f"已从挑战包导入 {imported} 条地标数据")
         else:
-            new_style = choice
+            new_style = getattr(self, "_style_display_map", {}).get(choice, choice)
             if new_style == self._get_current_style():
                 return
             self._set_current_style(new_style)
@@ -197,14 +215,14 @@ class LandmarkCardManager(CardManager):
 
     def _set_combo_to_current_style(self):
         current = self._get_current_style()
-        self.style_var.set(current)
+        self.style_var.set(self._style_display_name(current))
 
     def refresh_styles(self):
         self.styles = self.landmark_repo.get_styles()
         self._rebuild_dropdown()
         if self.gui.current_style not in self.styles:
             self.gui.current_style = self.styles[0] if self.styles else DEFAULT_LANDMARK_STYLE
-        self.style_var.set(self.gui.current_style)
+        self.style_var.set(self._style_display_name(self.gui.current_style))
 
     # ---------- 数据加载与保存 ----------
     def load_items(self):

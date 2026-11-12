@@ -1017,8 +1017,14 @@ class StyleListBox(customtkinter.CTkFrame):
             font=ui_fonts.ui_font(11)
         ).pack(side=side, padx=padx)
 
-    def sync_items(self, items, selected_indices=None):
+    def sync_items(self, items, selected_indices=None, keys=None):
+        """填充条目；``keys`` 给出显示文本背后的身份（资源 id 等）。
+
+        有 ``keys`` 时选择结果一律回原始的 id，显示文本只用于界面——显示名可以
+        随时改，选择态（设置项里的 id）不受影响。
+        """
         self._updating = True
+        self._keys = list(keys) if keys is not None else None
         self.listbox.delete(0, tk.END)
         for item in items:
             self.listbox.insert(tk.END, item)
@@ -1027,9 +1033,16 @@ class StyleListBox(customtkinter.CTkFrame):
                 self.listbox.selection_set(i)
         self._updating = False
 
+    def _key_at(self, index: int) -> str:
+        """某行的身份：优先取 ``sync_items`` 给的 keys，否则从文本里剥。"""
+        keys = getattr(self, "_keys", None)
+        if keys is not None and 0 <= index < len(keys):
+            return str(keys[index])
+        return self.extract_raw_name(self.listbox.get(index))
+
     def get_selected_raw_names(self):
         indices = self.listbox.curselection()
-        return [self.extract_raw_name(self.listbox.get(i)) for i in indices]
+        return [self._key_at(i) for i in indices]
 
     def select_all(self):
         self.listbox.selection_set(0, tk.END)
@@ -1042,7 +1055,7 @@ class StyleListBox(customtkinter.CTkFrame):
     def set_default(self, default_name="chinese_mix"):
         self.listbox.selection_clear(0, tk.END)
         for i in range(self.listbox.size()):
-            if self.extract_raw_name(self.listbox.get(i)) == default_name:
+            if self._key_at(i) == default_name:
                 self.listbox.selection_set(i)
                 break
         self._notify_change()

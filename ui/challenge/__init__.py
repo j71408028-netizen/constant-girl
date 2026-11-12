@@ -7,6 +7,7 @@ import customtkinter as ctk
 
 from core.ai import resolve_ai_config
 from dungeon.terms import scenario_config_of, scenario_id_of
+from persistence.resources import registry
 from services.challenges import ChallengeService
 from core.models import Personality, BodyPreset
 from core.address_model import world_of
@@ -56,12 +57,34 @@ class ChallengeModePanel(ctk.CTkFrame):
         # ---- 创建挑战包折叠块（嵌入主界面） ----
         form_body = self.create_block.body
 
-        ctk.CTkLabel(form_body, text="挑战包名称", font=ui_fonts.ui_font(13, "bold"),
-                     text_color=CHAL_TITLE).pack(anchor='w', pady=(6, 2), padx=10)
-        self.pack_name_entry = ctk.CTkEntry(form_body, width=300, placeholder_text="输入挑战包名称（不含扩展名）",
+        name_head = ctk.CTkFrame(form_body, fg_color="transparent")
+        name_head.pack(fill='x', pady=(6, 2), padx=10)
+        ctk.CTkLabel(name_head, text="挑战包名称", font=ui_fonts.ui_font(13, "bold"),
+                     text_color=CHAL_TITLE).pack(side='left')
+        self.pack_id_var = ctk.StringVar(value="")
+        self.pack_advanced_var = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(name_head, text="高级：指定 ID", variable=self.pack_advanced_var,
+                        command=self._toggle_pack_id_row, font=ui_fonts.ui_font(11),
+                        text_color=CHAL_TEXT_MUTED, fg_color=CHAL_OK,
+                        hover_color=CHAL_OK_HOVER, border_color=CHAL_BORDER_STRONG,
+                        checkbox_width=16, checkbox_height=16
+                        ).pack(side='right')
+        self.pack_name_entry = ctk.CTkEntry(form_body, width=300,
+                                            placeholder_text="输入挑战包名称（界面显示名，可随时改）",
                                             border_width=1, border_color=CHAL_BORDER_STRONG,
                                             fg_color=CHAL_PANEL_BG)
         self.pack_name_entry.pack(fill='x', pady=(0, 6), padx=10)
+        # 高级：手填 id（唯一标识，创建后不进界面）；不勾选时按名称自动派生
+        self.pack_id_row = ctk.CTkFrame(form_body, fg_color="transparent")
+        ctk.CTkLabel(self.pack_id_row, text="ID", width=40, anchor='w',
+                     font=ui_fonts.ui_font(11), text_color=CHAL_TEXT_MUTED).pack(side='left')
+        self.pack_id_entry = ctk.CTkEntry(self.pack_id_row, width=240,
+                                          placeholder_text="留空则按名称自动分配",
+                                          textvariable=self.pack_id_var,
+                                          border_width=1, border_color=CHAL_BORDER_STRONG,
+                                          fg_color=CHAL_PANEL_BG)
+        self.pack_id_entry.pack(side='left', fill='x', expand=True)
+        self.pack_name_entry.bind("<KeyRelease>", lambda _e: self._refresh_pack_id_placeholder())
 
         # ---- 两列布局 ----
         three_col = ctk.CTkFrame(form_body, fg_color="transparent")
@@ -100,8 +123,8 @@ class ChallengeModePanel(ctk.CTkFrame):
 
         ctk.CTkLabel(left_col, text="剧本", font=ui_fonts.ui_font(11, "bold"),
                      text_color=CHAL_TEXT_SOFT).pack(anchor='w', pady=2)
-        dungeons = self.gui._scenario_repo.list_all()
-        self.dungeon_combo = ctk.CTkComboBox(left_col, values=dungeons, state="readonly",
+        self._scenario_map = {}
+        self.dungeon_combo = ctk.CTkComboBox(left_col, values=[], state="readonly",
                                              border_width=1, border_color=CHAL_BORDER_STRONG,
                                              fg_color=CHAL_PANEL_BG,
                                              button_color=CHAL_HOVER,
@@ -110,7 +133,7 @@ class ChallengeModePanel(ctk.CTkFrame):
                                              dropdown_hover_color=CHAL_HOVER)
         self.dungeon_combo.pack(fill='x', pady=(2, 6))
         self._dungeon_dropdown = CTkScrollableDropdownFrame(
-            attach=self.dungeon_combo, values=dungeons, command=self.dungeon_combo.set,
+            attach=self.dungeon_combo, values=[], command=self.dungeon_combo.set,
             height=160, button_height=28,
             fg_color=CHAL_PANEL_BG,
             hover_color=CHAL_CARD_HOVER,
@@ -120,8 +143,7 @@ class ChallengeModePanel(ctk.CTkFrame):
             scrollbar_button_color=CHAL_HOVER,
             scrollbar_button_hover_color=CHAL_HOVER,
             frame_border_width=1, justify="left")
-        if dungeons:
-            self.dungeon_combo.set(dungeons[0])
+        self._sync_scenario_choices()
 
         # 中列：地标风格组
         center_col = ctk.CTkFrame(three_col, fg_color="transparent")
@@ -216,14 +238,15 @@ class ChallengeModePanel(ctk.CTkFrame):
             if filter_world and reg_world and reg_world != filter_world:
                 continue  # 同一维度自动筛选：隐藏其它维度的地标风格
             landmarks = self.gui._landmark_repo.load(style)
-            display_items.append(f"{style} ({len(landmarks)})")
+            display = self.gui._landmark_repo.display_name(style)
+            display_items.append(f"{display} ({len(landmarks)})")
             kept.append(style)
         selected = [s for s in getattr(self, "_sel_lm", []) if s in kept]
         if not selected and kept:
             default = self.gui._landmark_repo.default_style
             selected = [default] if default in kept else [kept[0]]
         idx = [i for i, s in enumerate(kept) if s in selected]
-        self.landmark_selector.sync_items(display_items, idx or None)
+        self.landmark_selector.sync_items(display_items, idx or None, keys=kept)
         self._sel_lm = self.landmark_selector.get_selected_raw_names() or (selected if kept else [])
 
     def _lock_world_from_selection(self):
@@ -276,15 +299,9 @@ class ChallengeModePanel(ctk.CTkFrame):
                   else "▶ 创建挑战包"))
 
     def refresh_world_resources(self):
-        """世界包状态变化后，刷新地标风格组、副本方案下拉框与挑战包列表。"""
+        """世界包状态变化后，刷新地标风格组、剧本下拉框与挑战包列表。"""
         self._sync_landmark_styles()
-        dungeons = self.gui._scenario_repo.list_all()
-        self.dungeon_combo.configure(values=dungeons)
-        if hasattr(self, '_dungeon_dropdown'):
-            self._dungeon_dropdown.configure(values=dungeons)
-        current = self.dungeon_combo.get()
-        if current not in dungeons:
-            self.dungeon_combo.set(dungeons[0] if dungeons else "")
+        self._sync_scenario_choices()
         self._refresh_packs()
 
     def _refresh_packs(self):
@@ -311,7 +328,8 @@ class ChallengeModePanel(ctk.CTkFrame):
             pack_base = meta.get("pack_base", os.path.splitext(filename)[0])
             bundled = meta.get("bundled", False)
             intro = meta.get("intro", "")[:60]
-            title = os.path.splitext(filename)[0] if filename else pack_base
+            title = (meta.get("title") or os.path.splitext(filename)[0]
+                     or pack_base)
             if not bundled and world_active:
                 title = f"{title}  ·  非本世界场景"
 
@@ -375,6 +393,11 @@ class ChallengeModePanel(ctk.CTkFrame):
 
     def _on_create_ok(self, key):
         ui.ctk.dialogs.showinfo("成功", f"挑战包已创建\n自动生成秘钥:\n{key}\n\n秘钥已写入环境变量")
+        # 表单复位：名称与手填 id 都不该留在下一次新建里
+        self.pack_name_entry.delete(0, "end")
+        self.pack_id_var.set("")
+        self.pack_advanced_var.set(False)
+        self.pack_id_row.pack_forget()
         self._refresh_packs()
         if hasattr(self.gui, 'refresh_challenge_pack_dropdowns'):
             self.gui.refresh_challenge_pack_dropdowns()
@@ -384,15 +407,16 @@ class ChallengeModePanel(ctk.CTkFrame):
             ui.ctk.dialogs.showwarning("提示", "世界包附带的挑战包不可删除")
             return
         filename = os.path.basename(file_path)
-        if not ui.ctk.dialogs.askyesno("确认", f"确定删除挑战包 '{filename}' 吗？"):
+        display = (self.challenge_mgr.pack_title(filename, file_path=file_path)
+                   or os.path.splitext(filename)[0])
+        if not ui.ctk.dialogs.askyesno("确认", f"确定删除挑战包「{display}」吗？"):
             return
         card = self._pack_cards.pop(file_path, None)
         if card:
             card.destroy()
 
         def _do_work():
-            if os.path.exists(file_path):
-                os.remove(file_path)
+            self.challenge_mgr.delete_pack(file_path)
             self.after(0, lambda: self._on_delete_done())
 
         self.after(50, _do_work)
@@ -404,6 +428,41 @@ class ChallengeModePanel(ctk.CTkFrame):
             self._refresh_packs()
         if hasattr(self.gui, 'refresh_challenge_pack_dropdowns'):
             self.gui.refresh_challenge_pack_dropdowns()
+
+    def _sync_scenario_choices(self):
+        """剧本下拉：只显示方案名，id 留在映射里（同名时补 id 区分）。"""
+        labels, mapping = [], {}
+        for scenario_id in self.gui._scenario_repo.list_all():
+            display = self.gui._scenario_repo.display_name(scenario_id) or scenario_id
+            if display in mapping:
+                display = f"{display} ({scenario_id})"
+            labels.append(display)
+            mapping[display] = scenario_id
+        self._scenario_map = mapping
+        self.dungeon_combo.configure(values=labels)
+        if hasattr(self, "_dungeon_dropdown"):
+            self._dungeon_dropdown.configure(values=labels)
+        if self.dungeon_combo.get() not in labels:
+            self.dungeon_combo.set(labels[0] if labels else "")
+
+    # ---------- 新建：名称进界面，id 默认派生（高级里可手填） ----------
+    def _toggle_pack_id_row(self):
+        if self.pack_advanced_var.get():
+            self.pack_id_row.pack(fill='x', pady=(0, 6), padx=10,
+                                 after=self.pack_name_entry)
+            self._refresh_pack_id_placeholder()
+        else:
+            self.pack_id_row.pack_forget()
+            self.pack_id_var.set("")
+
+    def _pack_taken_ids(self):
+        return [os.path.splitext(name)[0]
+                for name in self.challenge_mgr.get_available_packs()]
+
+    def _refresh_pack_id_placeholder(self):
+        candidate = registry.suggest_id("challenges", self.pack_name_entry.get(),
+                                        self._pack_taken_ids())
+        self.pack_id_entry.configure(placeholder_text=f"留空则用 {candidate}")
 
     def _toggle_create_block(self):
         self.create_block.toggle()
@@ -417,10 +476,25 @@ class ChallengeModePanel(ctk.CTkFrame):
                 and self.gui.world_state.active):
             ui.ctk.dialogs.showwarning("提示", "世界包加载期间不可创建挑战包")
             return
-        pack_name = self.pack_name_entry.get().strip()
-        if not pack_name:
+        pack_title = self.pack_name_entry.get().strip()
+        if not pack_title:
             ui.ctk.dialogs.showerror("错误", "请输入挑战包名称")
             return
+        taken = self._pack_taken_ids()
+        manual_id = (self.pack_id_var.get().strip()
+                     if self.pack_advanced_var.get() else "")
+        if manual_id:
+            if not registry.valid_id_of("challenges", manual_id):
+                ui.ctk.dialogs.showerror(
+                    "错误", f"ID「{manual_id}」不合规：小写字母、数字、下划线、"
+                           "点与连字符，且以字母或数字开头")
+                return
+            if manual_id in taken:
+                ui.ctk.dialogs.showerror("错误", f"ID「{manual_id}」已被占用")
+                return
+            pack_name = manual_id
+        else:
+            pack_name = registry.suggest_id("challenges", pack_title, taken)
 
         choice = self.char_combo.get()
         cid = self.char_map.get(choice, ("", {}))[0]
@@ -433,9 +507,9 @@ class ChallengeModePanel(ctk.CTkFrame):
             ui.ctk.dialogs.showerror("错误", "请至少选择一个地标风格组")
             return
 
-        dg = self.dungeon_combo.get()
+        dg = self._scenario_map.get(self.dungeon_combo.get(), "")
         if not dg:
-            ui.ctk.dialogs.showerror("错误", "请选择副本方案")
+            ui.ctk.dialogs.showerror("错误", "请选择剧本")
             return
 
         intro = self.intro_text.get("1.0", "end-1c").strip()
@@ -446,7 +520,7 @@ class ChallengeModePanel(ctk.CTkFrame):
         def _do_work():
             try:
                 key = self.challenge_mgr.create_challenge(
-                    cid, lms, dg, intro, pack_name
+                    cid, lms, dg, intro, pack_name, title=pack_title
                 )
                 self.after(0, lambda k=key: self._on_create_ok(k))
             except Exception as e:

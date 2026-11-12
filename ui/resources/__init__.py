@@ -484,9 +484,16 @@ class ResourceHubPanel(ctk.CTkFrame):
                             lambda sid=scenario_id: self._goto_scenario_editor(sid),
                             SETTINGS_TEXT_SOFT),)
             self._item_row(
-                frame, scenario_id,
+                frame, self._scenario_display(scenario_id),
                 badge="随包启用" if scenario_id in bundled else None,
                 buttons=buttons)
+
+    def _scenario_display(self, scenario_id):
+        """方案 id → 界面显示名（仓库不可用时回落成 id）。"""
+        repo = getattr(self.gui_ref, "_scenario_repo", None) if self.gui_ref else None
+        if repo is None:
+            return scenario_id
+        return repo.display_name(scenario_id)
 
     # ───────────────── 分区：取材表 ─────────────────
     @staticmethod
@@ -502,12 +509,14 @@ class ResourceHubPanel(ctk.CTkFrame):
         body.columnconfigure(1, weight=3, uniform="hub_tables")
 
         _, ctrl = self._make_table_row(body, 0, "当前取材表")
-        self.material_table_var = tk.StringVar(value=self.material_table)
+        self.material_table_var = tk.StringVar(
+            value=self._material_display(self.material_table))
         groups = self._pinned_front(self._material_groups(), self.material_table)
         if not groups:
             groups = [DEFAULT_MATERIAL_TABLE]
+        values, self._material_display_map = self._material_choices(groups)
         self.material_table_menu = self._make_option_button(
-            ctrl, groups, self._on_material_table_changed, self.material_table_var
+            ctrl, values, self._on_material_table_changed, self.material_table_var
         )
 
         self._material_members_frame = ctk.CTkFrame(body, fg_color="transparent")
@@ -518,6 +527,22 @@ class ResourceHubPanel(ctk.CTkFrame):
     def _material_groups(self):
         """可用取材表组名（包内 + 自由层）。"""
         return self.name_repo.get_groups()
+
+    def _material_display(self, group):
+        """取材表 id → 界面显示名（未命名时回落成 id）。"""
+        return registry.display_name("materials", group,
+                                     self._resource_data_dir(), self.world_state)
+
+    def _material_choices(self, groups):
+        """``(下拉显示项, {显示项: 组 id})``，显示名撞车时补 id。"""
+        values, mapping = [], {}
+        for group in groups:
+            display = self._material_display(group)
+            if display in mapping:
+                display = f"{display}（{group}）"
+            values.append(display)
+            mapping[display] = group
+        return values, mapping
 
     def _refresh_material_members(self):
         """重建组内成员明细：文件名 + 是否回落内置。"""
@@ -599,8 +624,8 @@ class ResourceHubPanel(ctk.CTkFrame):
         cards: List[IconCard] = []
         for meta in metas:
             filename = meta.get("filename", "")
-            title = meta.get("pack_base") or (
-                os.path.splitext(filename)[0] if filename else "未命名")
+            title = (meta.get("title") or meta.get("pack_base")
+                     or (os.path.splitext(filename)[0] if filename else "未命名"))
             icon = manager.pack_icon_path(meta.get("file_path", "")) or default_icon
             cards.append(IconCard(
                 frame, title, icon_path=icon, fallback_emoji="⚡",
@@ -626,7 +651,8 @@ class ResourceHubPanel(ctk.CTkFrame):
         groups = self._pinned_front(self._material_groups(), self.material_table)
         if not groups:
             groups = [DEFAULT_MATERIAL_TABLE]
-        self.material_table_menu.configure(values=groups)
+        values, self._material_display_map = self._material_choices(groups)
+        self.material_table_menu.configure(values=values)
         self._refresh_material_members()
 
     def _goto_page(self, page_key):
@@ -743,8 +769,9 @@ class ResourceHubPanel(ctk.CTkFrame):
         if not groups:
             groups = [DEFAULT_MATERIAL_TABLE]
         self.material_table = groups[0]
-        self.material_table_var.set(self.material_table)
-        self.material_table_menu.configure(values=groups)
+        values, self._material_display_map = self._material_choices(groups)
+        self.material_table_var.set(self._material_display(self.material_table))
+        self.material_table_menu.configure(values=values)
         self._refresh_material_members()
 
     def _after_world_state_change(self):
@@ -770,7 +797,8 @@ class ResourceHubPanel(ctk.CTkFrame):
             ui.ctk.dialogs.showerror("错误", "世界包功能不可用")
             return
         dialog = WorldPackCreateDialog(
-            self, available_resources=self._build_available_resources())
+            self, available_resources=self._build_available_resources(),
+            data_dir=self._resource_data_dir(), world_state=self.world_state)
         cfg = dialog.result
         if not cfg:
             return
@@ -844,8 +872,9 @@ class ResourceHubPanel(ctk.CTkFrame):
 
     # ───────────────── 回调 ─────────────────
     def _on_material_table_changed(self, choice):
-        self.material_table = choice or DEFAULT_MATERIAL_TABLE
-        self.material_table_var.set(self.material_table)
+        self.material_table = (getattr(self, "_material_display_map", {}).get(choice, choice)
+                               or DEFAULT_MATERIAL_TABLE)
+        self.material_table_var.set(self._material_display(self.material_table))
         self._refresh_material_members()
         if self.on_material_table_changed:
             self.on_material_table_changed(self.material_table)
@@ -865,13 +894,16 @@ class ResourceHubPanel(ctk.CTkFrame):
             if filter_world and reg_world and reg_world != filter_world:
                 continue  # 同一维度自动筛选：隐藏其它维度的地标风格
             landmarks = self.landmark_repo.load(style)
-            entries.append((f"{style} ({len(landmarks)})", style,
+            display = self.landmark_repo.display_name(style)
+            entries.append((f"{display} ({len(landmarks)})", style,
                             style in selected))
         # 启用（已选）风格排在最前，其余保持原顺序
         entries.sort(key=lambda e: not e[2])
         display_items = [e[0] for e in entries]
+        keys = [e[1] for e in entries]
         selected_indices = [i for i, e in enumerate(entries) if e[2]]
-        self.landmark_selector.sync_items(display_items, selected_indices)
+        self.landmark_selector.sync_items(display_items, selected_indices,
+                                          keys=keys)
 
     def _sync_quip_styles(self, filter_world=None):
         styles = self.quip_repo.get_styles()
@@ -888,13 +920,16 @@ class ResourceHubPanel(ctk.CTkFrame):
                 matrix = quips.get(size, {})
                 total = sum(len(qlist) for qlist in matrix.values())
                 counts.append(str(total))
-            entries.append((f"{style} ({', '.join(counts)})", style,
+            display = self.quip_repo.display_name(style)
+            entries.append((f"{display} ({', '.join(counts)})", style,
                             style in selected))
         # 启用（已选）风格排在最前，其余保持原顺序
         entries.sort(key=lambda e: not e[2])
         display_items = [e[0] for e in entries]
+        keys = [e[1] for e in entries]
         selected_indices = [i for i, e in enumerate(entries) if e[2]]
-        self.quip_selector.sync_items(display_items, selected_indices)
+        self.quip_selector.sync_items(display_items, selected_indices,
+                                      keys=keys)
 
     def _lock_world_from_selection(self) -> Optional[str]:
         """当前选中风格共同锁定的维度（先地标风格后描述风格）；未注册返回 None。"""

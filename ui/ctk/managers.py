@@ -5,7 +5,7 @@ from typing import List, Any, Optional
 
 import customtkinter as ctk
 
-from ui.ctk.dialogs import InputDialog
+from ui.ctk.dialogs import ResourceNameDialog
 from ui.ctk.widgets import ClickableCard, CTkSegmentedControl
 from ui.ctk.theme import (
     MGR_BG, MGR_HEADER_BG, MGR_BORDER, MGR_BORDER_STRONG,
@@ -311,7 +311,16 @@ class TreeviewManager(ctk.CTkFrame):
 
 
 class CardManager(ctk.CTkFrame):
-    """重构后的卡片式管理基类 - 分离视图，流畅点击"""
+    """重构后的卡片式管理基类 - 分离视图，流畅点击
+
+    子类用 ``RESOURCE_TYPE`` 声明自己维护的资源类型（``landmarks`` / ``quips``）：
+    新建时按名称自动派生带类型前缀的 id，界面只认名称；id 作为「高级」项可手填，
+    改名只写显示名（信封 ``title``）。
+    """
+
+    #: 本管理器维护的资源类型 id（子类必须声明）
+    RESOURCE_TYPE = ""
+
     def __init__(self, parent, gui_ref, item_name="条目"):
         super().__init__(parent, fg_color="transparent", corner_radius=0)
         self.gui = gui_ref
@@ -339,14 +348,19 @@ class CardManager(ctk.CTkFrame):
     def _get_default_style(self) -> str:
         raise NotImplementedError
 
-    def _create_style_impl(self, name: str):
+    def _create_style_impl(self, style_id: str, title: str):
         raise NotImplementedError
 
-    def _rename_style_impl(self, old: str, new: str):
+    def _set_style_title_impl(self, style_id: str, title: str):
+        """写显示名。改名不换 id，因此不涉及任何按 id 记录的引用。"""
         raise NotImplementedError
 
     def _delete_style_impl(self, name: str):
         raise NotImplementedError
+
+    def _style_display_name(self, style_id: str) -> str:
+        """风格 id → 界面显示名；子类用各自仓库实现（含世界包接管）。"""
+        return str(style_id or "")
 
     def _notify_style_list_changed(self):
         """风格新建/重命名/删除后，通知刷新各处 StyleListBox。"""
@@ -400,20 +414,24 @@ class CardManager(ctk.CTkFrame):
     # ---------- 通用风格管理方法 ----------
     def refresh_styles(self):
         styles = self._get_style_list()
-        self.style_combo.configure(values=styles)
+        self.style_combo.configure(
+            values=[self._style_display_name(style) for style in styles])
         current = self._get_current_style()
         if current not in styles:
             current = styles[0] if styles else self._get_default_style()
             self._set_current_style(current)
-        self.style_var.set(current)
+        self.style_var.set(self._style_display_name(current))
 
     def create_style(self):
-        dlg = InputDialog(self, title="新建风格", prompt="请输入风格名称:")
-        name = dlg.get_input()
-        if not name or not name.strip():
+        """新建风格：只问名称，id 自动分配（高级里可手填）。"""
+        dlg = ResourceNameDialog(
+            self, resource_type=self.RESOURCE_TYPE, title="新建风格",
+            initial_name="", taken=self._get_style_list())
+        if not dlg.result:
             return
         try:
-            self._create_style_impl(name.strip())
+            self._create_style_impl(dlg.result["id"], dlg.result["title"])
+            self._set_current_style(dlg.result["id"])
             self.refresh_styles()
             self.load_items()
             self.show_first_view()
@@ -422,17 +440,19 @@ class CardManager(ctk.CTkFrame):
         self._notify_style_list_changed()
 
     def rename_style(self):
+        """改名只改显示名，id 不变——已选风格、注册地址、打包清单都照旧。"""
         old = self._get_current_style()
-        if old == self._get_default_style():
-            ui.ctk.dialogs.showwarning("警告", f"不能重命名默认风格")
+        if not old:
+            ui.ctk.dialogs.showwarning("警告", "请先选择一个风格")
             return
-        dlg = InputDialog(self, title="重命名风格", prompt=f"将 '{old}' 重命名为:")
-        new = dlg.get_input()
-        if not new or not new.strip():
+        dlg = ResourceNameDialog(
+            self, resource_type=self.RESOURCE_TYPE, title="重命名风格",
+            mode="rename", initial_name=self._style_display_name(old),
+            resource_id=old)
+        if not dlg.result:
             return
         try:
-            self._rename_style_impl(old, new.strip())
-            self._set_current_style(new.strip())
+            self._set_style_title_impl(old, dlg.result["title"])
             self.refresh_styles()
             self.load_items()
             self.show_first_view()
@@ -445,7 +465,8 @@ class CardManager(ctk.CTkFrame):
         if name == self._get_default_style():
             ui.ctk.dialogs.showwarning("警告", "不能删除默认风格")
             return
-        if not ui.ctk.dialogs.askyesno("确认", f"确定删除风格 '{name}' 吗？"):
+        if not ui.ctk.dialogs.askyesno(
+                "确认", f"确定删除风格「{self._style_display_name(name)}」吗？"):
             return
         try:
             self._delete_style_impl(name)

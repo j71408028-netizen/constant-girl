@@ -1,6 +1,5 @@
 import ui.ctk.dialogs
 import customtkinter as ctk
-import re
 import copy
 import os
 from dungeon.audio.chapters import normalize_chapters
@@ -17,7 +16,7 @@ from dungeon.audio.speech import normalize_voice
 from ui.ctk.widgets import (CTkScrollableDropdownFrame, CTkSegmentedControl,
                                OptionButton)
 from ui.ctk.address_dlg import AddressTextDialog
-from ui.ctk.dialogs import BaseDialog, InputDialog
+from ui.ctk.dialogs import BaseDialog, ResourceNameDialog
 from ui.scenario.chapter_trigger_mgr import ChapterTriggerManager
 from dungeon.terms import DEFAULT_SCENARIO_ID, scenario_config_of, scenario_id_of
 from dungeon.validate import format_diagnostics, has_errors
@@ -154,15 +153,30 @@ class ScenarioEditor(ctk.CTkFrame):
         self.component_panel.pack_forget()
         self.prompt_panel.pack(fill='both', padx=9, expand=True)
 
+    def _scenario_display(self, scenario_id):
+        """方案 id → 界面显示名（未命名时回落成 id）。"""
+        return self._scenario_repo.display_name(scenario_id)
+
     def _build_combined_items(self):
+        """下拉条目：显示名在前（选择回 id），挑战包项挂在末尾。"""
         schemes = self._scenario_repo.list_all()
-        items = list(schemes)
+        items = []
         text_colors = {}
         self._pack_display_map = {}
+        self._scenario_display_map = {}
+        used = set()
+        for scenario_id in schemes:
+            display = self._scenario_display(scenario_id)
+            if display in used:   # 显示名撞车时补 id，保证每行可区分
+                display = f"{display}（{scenario_id}）"
+            used.add(display)
+            items.append(display)
+            self._scenario_display_map[display] = scenario_id
         if self._challenge_mgr and self._challenge_mgr.has_any_valid_key():
             packs = self._challenge_mgr.get_available_packs()
             for pack in packs:
-                display = f"⚔ {os.path.splitext(pack)[0]}"
+                base = os.path.splitext(pack)[0]
+                display = f"⚔ {self._challenge_mgr.pack_title(pack) or base}"
                 items.append(display)
                 text_colors[display] = SC_LINK
                 self._pack_display_map[display] = pack
@@ -199,7 +213,9 @@ class ScenarioEditor(ctk.CTkFrame):
             pack_name = self._pack_display_map[choice]
             self._on_scenario_challenge_pack_select(pack_name)
         else:
-            self._on_scenario_select(choice)
+            # 下拉里是显示名，方案切换一律按 id 走
+            self._on_scenario_select(
+                getattr(self, '_scenario_display_map', {}).get(choice, choice))
 
     def _on_scenario_challenge_pack_select(self, choice):
         if not choice:
@@ -231,7 +247,8 @@ class ScenarioEditor(ctk.CTkFrame):
         self._refresh_scenario_list()
         self._load_scenario(scenario_id)
         self._notify_validation()
-        ui.ctk.dialogs.showinfo("成功", f"已从挑战包加载副本方案 '{scenario_id}'")
+        ui.ctk.dialogs.showinfo(
+            "成功", f"已从挑战包加载剧本「{self._scenario_repo.display_name(scenario_id)}」")
 
     def _on_scenario_tab_switch(self, value):
         # 分段值可能带装饰空格（如 " 动态 "），统一去掉后再比较
@@ -655,7 +672,7 @@ class ScenarioEditor(ctk.CTkFrame):
         # 逻辑依赖 current_scenario_id 指向正在加载的配置
         self.current_scenario_id = scenario_id
         self._refresh_ui_from_config()
-        self.scenario_combo.set(scenario_id)
+        self.scenario_combo.set(self._scenario_display(scenario_id))
 
     def _get_prompt_data_from_ui(self) -> dict:
         """从UI控件收集提示词相关数据"""
@@ -781,32 +798,21 @@ class ScenarioEditor(ctk.CTkFrame):
                 format_diagnostics(diagnostics, include_info=False))
 
     def _rename_scenario(self):
-        old_name = self.current_scenario_id
-        if old_name == DEFAULT_SCENARIO_ID:
-            ui.ctk.dialogs.showwarning("警告", "默认副本方案不可重命名")
+        """改名只改显示名，方案目录与 id 不变（已进世界包的清单照旧有效）。"""
+        scenario_id = self.current_scenario_id
+        if not scenario_id:
             return
         self.character_panel.flush_pending()
-
-        dlg = InputDialog(self, title="重命名副本方案", prompt=f"将 '{old_name}' 重命名为:")
-        new_name = dlg.get_input()
-        if not new_name or not re.match(r'^\w+$', new_name):
+        dlg = ResourceNameDialog(
+            self, resource_type="scenarios", title="重命名副本方案",
+            mode="rename", initial_name=self._scenario_display(scenario_id),
+            resource_id=scenario_id)
+        if not dlg.result:
             return
-
-        if self._scenario_repo.exists(new_name):
-            ui.ctk.dialogs.showerror("错误", "副本方案名称已存在")
-            return
-
-        # 加载旧配置并保存为新名称，再删除旧配置
-        config = self._scenario_repo.load_config(old_name)
-        if config is None:
-            ui.ctk.dialogs.showerror("错误", f"无法加载副本方案 '{old_name}'")
-            return
-
         try:
-            self._scenario_repo.save_config(new_name, config)
-            self._scenario_repo.delete(old_name)
+            self._scenario_repo.set_title(scenario_id, dlg.result["title"])
             self._refresh_scenario_list()
-            self._load_scenario(new_name)
+            self._load_scenario(scenario_id)
         except Exception as e:
             ui.ctk.dialogs.showerror("错误", f"重命名失败: {e}")
 
@@ -814,7 +820,10 @@ class ScenarioEditor(ctk.CTkFrame):
         if self.current_scenario_id == DEFAULT_SCENARIO_ID:
             ui.ctk.dialogs.showwarning("警告", "默认副本方案不可删除")
             return
-        if not ui.ctk.dialogs.askyesno("确认", f"确定删除副本方案 '{self.current_scenario_id}' 吗？\n此操作不可恢复！"):
+        if not ui.ctk.dialogs.askyesno(
+                "确认",
+                f"确定删除副本方案「{self._scenario_display(self.current_scenario_id)}」吗？"
+                "\n此操作不可恢复！"):
             return
         try:
             self._scenario_repo.delete(self.current_scenario_id)
@@ -824,10 +833,13 @@ class ScenarioEditor(ctk.CTkFrame):
             ui.ctk.dialogs.showerror("错误", str(e))
 
     def _new_scenario(self):
-        dlg = InputDialog(self, title="新建副本方案", prompt="请输入新副本方案名称:")
-        new_id = dlg.get_input()
-        if not new_id or not re.match(r'^\w+$', new_id):
+        """新建副本方案：只问名称，id 自动分配（高级里可手填）。"""
+        dlg = ResourceNameDialog(
+            self, resource_type="scenarios", title="新建副本方案",
+            taken=self._scenario_repo.list_all())
+        if not dlg.result:
             return
+        new_id = dlg.result["id"]
         if self._scenario_repo.exists(new_id):
             ui.ctk.dialogs.showerror("错误", "副本方案已存在")
             return
@@ -852,6 +864,7 @@ class ScenarioEditor(ctk.CTkFrame):
             "components_params": {},
         }
         if self._scenario_repo.create(new_id, empty_config):
+            self._scenario_repo.set_title(new_id, dlg.result["title"])
             self._refresh_scenario_list()
             self._load_scenario(new_id)
         else:
@@ -884,7 +897,9 @@ class ScenarioEditor(ctk.CTkFrame):
         self._rebuild_dropdown()
         if self.current_scenario_id not in dungeon_list:
             self.current_scenario_id = dungeon_list[0] if dungeon_list else None
-            self.scenario_combo.set(self.current_scenario_id or "")
+            self.scenario_combo.set(
+                self._scenario_display(self.current_scenario_id)
+                if self.current_scenario_id else "")
             if self.current_scenario_id:
                 self._load_scenario(self.current_scenario_id)
 

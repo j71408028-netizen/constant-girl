@@ -8,7 +8,7 @@ from typing import Dict
 import customtkinter as ctk
 
 from persistence.resources import (
-    MULTI_PICK_TYPES, RESOURCE_TYPE_LABELS, SINGLE_PICK_TYPES,
+    MULTI_PICK_TYPES, RESOURCE_TYPE_LABELS, SINGLE_PICK_TYPES, registry,
 )
 from ui.ctk.dialogs import BaseDialog
 from ui.ctk.widgets import StyleListBox
@@ -37,7 +37,8 @@ class WorldPackCreateDialog(BaseDialog):
     _MULTI_TYPES = MULTI_PICK_TYPES
     _SINGLE_TYPES = SINGLE_PICK_TYPES
 
-    def __init__(self, parent, available_resources=None):
+    def __init__(self, parent, available_resources=None, data_dir="data",
+                 world_state=None):
         super().__init__(parent)
         self.title("创建世界包")
         self.result = None
@@ -46,6 +47,11 @@ class WorldPackCreateDialog(BaseDialog):
         self.protocol("WM_DELETE_WINDOW", self._cancel)
 
         self.available_resources = available_resources or {}
+        # 资源显示名按这层信息解析（世界包接管的资源读包内信封）
+        self._data_dir = data_dir
+        self._world_state = world_state
+        self._id_advanced = False
+        self._id_manual = False   # 用户手填过世界 ID 后不再跟随包名
         self.listboxes: Dict[str, StyleListBox] = {}
         self.combo_vars: Dict[str, tk.StringVar] = {}
         self._rtype_labels: Dict[str, str] = dict(self._TYPE_LABELS)
@@ -88,6 +94,7 @@ class WorldPackCreateDialog(BaseDialog):
 
     # ---------- 基础信息页 ----------
     def _build_basic_page(self, parent):
+        self._id_advanced = False   # 每次重建页面都从「收起」开始
         # 配置列权重：标签列最小宽度，输入列可伸缩
         parent.columnconfigure(0, weight=0, minsize=90)
         parent.columnconfigure(1, weight=1)
@@ -126,7 +133,31 @@ class WorldPackCreateDialog(BaseDialog):
             return ret
 
         self.name_entry = add_row("包名称", self.name_var)
-        self.world_id_entry = add_row("ID", self.world_id_var, "disabled_entry")
+        self.name_entry.bind("<KeyRelease>", lambda _e: self._sync_world_id())
+
+        # 世界 ID 是技术标识，默认由程序分配、界面不出现；需要固定时展开「高级」
+        self.adv_toggle = ctk.CTkButton(
+            parent, text="高级 ▸", width=64, height=22, command=self._toggle_id_row,
+            fg_color="transparent", text_color=SETTINGS_DLG_TEXT_SOFT,
+            hover_color=SETTINGS_DLG_HOVER, border_width=1,
+            border_color=SETTINGS_DLG_INPUT_BORDER, corner_radius=6,
+            font=ui_fonts.ui_font(11))
+        self.adv_toggle.grid(row=row, column=1, sticky='e', padx=(0, 10))
+        row += 1
+
+        self.id_row_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self.id_row_frame.grid(row=row, column=0, columnspan=2, sticky='ew',
+                               padx=(10, 10))
+        ctk.CTkLabel(self.id_row_frame, text="ID", width=80, anchor='w',
+                     font=self.UI_FONT, text_color=SETTINGS_DLG_TEXT).pack(side='left')
+        self.world_id_entry = ctk.CTkEntry(
+            self.id_row_frame, textvariable=self.world_id_var, height=26,
+            font=self.UI_FONT)
+        self.world_id_entry.pack(side='left', fill='x', expand=True)
+        self.world_id_entry.bind("<KeyRelease>", self._mark_world_id_manual)
+        self.id_row_frame.grid_remove()
+        row += 1
+
         self.version_entry = add_row("版本号", self.version_var)
         self.author_entry = add_row("作者", self.author_var)
 
@@ -155,6 +186,29 @@ class WorldPackCreateDialog(BaseDialog):
         parent.grid_rowconfigure(row, weight=0)
         row += 1
 
+    def _sync_world_id(self):
+        """未手填 ID 时按包名跟进：``world_<slug>``，名字没有可用字符就留随机值。"""
+        if self._id_manual:
+            return
+        slug = registry.slugify(self.name_var.get())
+        if slug:
+            self.world_id_var.set(f"world_{slug}"[:64])
+
+    def _mark_world_id_manual(self, _event=None):
+        """手填过（且仍非空）就不再跟随包名；清空后恢复自动派生。"""
+        self._id_manual = bool(self.world_id_var.get().strip())
+
+    def _toggle_id_row(self):
+        """展开/收起世界 ID 输入（高级选项）。"""
+        self._id_advanced = not self._id_advanced
+        if self._id_advanced:
+            self.adv_toggle.configure(text="高级 ▾")
+            self.id_row_frame.grid()
+            self.world_id_entry.focus_set()
+        else:
+            self.adv_toggle.configure(text="高级 ▸")
+            self.id_row_frame.grid_remove()
+
     # ---------- 资源打包页 ----------
     def _build_resources_page(self, parent):
         """资源打包页：左栏取材表下拉框，右栏可切换的多选列表（带全选/清空），底部提示跨两栏。"""
@@ -177,6 +231,7 @@ class WorldPackCreateDialog(BaseDialog):
                         for rtype in self._SINGLE_TYPES]
 
         self._single_vars = {}
+        self._single_maps = {}
         for rtype, label in single_types:
             items = [str(i) for i in (self.available_resources.get(rtype) or []) if str(i)]
             if not items:
@@ -187,9 +242,19 @@ class WorldPackCreateDialog(BaseDialog):
                 row, text=label, width=60, anchor='w',
                 font=self.UI_FONT, text_color=SETTINGS_DLG_TEXT
             ).pack(side='left')
+            displays = []
+            mapping = {"<不配置>": ""}
+            for rid in items:
+                display = registry.display_name(rtype, rid, self._data_dir,
+                                                self._world_state)
+                if display in mapping:   # 显示名撞车时补 id
+                    display = f"{display}（{rid}）"
+                displays.append(display)
+                mapping[display] = rid
+            self._single_maps[rtype] = mapping
             var = tk.StringVar(value="<不配置>")
             combo = ctk.CTkComboBox(
-                row, values=["<不配置>"] + items, variable=var,
+                row, values=["<不配置>"] + displays, variable=var,
                 width=100, height=24,
                 font=self.UI_FONT,
                 command=self._refresh_resource_label
@@ -197,7 +262,10 @@ class WorldPackCreateDialog(BaseDialog):
             combo.pack(side='left', padx=(4, 0))
             saved = self._resource_selection or {}
             if rtype in saved:
-                var.set(saved[rtype][0])
+                wanted = saved[rtype][0]
+                display = next((d for d, rid in mapping.items() if rid == wanted),
+                               wanted)
+                var.set(display)
             self._single_vars[rtype] = var
 
         # ---- 右栏：多选列表（可切换） ----
@@ -261,10 +329,8 @@ class WorldPackCreateDialog(BaseDialog):
         """循环切换到下一个多选类型，保存当前选择。"""
         current_rtype = self._multi_types[self._multi_index]
         if self._current_listbox:
-            selected = self._current_listbox.get_selected_raw_names()
-            if current_rtype == "challenges":
-                selected = [n if n.endswith(".chal") else f"{n}.chal" for n in selected]
-            self._multi_selections[current_rtype] = selected
+            self._multi_selections[current_rtype] = \
+                self._current_listbox.get_selected_raw_names()
 
         self._multi_index = (self._multi_index + 1) % len(self._multi_types)
         self._update_current_listbox()
@@ -281,21 +347,13 @@ class WorldPackCreateDialog(BaseDialog):
             self._current_listbox.set_title(f"{label}（0/0）")
             return
 
-        display = self._display_items(rtype, items)
-        saved = self._multi_selections.get(rtype, [])
-        if not saved:
-            self._current_listbox.sync_items(display)
-        else:
-            sel_indices = []
-            for i, disp in enumerate(display):
-                if rtype == "challenges":
-                    raw = os.path.splitext(disp)[0]
-                    if raw in saved:
-                        sel_indices.append(i)
-                else:
-                    if disp in saved:
-                        sel_indices.append(i)
-            self._current_listbox.sync_items(display, selected_indices=sel_indices)
+        pairs = self._display_items(rtype, items)
+        display = [text for _, text in pairs]
+        keys = [rid for rid, _ in pairs]
+        saved = set(self._multi_selections.get(rtype, []))
+        sel_indices = [i for i, rid in enumerate(keys) if rid in saved]
+        self._current_listbox.sync_items(display, selected_indices=sel_indices,
+                                         keys=keys)
         # 标题更新由 _refresh_resource_label 统一处理，但这里可先设置基本计数
         total = len(display)
         count = len(self._current_listbox.listbox.curselection())
@@ -318,8 +376,6 @@ class WorldPackCreateDialog(BaseDialog):
             if rtype == self._multi_types[self._multi_index]:
                 if self._current_listbox:
                     selected = self._current_listbox.get_selected_raw_names()
-                    if rtype == "challenges":
-                        selected = [n if n.endswith(".chal") else f"{n}.chal" for n in selected]
                     count = len(selected)
                     if count:
                         parts.append(f"{label}×{count}")
@@ -341,14 +397,12 @@ class WorldPackCreateDialog(BaseDialog):
         for rtype, var in self._single_vars.items():
             val = var.get().strip()
             if val and val != "<不配置>":
-                state[rtype] = [val]
+                state[rtype] = [self._single_maps.get(rtype, {}).get(val, val)]
         # 多选类型：先保存当前显示的类型（从 listbox 获取）
         if self._current_listbox:
             rtype = self._multi_types[self._multi_index]
-            selected = self._current_listbox.get_selected_raw_names()
-            if rtype == "challenges":
-                selected = [n if n.endswith(".chal") else f"{n}.chal" for n in selected]
-            self._multi_selections[rtype] = selected
+            self._multi_selections[rtype] = \
+                self._current_listbox.get_selected_raw_names()
         # 合并所有多选缓存
         for rtype, sel in self._multi_selections.items():
             if sel:
@@ -356,11 +410,20 @@ class WorldPackCreateDialog(BaseDialog):
         self._resource_selection = state
 
 
-    @staticmethod
-    def _display_items(rtype: str, items) -> list:
-        if rtype == "challenges":
-            return [os.path.splitext(i)[0] for i in items]
-        return list(items)
+    def _display_items(self, rtype: str, items) -> list:
+        """``[(id, 显示名)]``：id 是资源身份（挑战包保持 ``.chal`` 后缀）。"""
+        pairs = []
+        used = set()
+        for item in items:
+            rid = str(item)
+            key = os.path.splitext(rid)[0] if rtype == "challenges" else rid
+            display = registry.display_name(
+                rtype, key, self._data_dir, self._world_state) if key else key
+            if display in used:   # 显示名撞车时补 id，保证每行可区分
+                display = f"{display}（{key}）"
+            used.add(display)
+            pairs.append((rid, display))
+        return pairs
 
 
     def _validate_basic(self) -> bool:

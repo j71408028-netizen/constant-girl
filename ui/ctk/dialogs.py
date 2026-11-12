@@ -9,6 +9,7 @@ from PIL import Image, ImageTk
 
 from core import imaging
 from paths import icon_dir
+from persistence.resources import registry
 from ui.ctk import fonts as ui_fonts
 from ui.ctk.theme import (
     DLG_BG, DLG_PANEL_BG, DLG_BORDER, DLG_BORDER_STRONG,
@@ -329,6 +330,150 @@ class InputDialog(BaseDialog):
 
     def get_input(self):
         return self.result
+
+
+class ResourceNameDialog(BaseDialog):
+    """资源命名对话框：只问名称，ID 由名称自动派生。
+
+    ID 是内部身份（目录名、设置项、包清单都按它组织），界面默认不出现；
+    需要固定 ID 的用户可以展开「高级」手填，手填值只受该类型的 id 规则约束，
+    不要求带类型前缀（见 ``registry.suggest_id`` / ``registry.valid_id_of``）。
+
+    ``mode="rename"`` 时只改显示名（信封 ``title``），ID 不可编辑。
+
+    结果：``{"id": ..., "title": ...}``；取消为 ``None``。
+    """
+
+    def __init__(self, parent, *, resource_type: str, title: str = "新建",
+                 mode: str = "create", initial_name: str = "",
+                 resource_id: str = "", taken=()):
+        super().__init__(parent)
+        self.title(title)
+        self.result = None
+        self._type = resource_type
+        self._mode = mode
+        self._taken = [str(item) for item in (taken or ())]
+        self._fixed_id = str(resource_id or "")
+        self._advanced_open = False
+
+        self.name_var = tk.StringVar(value=initial_name)
+        self.id_var = tk.StringVar(value="")
+
+        body = ctk.CTkFrame(self, fg_color="transparent")
+        body.pack(fill='both', expand=True, padx=20, pady=(16, 8))
+        body.columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(body, text="名称", font=self.UI_FONT,
+                     text_color=DLG_TEXT).grid(row=0, column=0, sticky='w',
+                                               padx=(0, 12), pady=(0, 6))
+        self._name_entry = ctk.CTkEntry(
+            body, textvariable=self.name_var, width=210, height=28,
+            font=self.UI_FONT, fg_color=DLG_PANEL_BG,
+            border_color=DLG_BORDER_STRONG, text_color=DLG_TEXT)
+        self._name_entry.grid(row=0, column=1, sticky='ew', pady=(0, 6))
+
+        self._hint = ctk.CTkLabel(
+            body, text="", font=self.UI_FONT_SMALL, text_color=DLG_TEXT_SOFT,
+            anchor='w', justify='left', wraplength=300)
+        self._hint.grid(row=1, column=0, columnspan=2, sticky='w', pady=(0, 4))
+
+        if mode == "create":
+            self._advanced_btn = ctk.CTkButton(
+                body, text="高级 ▸", width=64, height=24, command=self._toggle_advanced,
+                fg_color="transparent", text_color=DLG_TEXT_SOFT,
+                hover_color=DLG_HOVER, border_width=1, border_color=DLG_BORDER,
+                corner_radius=self.corner_radius, font=self.UI_FONT_SMALL)
+            self._advanced_btn.grid(row=2, column=1, sticky='e')
+
+            self._id_row = ctk.CTkFrame(body, fg_color="transparent")
+            self._id_row.columnconfigure(1, weight=1)
+            ctk.CTkLabel(self._id_row, text="ID", font=self.UI_FONT_SMALL,
+                         text_color=DLG_TEXT_SOFT).grid(
+                row=0, column=0, sticky='w', padx=(0, 12))
+            self._id_entry = ctk.CTkEntry(
+                self._id_row, textvariable=self.id_var, width=210, height=26,
+                font=self.UI_FONT, fg_color=DLG_PANEL_BG,
+                border_color=DLG_BORDER_STRONG, text_color=DLG_TEXT)
+            self._id_entry.grid(row=0, column=1, sticky='ew')
+            ctk.CTkLabel(
+                self._id_row,
+                text="留空即按名称自动分配；手填只需符合小写蛇形命名，"
+                     "不强制带类型前缀",
+                font=ui_fonts.ui_font(11), text_color=DLG_TEXT_SOFT,
+                anchor='w', justify='left', wraplength=300).grid(
+                row=1, column=1, sticky='w', pady=(2, 0))
+            self.name_var.trace_add("write", self._on_name_changed)
+        else:
+            self._hint.configure(text="改名只影响界面显示，资源标识保持不变。")
+
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.pack(pady=(6, 16))
+        self._make_std_button(btns, "确定", True, self._ok).pack(side='left', padx=6)
+        self._make_std_button(btns, "取消", False, self._cancel).pack(side='left', padx=6)
+
+        self.bind("<Return>", self._ok)
+        self.bind("<Escape>", self._cancel)
+        self._show_modal(focus_widget=self._name_entry)
+
+    # ---------- 高级区 ----------
+    def _toggle_advanced(self):
+        self._advanced_open = not self._advanced_open
+        if self._advanced_open:
+            self._advanced_btn.configure(text="高级 ▾")
+            self._id_row.grid(row=3, column=0, columnspan=2, sticky='ew',
+                              pady=(6, 0))
+            self._refresh_placeholder()
+            self._id_entry.focus_set()
+        else:
+            self._advanced_btn.configure(text="高级 ▸")
+            self._id_row.grid_forget()
+
+    def _derived_id(self) -> str:
+        return registry.suggest_id(
+            self._type, self.name_var.get().strip(), self._taken)
+
+    def _refresh_placeholder(self):
+        if not self._advanced_open:
+            return
+        derived = self._derived_id()
+        self._id_entry.configure(placeholder_text=derived)
+
+    def _on_name_changed(self, *_args):
+        """名称变化时同步「留空将得到什么 id」的占位提示。"""
+        self._refresh_placeholder()
+
+    # ---------- 提交 ----------
+    def _ok(self, _event=None):
+        name = self.name_var.get().strip()
+        if not name:
+            self._hint.configure(text="请填写名称", text_color=DLG_ERR)
+            return
+        if self._mode == "rename":
+            self.result = {"id": self._fixed_id, "title": name}
+            self._close()
+            return
+
+        typed = self.id_var.get().strip()
+        if typed:
+            if not registry.valid_id_of(self._type, typed):
+                self._hint.configure(
+                    text=f"ID {typed!r} 不合规：需字母或数字开头，"
+                         "只含小写字母、数字、下划线、点与连字符",
+                    text_color=DLG_ERR)
+                return
+            if typed in self._taken:
+                self._hint.configure(text=f"ID {typed!r} 已被占用",
+                                     text_color=DLG_ERR)
+                return
+            resource_id = typed
+        else:
+            resource_id = self._derived_id()
+        self.result = {"id": resource_id, "title": name}
+        self._close()
+
+    def _cancel(self, _event=None):
+        self.result = None
+        self._close()
 
 
 class ImageCropDialog(BaseDialog):
