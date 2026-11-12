@@ -836,6 +836,11 @@ class DungeonStoryEngine:
         if record.total_casualties_after is not None:
             state.total_casualties = record.total_casualties_after
         state.casualty_evolution.append(record.casualty_increase)
+        # 步数随记录还原：回放不经过 evolve_attributes，缺这一步 total_steps 恒为
+        # 起始值——剧情压缩的分块节奏、结算报告的「总步数」都读它。记录没写步数
+        # （旧文件）时是 0，与不回填等价
+        state.total_steps = record.step
+        self.step_num = record.step
         # 回放同样喂给剧情压缩器，保证概要/最近段落与实际推进一致
         self._record_story_summary(record.text_type, record.text)
         # 效果覆盖的时长以步计：实时在 _finish_step 里消耗，回放没有那一步，

@@ -290,6 +290,13 @@ _keep.dungeon_state.intrusion = 2.0
 _keep._replay_next_step()
 check("缺快照的旧记录不动状态", _keep.dungeon_state.intrusion == 2.0)
 
+_steps = _play([{"type": "dialog", "text": "第 5 步", "step": 5}])
+check("步数随记录还原（回放不走 evolve_attributes，否则恒为 0）",
+      _steps.dungeon_state.total_steps == 5 and _steps.step_num == 5,
+      (_steps.dungeon_state.total_steps, _steps.step_num))
+check("记录没写步数时按 0（与不回填等价）",
+      _play([{"type": "dialog", "text": "无步数"}]).dungeon_state.total_steps == 0)
+
 # ---------- 3.3 覆盖按步到期 ----------
 _CHAPTER_A = [{"kind": "chapter", "name": "A",
                "background": {"image_path": "a.png", "filter_effect": "smooth"},

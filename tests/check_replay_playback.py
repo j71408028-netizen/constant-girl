@@ -10,8 +10,9 @@
 1. **限速上屏**：步进记录不再整段直出，1 秒约 30 字；
 2. **逐句点击**：一个逻辑段落切成多个显示段落，点一下补满、再点才切下一句；
 3. **跳过不可见记录**：章节进入 / 效果覆盖与正文共用一次点击，不空耗点击；
-4. **停留登记**：段落走完登记 ``_advance_due``（自动播放不再 0.2 秒一条空转）；
-5. **结局**：正文同样限速上屏，上屏走完才关窗。
+4. **选项 / 小游戏**：实时是弹窗 / 独立界面，回放补一行「【选择】…」并占一次点击；
+5. **停留登记**：段落走完登记 ``_advance_due``（自动播放不再 0.2 秒一条空转）；
+6. **结局**：正文同样限速上屏，上屏走完才关窗。
 """
 
 import os
@@ -244,7 +245,21 @@ check("章节进入 / 效果覆盖随同一次点击落地（不空耗点击）"
       (_skip.current_background_path, _skip._applied_visual_filter,
        _skip.story_history))
 
-# ---------------- 4. 结局 ----------------
+# ---------------- 4. 选项 / 小游戏：回放的替代行 ----------------
+# 实时是弹窗 / 独立界面，回放不弹窗，改在故事区补一行（见 script.md §9.3）
+_choice = _PlaybackHost([{
+    "kind": "trigger", "name": "岔路", "action_type": "option",
+    "action_data": {"options": [{"text": "往左", "prompt": "选哪边？"},
+                                {"text": "往右"}]},
+    "choice_index": 1, "choice_text": "往右", "option_prompt": "选哪边？"}])
+_choice._replay_next_step()
+check("回放把选项补成一行「【选择】…」（内容是当时选的那条）",
+      [(i["type_str"], i["text"]) for i in _choice.story_history]
+      == [("【选择】", "往右")], _choice.story_history)
+check("选项行占一次点击（与实时弹窗同等的停顿）",
+      _choice._advance_due > _clock_base(), _choice._advance_due)
+
+# ---------------- 5. 结局 ----------------
 ENDING = "城市在她脚下安静地碎成一片灰白"
 _end = _PlaybackHost([{"kind": "ending", "name": "真结局", "text": ENDING,
                        "icon_path": "i.png", "step": 7}])
@@ -262,7 +277,7 @@ _end._last_click_time = None
 _end._on_next_step()
 check("结局上屏后才关窗（再点一次）", _end.closed is True)
 
-# ---------------- 5. 朗读拿的是整句，不是已上屏前缀 ----------------
+# ---------------- 6. 朗读拿的是整句，不是已上屏前缀 ----------------
 # 记录里的净文本没有说话人，朗读靠 display_text 还原（12.2）；游标把 item 文本
 # 清空后，朗读必须仍拿到整句。
 QUOTED = "“桥还没塌，先别过去。”"
@@ -286,7 +301,7 @@ _sp2._present_paragraph("桥还没塌，", prefix="【对话】",
 check("同一段落的后续句走队列时也带说话人（_present_paragraph 直调）",
       _sp2._speech.spoken == [("李队长", "“桥还没塌")], _sp2._speech.spoken)
 
-# ---------------- 6. 常量契约 ----------------
+# ---------------- 7. 常量契约 ----------------
 check("回放复用 30 字/秒的上屏速率（未另造一套节奏）",
       _REVEAL_CHARS_PER_SECOND == 30.0)
 
