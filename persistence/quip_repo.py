@@ -18,8 +18,10 @@ from .json_store import (BACKUP_SUFFIX, TEMP_SUFFIX, load_json_with_backup,
                          write_json_atomic, write_text_atomic)
 from .resources.envelope import ENVELOPE_SUFFIX
 from .resources.registry import addr_path as _reg_addr_path
+from .resources.registry import display_name as _display_name
 from .resources.registry import envelope_path_of as _envelope_path_of
 from .resources.registry import free_dir as _free_dir_of
+from .resources.registry import set_title as _set_title
 from .style_addr import (ADDR_SUFFIX, delete_address as _delete_addr,
                          load_address as _load_addr,
                          rename_address as _rename_addr,
@@ -239,6 +241,20 @@ class QuipRepo:
             styles = [DEFAULT_QUIP_STYLE]
         return styles
 
+    def display_name(self, style_name: str) -> str:
+        """界面显示名：有显示名用显示名，否则回落成 id。"""
+        return _display_name(_TYPE, style_name, self._data_dir, self._world_state)
+
+    def display_names(self, style_names: List[str] = None) -> Dict[str, str]:
+        """``{风格 id: 显示名}``；不传则覆盖当前可见的全部风格。"""
+        ids = list(style_names) if style_names is not None else self.get_styles()
+        return {sid: self.display_name(sid) for sid in ids}
+
+    def set_title(self, style_name: str, title: str):
+        """写显示名（即界面上的「重命名」）：不动 id、不动 CSV。"""
+        return _set_title(_TYPE, style_name, title, self._data_dir,
+                          self._world_state)
+
     def load(self, style_name: str = None) -> dict:
         if style_name is None:
             style_name = DEFAULT_QUIP_STYLE
@@ -289,7 +305,9 @@ class QuipRepo:
         save_data["_meta"] = meta
         return save_data
 
-    def create_style(self, style_name: str, copy_from: str = None):
+    def create_style(self, style_name: str, copy_from: str = None,
+                     title: str = ""):
+        """新建风格；``style_name`` 是 id，``title`` 是界面显示名。"""
         if style_name in self.get_styles():
             raise ValueError(f"风格 '{style_name}' 已存在")
         target = self._free_style_dir(style_name)
@@ -311,6 +329,8 @@ class QuipRepo:
             os.makedirs(target, exist_ok=True)
             self.save(style_name, {})
             self.save_meta(style_name, self._default_meta())
+        if title:
+            self.set_title(style_name, title)
 
     def delete_style(self, style_name: str):
         target = self._free_style_dir(style_name)

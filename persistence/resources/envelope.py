@@ -10,6 +10,10 @@
 3. 信封不得藏进不可读容器——``opaque`` 类型（如 ``.chal``）必须外加兄弟信封，
    否则服务端连索引都做不了。
 
+``title`` 是资源在界面上的显示名，与 ``id`` 分层：服务层一律按 ``id`` 组织，
+界面只显示 ``title``（空则回落成 ``id``）。改名只写信封，不动目录名也不进
+``content_hash``，所以改显示名不算「内容改过」。
+
 ``content_hash`` 是「本地有没有改过」的唯一依据：规范化载荷哈希，纯本地计算，
 不需要服务端参与。信封与索引之间只通过它耦合。
 """
@@ -29,6 +33,10 @@ ENVELOPE_SUFFIX = ".meta.json"
 ENVELOPE_DEFAULTS: Dict[str, Any] = {
     "schema": "",
     "id": "",
+    # 资源本身的显示名（界面用）；空 = 回落成资源 id。
+    # 与载荷里的 name/label 不是一回事：后者是资源**内部条目**的名字，
+    # 这里说的是「这份资源叫什么」。
+    "title": "",
     "author": "",
     "namespace": "",
     "version": "0.0.0",
@@ -99,6 +107,9 @@ def normalize_envelope(data: Any, type_id: str, resource_id: str) -> dict:
     result["traits"] = [str(t) for t in result["traits"] if str(t)]
     if not isinstance(result.get("source"), dict):
         result["source"] = {}
+    if not isinstance(result.get("title"), str):
+        result["title"] = ""
+    result["title"] = result["title"].strip()
     if not isinstance(result.get("language"), str):
         result["language"] = ""
     if not isinstance(result.get("version"), str) or not result["version"]:
@@ -133,6 +144,23 @@ def save_envelope(directory: str, type_id: str, resource_id: str, data: dict) ->
 
 def has_envelope(directory: str, resource_id: str) -> bool:
     return os.path.isfile(envelope_path(directory, resource_id))
+
+
+def envelope_title(directory: str, type_id: str, resource_id: str) -> str:
+    """信封里的显示名；没有信封或未设置时返回空串（调用方回落成 id）。"""
+    return load_envelope(directory, type_id, resource_id).get("title", "")
+
+
+def set_title(directory: str, type_id: str, resource_id: str, title) -> str:
+    """写显示名并返回信封路径。
+
+    改名只动信封，**不碰载荷、不动目录名**：显示名因此可以随意改（含空格、
+    中文、同名），资源 id 与所有按 id 记录的引用（设置项、``Ref``、世界包
+    清单、索引）都不受影响。空串表示清除，界面回落成 id。
+    """
+    data = load_envelope(directory, type_id, resource_id)
+    data["title"] = str(title or "").strip()
+    return save_envelope(directory, type_id, resource_id, data)
 
 
 # ---------------------------------------------------------------------------

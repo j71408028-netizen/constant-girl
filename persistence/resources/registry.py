@@ -9,7 +9,10 @@
 2. **路径定位**——自由目录、读取目录（世界包接管时）、主文件、信封、注册地址，
    所有资源路径都从这里出，调用方不再自己拼 ``os.path.join``；
 3. **清单与校验**——列出某类资源的 id（坏条目跳过并给诊断），
-   ``validate_resource()`` 是唯一判定出口，等价于地址系统的 ``relate()``。
+   ``validate_resource()`` 是唯一判定出口，等价于地址系统的 ``relate()``；
+4. **显示名**——``display_name()`` / ``display_names()`` 是界面取名的唯一出口，
+   ``set_title()`` 是「重命名资源」的唯一实现。id 只做身份，显示名只做界面，
+   两者分层，改名不动 id。
 
 ``world_state`` 只按鸭子类型使用（``owns()`` / ``pack_path()``），本模块不 import
 ``persistence.world_pack``：那个模块反过来要 import 这里的派生映射，形成环。
@@ -18,12 +21,14 @@
 import csv
 import json
 import os
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from core.resource_spec import (
     EXTRA_SETTING_KEYS,
     RESOURCE_TYPES,
+    id_prefix_of,
     packable_type_ids,
     pick_mode,
     spec_of,
@@ -36,6 +41,7 @@ from .envelope import (
     load_envelope,
     schema_for,
 )
+from .envelope import set_title as _set_envelope_title
 from ..json_store import BACKUP_SUFFIX, TEMP_SUFFIX
 
 DEFAULT_DATA_DIR = "data"
@@ -224,6 +230,138 @@ def list_ids(type_id: str, data_dir: str = DEFAULT_DATA_DIR,
             if is_resource_entry(type_id, root, name):
                 found.add(resource_id_from_entry(type_id, name))
     return sorted(found)
+
+
+# ---------------------------------------------------------------------------
+# 显示名（信封 title）
+# ---------------------------------------------------------------------------
+# id 与显示名分层：id 是身份（目录名、设置项、Ref、世界包清单、索引都按它组织），
+# 显示名只属于界面。改显示名不动 id，因此不会让任何按 id 记录的引用断档。
+
+#: 可用作 id 的字符之外一律折成下划线；连续下划线与首尾装饰字符去掉。
+_SLUG_STRIP_RE = re.compile(r"[^a-z0-9._-]+")
+_SLUG_REPEAT_RE = re.compile(r"_{2,}")
+#: 派生 id 的长度上限（远小于 id 规则的 64，留出追加序号的空间）
+_SLUG_MAX = 48
+
+
+def slugify(text: str) -> str:
+    """显示名 → 可用于 id 的 ASCII 片段（不保证非空、不保证唯一）。"""
+    slug = _SLUG_STRIP_RE.sub("_", str(text or "").lower())
+    slug = _SLUG_REPEAT_RE.sub("_", slug).strip("._-")
+    return slug[:_SLUG_MAX].strip("._-")
+
+
+def suggest_id(type_id: str, title: str, taken: Iterable[str] = ()) -> str:
+    """按显示名派生一个未被占用的资源 id，默认带类型前缀。
+
+    前缀取自声明（``landmarks`` → ``landmark``），所以新建出来的 id 形如
+    ``landmark_my_style``；名字本身已经以该前缀开头时不重复加。``taken`` 传
+    当前已有 id（通常是 :func:`list_ids` 的结果），撞名时追加序号。
+
+    名字里没有可用字符时（纯中文、纯符号）只留前缀（``landmark`` / ``landmark_2``）
+    ——显示名照旧可以是任意语言，id 只求稳定可读。前缀不是约束：用户手填的 id
+    只要合 ``spec.valid_id`` 就成立，见 :func:`valid_id_of`。
+    """
+    spec = _spec(type_id)
+    used = {str(item) for item in (taken or ())}
+    prefix = id_prefix_of(type_id)
+    stem = slugify(title)
+    if not stem:
+        base = prefix
+    elif stem == prefix or stem.startswith(f"{prefix}_"):
+        base = stem
+    else:
+        base = f"{prefix}_{stem}"
+    if not spec.valid_id(base):
+        base = prefix
+    if not spec.valid_id(base):
+        base = "res"
+    if base not in used:
+        return base
+    index = 2
+    while True:
+        candidate = f"{base}_{index}"
+        if spec.valid_id(candidate) and candidate not in used:
+            return candidate
+        index += 1
+
+
+def valid_id_of(type_id: str, resource_id: str) -> bool:
+    """用户手填的 id 是否可用于该类型（前缀不作要求）。"""
+    spec = spec_of(type_id)
+    return spec.valid_id(resource_id) if spec is not None else False
+
+
+def _resource_dirs(type_id: str, data_dir: str = DEFAULT_DATA_DIR,
+                   world_state=None) -> List[str]:
+    """显示名的查找目录：包内（接管时）优先，其次自由目录。"""
+    dirs: List[str] = []
+    package = pack_dir(type_id, world_state)
+    if package:
+        dirs.append(package)
+    free = free_dir(type_id, data_dir)
+    if free not in dirs:
+        dirs.append(free)
+    return dirs
+
+
+def _resource_home(type_id: str, resource_id: str,
+                   dirs: List[str]) -> str:
+    """资源本体所在的目录：先认信封，再认主文件或资源目录，都没有就用自由目录。"""
+    for directory in dirs:
+        if os.path.isfile(envelope_path(directory, resource_id)):
+            return directory
+    for directory in dirs:
+        primary = os.path.join(
+            directory, primary_relpath(type_id, resource_id).replace("/", os.sep))
+        if os.path.exists(primary) or os.path.exists(
+                os.path.join(directory, resource_id)):
+            return directory
+    return dirs[-1]
+
+
+def title_of(type_id: str, resource_id: str, data_dir: str = DEFAULT_DATA_DIR,
+             world_state=None) -> str:
+    """资源的显示名；未设置或读不到返回空串（界面回落成 id）。"""
+    if not resource_id:
+        return ""
+    directory = _resource_home(
+        type_id, resource_id, _resource_dirs(type_id, data_dir, world_state))
+    return load_envelope(directory, type_id, resource_id).get("title", "")
+
+
+def display_name(type_id: str, resource_id: str, data_dir: str = DEFAULT_DATA_DIR,
+                 world_state=None) -> str:
+    """界面显示用名称：有显示名用显示名，否则回落成 id。"""
+    return title_of(type_id, resource_id, data_dir, world_state) or str(resource_id or "")
+
+
+def display_names(type_id: str, resource_ids: Iterable[str] = (),
+                  data_dir: str = DEFAULT_DATA_DIR,
+                  world_state=None) -> List[Tuple[str, str]]:
+    """``[(id, 显示名)]``，顺序与传入一致（``resource_ids`` 为空则枚举全部）。
+
+    界面要同时拿 id（选择结果、深跳参数）与显示名（列表文字），一次读完
+    免得每个条目各读一次信封。
+    """
+    ids = list(resource_ids) if resource_ids else list_ids(
+        type_id, data_dir, world_state)
+    return [(rid, display_name(type_id, rid, data_dir, world_state)) for rid in ids]
+
+
+def set_title(type_id: str, resource_id: str, title,
+              data_dir: str = DEFAULT_DATA_DIR, world_state=None) -> str:
+    """写资源显示名（空串 = 清除，界面回落成 id）；返回信封路径。
+
+    这是「重命名资源」的唯一实现：只写信封，不改目录名、不改载荷、不影响
+    ``content_hash``。资源在包内就写到包内那份信封，否则写自由目录。
+    """
+    if not resource_id:
+        raise ValueError("资源 id 为空，无法设置显示名")
+    directory = _resource_home(
+        type_id, resource_id, _resource_dirs(type_id, data_dir, world_state))
+    return _set_envelope_title(directory, type_id, str(resource_id), title)
 
 
 # ---------------------------------------------------------------------------
@@ -517,6 +655,7 @@ def catalog_entry(type_id: str, resource_id: str,
             envelope["content_hash"] = content_hash(target, spec.container)
     return {
         "id": resource_id,
+        "title": envelope.get("title", ""),
         "author": envelope.get("author", ""),
         "namespace": envelope.get("namespace", ""),
         "version": envelope.get("version", ""),

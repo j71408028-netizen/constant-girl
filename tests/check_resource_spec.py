@@ -272,6 +272,70 @@ try:
                                       "chinese_mix", primary),
           "仅行尾换行差异也算改动（CSV 按字节哈希）")
 
+    # ---------------- 4b. 显示名与 id 分层 ----------------
+    check(envelope_mod.default_envelope("landmarks", "x")["title"] == "",
+          "缺省信封的显示名为空")
+    check(registry.display_name("landmarks", "chinese_mix", _tmp) == "chinese_mix",
+          "未设显示名时回落成 id")
+    check(registry.title_of("landmarks", "chinese_mix", _tmp) == "",
+          "未设显示名时 title 为空串")
+
+    envelope_mod.save_envelope(landmarks_dir, "landmarks", "chinese_mix",
+                               envelope_mod.build_envelope(
+                                   landmarks_dir, "landmarks", "chinese_mix", primary))
+    payload_before = open(primary, "rb").read()
+    entries_before = sorted(os.listdir(landmarks_dir))
+    registry.set_title("landmarks", "chinese_mix", "  中文混合  ", _tmp)
+    check(registry.title_of("landmarks", "chinese_mix", _tmp) == "中文混合",
+          "显示名原样保存并去掉首尾空白",
+          registry.title_of("landmarks", "chinese_mix", _tmp))
+    check(registry.display_name("landmarks", "chinese_mix", _tmp) == "中文混合",
+          "有显示名时界面取显示名")
+    check(open(primary, "rb").read() == payload_before,
+          "改显示名不动载荷")
+    check(sorted(os.listdir(landmarks_dir)) == entries_before,
+          "改显示名不动容器名与目录内容")
+    check(not envelope_mod.looks_modified(landmarks_dir, "landmarks",
+                                          "chinese_mix", primary),
+          "改显示名不算内容改动（不进 content_hash）")
+    registry.set_title("landmarks", "chinese_mix", "", _tmp)
+    check(registry.display_name("landmarks", "chinese_mix", _tmp) == "chinese_mix",
+          "清除显示名后回落成 id")
+
+    pairs = registry.display_names("landmarks", ["v1.2", "chinese_mix"], _tmp)
+    check([rid for rid, _ in pairs] == ["v1.2", "chinese_mix"],
+          "display_names 保持传入顺序", pairs)
+    check(all(name for _, name in pairs), "display_names 不留空名", pairs)
+
+    check(registry.slugify("My Style!") == "my_style",
+          "显示名派生 id：非字母数字折成下划线", registry.slugify("My Style!"))
+    check(registry.suggest_id("landmarks", "My Style") == "landmark_my_style",
+          "派生 id 带类型前缀", registry.suggest_id("landmarks", "My Style"))
+    check(registry.suggest_id("landmarks", "My Style",
+                              ["landmark_my_style"]) == "landmark_my_style_2",
+          "撞名时追加序号")
+    check(registry.suggest_id("quips", "My Style") == "quip_my_style",
+          "不同类型用各自前缀")
+    check(registry.suggest_id("landmarks", "巨影临城") == "landmark",
+          "纯中文名退化为前缀", registry.suggest_id("landmarks", "巨影临城"))
+    check(registry.suggest_id("landmarks", "巨影临城", ["landmark"]) == "landmark_2",
+          "纯中文名撞名后再追加序号")
+    check(registry.suggest_id("landmarks", "Landmark Mix") == "landmark_mix",
+          "名字已带前缀时不重复加", registry.suggest_id("landmarks", "Landmark Mix"))
+    check(registry.valid_id_of("landmarks", "quip_whatever"),
+          "前缀只是默认值，手填 id 不受前缀约束")
+    check(not registry.valid_id_of("landmarks", "Bad ID"),
+          "手填 id 仍要满足 id 规则")
+    check(registry.slugify("../../etc") == "etc",
+          "派生 id 不会逃出目录", registry.slugify("../../etc"))
+    for type_id in ("behaviors", "topics", "challenges"):
+        candidate = registry.suggest_id(type_id, "Some Name!!", ["some_name"])
+        check(spec_of(type_id).valid_id(candidate),
+              f"{type_id} 派生的 id 合规", candidate)
+
+    catalog_title = registry.catalog_entry("landmarks", "chinese_mix", _tmp)
+    check("title" in catalog_title, "索引条目带显示名字段", sorted(catalog_title))
+
     # 缺信封视为改过；不可读容器缺信封给警告
     missing_dir = os.path.join(_tmp, "packs", "challenges")
     os.makedirs(missing_dir, exist_ok=True)

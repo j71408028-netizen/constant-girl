@@ -14,13 +14,22 @@
 三条命名规则对本文件声明的**全部**类型生效：
 
 - 类型 id：``^[a-z][a-z0-9_]*$``，复数形式，同时充当自由目录名与世界包内目录名；
-- 资源 id：``^[a-z0-9][a-z0-9._-]{0,63}$``，来自容器名，不从显示名推断；
+- 资源 id：``^[a-z0-9][a-z0-9._-]{0,63}$``，来自容器名——新建时自动派生
+  （``registry.suggest_id``，规则是「类型前缀 + 显示名 slug」，如
+  ``landmark_my_style``），之后跟着容器走，改显示名不改它。前缀只是**默认派生**
+  的约定，不是 id 的合法条件：用户指定 ``quip_雪夜`` 或 ``something_else`` 都成立，
+  只要符合 id 规则；
 - 主文件后缀：只有容器本身需要被外部程序认领时才带后缀（``.csv`` 要给表格软件、
   ``.chal`` 是整包、``.py`` 是 Python 包）。单个 JSON 文件的主文件**不带后缀**——
   路径本身就是资源的地址，同目录的 ``.addr.json`` / ``.meta.json`` 一眼可辨，
   按名与按类型两种浏览方式才能得到不同视图；编辑器里关联语言见 docs/dev/architecture.md。
 
-显示名（``name`` / ``label`` 字段）可以是任意语言，只用于界面与提示词。
+名字分两层，不要混：
+
+- **资源级显示名**（信封 ``title``）——「这份资源在界面上叫什么」，任意语言、可改、
+  不进 id；空值由界面回落成 id（见 ``registry.display_name``）；
+- **条目级显示名**（载荷里的 ``name`` / ``label`` 字段）——资源**内部**一条内容的名字
+  （一个地标、一个话题类型），由各自的字段声明管，与资源 id 无关。
 """
 
 import re
@@ -132,6 +141,8 @@ class ResourceTypeSpec:
     - ``max_items``：世界包一次可声明的份数上限（0 = 不限）；
     - ``id_pattern``：本类型专属的资源 id 正则（空 = 用全局 ``RESOURCE_ID_RE``）；
       行为包要按 Python 标识符取名，比全局规则宽，不能共用一个正则；
+    - ``id_prefix``：自动派生 id 时的默认前缀（``landmarks`` → ``landmark``），
+      让新建的资源一眼能看出属于哪一类；只是默认值，不参与 id 校验；
     - ``ui_pick``：界面上的选择粒度，见 ``PICK_MODES``；
     - ``trait_values``：本类型的特色（``traits``）词表，声明在信封 ``traits``
       字段里的合法取值；空 = 该类型暂未启用特色，界面对其隐藏该筛选项。
@@ -154,6 +165,7 @@ class ResourceTypeSpec:
     addressable: bool = False
     max_items: int = 0
     id_pattern: str = ""
+    id_prefix: str = ""
     ui_pick: str = "multi"
     trait_values: Tuple[str, ...] = ()
     trait_pick: str = "single"
@@ -373,6 +385,7 @@ RESOURCE_TYPES: Tuple[ResourceTypeSpec, ...] = (
         container="csv",
         primary="{id}.csv",
         label="地标风格",
+        id_prefix="landmark",
         fields=_LANDMARK_FIELDS,
         settings_keys=("selected_styles",),
         addressable=True,
@@ -384,6 +397,7 @@ RESOURCE_TYPES: Tuple[ResourceTypeSpec, ...] = (
         primary="{id}/quips.csv",
         config="{id}/config.json",
         label="描述风格",
+        id_prefix="quip",
         fields=_QUIP_FIELDS,
         settings_keys=("selected_quip_styles",),
         addressable=True,
@@ -396,6 +410,7 @@ RESOURCE_TYPES: Tuple[ResourceTypeSpec, ...] = (
         container="csv_bundle",
         primary="{id}/names.csv",
         label="取材表",
+        id_prefix="material",
         root="static",
         members=MATERIAL_MEMBERS,
         settings_keys=("material_table",),
@@ -410,6 +425,7 @@ RESOURCE_TYPES: Tuple[ResourceTypeSpec, ...] = (
         container="json_dir",
         primary="{id}/config.json",
         label="副本方案",
+        id_prefix="scenario",
         fields=_SCENARIO_FIELDS,
         trait_values=("longform", "gameplay", "multi_ending"),
         trait_pick="multi",
@@ -420,6 +436,7 @@ RESOURCE_TYPES: Tuple[ResourceTypeSpec, ...] = (
         container="opaque",
         primary="{id}.chal",
         label="挑战包",
+        id_prefix="challenge",
         note="挑战包：整包加密、文件名是唯一外读信息，纳入索引时必须外加兄弟信封",
     ),
     ResourceTypeSpec(
@@ -427,6 +444,7 @@ RESOURCE_TYPES: Tuple[ResourceTypeSpec, ...] = (
         container="py_package",
         primary="{id}/*.py",
         label="行为包",
+        id_prefix="behavior",
         root="static",
         max_items=1,
         id_pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
@@ -439,6 +457,7 @@ RESOURCE_TYPES: Tuple[ResourceTypeSpec, ...] = (
         container="json_array",
         primary="{id}",
         label="话题表",
+        id_prefix="topic",
         fields=_TOPIC_FIELDS,
         max_items=1,
         ui_pick="single",
@@ -450,6 +469,7 @@ RESOURCE_TYPES: Tuple[ResourceTypeSpec, ...] = (
         container="json_dir",
         primary="{id}/manifest.json",
         label="小游戏",
+        id_prefix="minigame",
         fields=_MANIFEST_FIELDS,
         id_required=True,
         note="小游戏：数据包目录，manifest.json 声明后端与参数",
@@ -497,6 +517,14 @@ def pick_mode(type_id: str) -> str:
     """界面选择粒度（``multi`` / ``single``）；未知类型按 ``multi``。"""
     spec = spec_of(type_id)
     return spec.ui_pick if spec is not None else "multi"
+
+
+def id_prefix_of(type_id: str) -> str:
+    """自动派生 id 时的默认前缀；未声明时回落到类型 id（未知类型即原样返回）。"""
+    spec = spec_of(type_id)
+    if spec is None:
+        return str(type_id or "")
+    return spec.id_prefix or spec.type_id
 
 
 def trait_values_of(type_id: str) -> Tuple[str, ...]:
@@ -594,8 +622,11 @@ def check_spec_consistency() -> list:
                 re.compile(spec.id_pattern)
             except re.error as exc:
                 problems.append(f"{spec.type_id}: id_pattern 无法编译（{exc}）")
+        if spec.id_prefix and not spec.valid_id(f"{spec.id_prefix}_x"):
+            problems.append(
+                f"{spec.type_id}: id_prefix {spec.id_prefix!r} 拼出的 id 不合规")
     for name in ("settings_keys", "packable", "addressable", "id_required",
-                 "label", "max_items", "id_pattern", "ui_pick",
+                 "label", "max_items", "id_pattern", "id_prefix", "ui_pick",
                  "trait_values", "trait_pick", "members"):
         if name not in {f.name for f in fields(ResourceTypeSpec)}:
             problems.append(f"ResourceTypeSpec 缺少字段 {name}")

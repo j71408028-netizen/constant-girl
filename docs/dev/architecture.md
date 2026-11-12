@@ -208,6 +208,30 @@ data/static/behaviors/imperial_units/imperial_units.py:45
 `content_hash` 判定「本地改过没有」。列目录一律走 `registry.is_resource_entry()`
 （伴随文件、`.bak`、原子写的 `.tmp` 都由它排除），不要自己写 `endswith(".json")`。
 
+**id 与显示名分层**：id 是身份，显示名只属于界面，两者不要互相顶替。
+
+- **id 永不变**。它同时是目录名、容器名、设置项取值（`selected_styles` /
+  `material_table`）、`Ref` 文本、世界包清单里的声明与索引主键。新建资源时由
+  `registry.suggest_id()` 按显示名派生一次，自动带类型前缀
+  （`landmarks` → `landmark_my_style`；纯中文名只剩前缀，`landmark` /
+  `landmark_2`），之后跟着容器走，**改名不改 id**。
+- **前缀只是默认值，不是约束**。手填的 id 合 `registry.valid_id_of()` 就成立，
+  `my_style` 与 `landmark_x` 同等有效——前缀解决的是「一堆同级目录里一眼看出
+  属于哪类」，不是命名空间隔离。
+- **界面不出现 id**：新建只问名称，id 自动派生；要指定 id 走「高级」入口
+  （`ui/ctk/dialogs.py::ResourceNameDialog`；世界包对话框、挑战包新建块同理），
+  不合规或重名在提交时报错。
+- **显示名存信封 `title`**，任意语言、可改、允许重名。界面一律经
+  `registry.display_name()` / `display_names()` 取名，取不到就回落成 id；
+  「重命名资源」就是 `registry.set_title()`——只写信封，不改目录名、不动载荷、
+  不进 `content_hash`，所以改一次名字不会让已选风格、地址注册、耐久表键或
+  世界包清单断档，也不会被判成「内容改过」。
+- **载荷里的 `name` / `label` 不是资源名**：那是资源**内部条目**的名字
+  （一个地标、一个话题类型）。资源名只认信封 `title`。
+
+判据落在 `tests/check_resource_spec.py`（改名后载荷与目录不变、哈希不变、
+派生 id 不逃出目录）。
+
 **单文件 JSON 容器的主文件不带扩展名**：`topics/<id>`，路径本身就是资源地址。
 理由是三份文件挤在同一层的目录里时，`x.json` +
 `x.addr.json` + `x.meta.json` 让「按名浏览」和「按类型浏览」看不出区别；去掉主文件

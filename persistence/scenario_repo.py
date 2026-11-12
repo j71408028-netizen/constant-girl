@@ -26,12 +26,16 @@ from dungeon.validate import format_diagnostics, validate_scenario_config
 from dungeon.terms import (DEFAULT_SCENARIO_ID, SCENARIO_CONFIG_NAME,
                            SCENARIO_RESOURCE_KEY, is_default_scenario)
 from .json_store import load_json_with_backup, write_json_atomic
+from .resources.registry import display_name as _display_name
+from .resources.registry import envelope_path_of as _envelope_path_of
 from .resources.registry import free_dir as _free_dir_of
 from .resources.registry import pack_dir as _pack_dir_of
+from .resources.registry import set_title as _set_title
 
 
 class ScenarioRepo:
     def __init__(self, data_dir: str = "data", world_state=None):
+        self._data_dir = data_dir
         self._world_state = world_state
         self._write_root = _free_dir_of(SCENARIO_RESOURCE_KEY, data_dir)
         # 最近一次 save_config 的校验诊断（编辑器/启动流程各取所需）
@@ -65,6 +69,21 @@ class ScenarioRepo:
                 return candidate
         return os.path.join(self._write_root, scenario_id)
 
+
+    def display_name(self, scenario_id: str) -> str:
+        """界面显示名：有显示名用显示名，否则回落成 id。"""
+        return _display_name(SCENARIO_RESOURCE_KEY, scenario_id,
+                             self._data_dir, self._world_state)
+
+    def display_names(self, scenario_ids: list = None) -> dict:
+        """``{方案 id: 显示名}``；不传则覆盖当前可见的全部方案。"""
+        ids = list(scenario_ids) if scenario_ids is not None else self.list_all()
+        return {sid: self.display_name(sid) for sid in ids}
+
+    def set_title(self, scenario_id: str, title: str):
+        """写显示名（即界面上的「重命名」）：不动 id、不动方案目录。"""
+        return _set_title(SCENARIO_RESOURCE_KEY, scenario_id, title,
+                          self._data_dir, self._world_state)
 
     def list_all(self) -> list:
         """全部方案 id（世界包 + 自由根，去重排序）。"""
@@ -101,6 +120,10 @@ class ScenarioRepo:
         path = os.path.join(self._write_root, scenario_id)
         if os.path.exists(path):
             shutil.rmtree(path)
+        envelope = _envelope_path_of(SCENARIO_RESOURCE_KEY, scenario_id,
+                                     self._data_dir)
+        if os.path.exists(envelope):
+            os.remove(envelope)
 
     def copy(self, src_id: str, dst_id: str) -> bool:
         if self.exists(dst_id):
