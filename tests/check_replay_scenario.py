@@ -238,28 +238,36 @@ check("素材与当时一致时不刷日志",
 real_root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                          "data")
 replay_dir = os.path.join(real_root, "user", "replays")
-newest = None
+files = []
 if os.path.isdir(replay_dir):
     files = [os.path.join(replay_dir, name) for name in os.listdir(replay_dir)
              if name.endswith(".replay.json")]
-    if files:
-        newest = max(files, key=os.path.getmtime)
-if newest:
+# 反查靠素材存在性，而 data/ 里的素材随时会被作者删改：只挑「至少还能命中
+# 一个方案目录」的样本断言，全部命不中就跳过——别让素材搬家变成测试失败。
+sample = None
+if files:
     import json
     from persistence.scenario_repo import ScenarioRepo
 
-    with open(newest, encoding="utf-8") as handle:
-        raw = json.load(handle)
-    records = replay.parse_all(raw)
+    repo = ScenarioRepo(real_root)
+    roots = [repo.scenario_dir(sid) for sid in repo.list_all()]
+    for path in sorted(files, key=os.path.getmtime, reverse=True):
+        with open(path, encoding="utf-8") as handle:
+            raw = json.load(handle)
+        records = replay.parse_all(raw)
+        paths = replay.material_paths(records, 16)
+        if any(os.path.exists(os.path.join(root, rel))
+               for rel in paths for root in roots):
+            sample = (path, records)
+            break
+if sample:
+    newest, records = sample
     host = Host(ScenarioRepo(real_root))
     host._resolve_replay_scenario(records)
-    has_background = any(isinstance(r, replay.ChapterRecord) and r.background.get("image_path")
-                         for r in records)
-    check("真实回放文件反查出了方案（有章节背景时）",
-          bool(host.scenario_id) or not has_background,
+    check("真实回放文件反查出了方案（有章节背景时）", bool(host.scenario_id),
           (newest, host.scenario_id))
 else:
-    print("  SKIP 真实回放文件（data/user/replays 下没有样本）")
+    print("  SKIP 真实回放文件（没有素材还能命中方案目录的样本）")
 
 print("")
 print(f"{total - len(failures)}/{total} 通过")
