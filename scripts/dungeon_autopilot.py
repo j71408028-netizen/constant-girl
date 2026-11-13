@@ -620,7 +620,7 @@ def _written_files():
 # 场景
 # ---------------------------------------------------------------------------
 def scene_session_close():
-    """挑战模式直进会话 → 步进 → 关闭：应落「未完成」回放与报告。"""
+    """挑战模式直进会话 → 步进 → 关闭：未完成局不落任何文件，只确认一次。"""
     vp_before = _leftover_viewport_windows()
     win, result = _make_window(
         [("click", 4), ("check", _check_session_snapshot), ("close", None)],
@@ -635,11 +635,13 @@ def scene_session_close():
     files = _written_files()
     replays = [f for f in files if f.startswith(os.path.join("user", "replays"))]
     reports = [f for f in files if f.startswith(os.path.join("user", "reports"))]
-    check("会话：落盘了未完成回放", any("_未完成" in f for f in replays), replays)
-    check("会话：落盘了报告", bool(reports), reports)
+    check("会话：未完成局不落回放", not replays, replays)
+    check("会话：未完成局不落报告", not reports, reports)
     check("会话：未写 endings.json",
           not os.path.exists(os.path.join(_DATA_ROOT, "user", "endings.json")))
-    check("会话：退出时给出提示", any(c[0] == "info" for c in _HOST.calls), _HOST.calls)
+    check("会话：退出时确认过放弃",
+          any(c[0] == "ask" and "放弃" in c[1] for c in _HOST.calls), _HOST.calls)
+    check("会话：退出有可见提示", any(c[0] == "info" for c in _HOST.calls), _HOST.calls)
     # ---- L4：结果对象 ----
     check("会话：结果为 session-ended", result.reason == "session-ended", result)
     check("会话：结果 succeeded", result.succeeded and not result.failed
@@ -1198,7 +1200,7 @@ def scene_native_close():
 
     imgui/GLFW 侧 P0 实测不再残留 ``WM_QUIT``（见 ``30-spike-lifecycle.md``），本场景
     因此转成**回归守卫**：三条断言锁住它——弹框那一刻队列里没有残留、会话结束后
-    宿主计时器仍在跑、未完成回放照常落盘。
+    宿主计时器仍在跑、未完成局不落回放。
     """
     if not sys.platform.startswith("win"):
         print("  SKIP native-close：WM_QUIT 是 Win32 专有，非 Windows 不适用")
@@ -1232,7 +1234,7 @@ def scene_native_close():
     check("原生关闭：会话结束后队列里也没有 WM_QUIT", _pending_quit() == 0)
     files = _written_files()
     replays = [f for f in files if f.startswith(os.path.join("user", "replays"))]
-    check("原生关闭：落盘了未完成回放", any("_未完成" in f for f in replays), replays)
+    check("原生关闭：未完成局不落回放", not replays, replays)
     check("原生关闭：结果为 session-ended 且 succeeded",
           result.reason == "session-ended" and result.succeeded, result)
     # 用户可见的症状就是「宿主计时器不再跳」：这里真的泵一段事件循环去验证

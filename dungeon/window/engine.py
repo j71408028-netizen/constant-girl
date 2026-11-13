@@ -254,7 +254,7 @@ class DungeonStoryEngine:
 
             except Exception as e:
                 process_log.log(f"流式任务执行异常: {e}")
-                # 异常不再静默：写入会话错误清单（收尾时进「未完成」报告）
+                # 异常不再静默：写入会话错误清单（退出确认与日志会引用它）
                 # 并在故事区提示一行，玩家可再次点击推进重试
                 self._note_session_error(e)
             finally:
@@ -876,8 +876,8 @@ class DungeonStoryEngine:
         """记录一次生成异常：会话仍可重试，但异常必须可见。
 
         此前这里只有一行 ``print``，玩家看到的是"点了没反应"。现在异常写入
-        ``_session_errors``（副本收尾时汇总进「未完成」回放与报告），并在故事区
-        插一行提示；副本不因此自动结束，玩家可再次点击推进重试。
+        ``_session_errors``（退出确认会提示本次出现几次异常，同时进过程日志），
+        并在故事区插一行提示；副本不因此自动结束，玩家可再次点击推进重试。
         """
         message = f"{type(error).__name__}: {error}"
         errors = getattr(self, "_session_errors", None)

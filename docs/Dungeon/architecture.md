@@ -288,13 +288,14 @@ DungeonPersistence._finalize(completed: bool, reason: str = "")
 
 | 路径 | 触发方 | `completed` | 行为 |
 |---|---|---|---|
-| 正常结局 | `EndingHandler._generate_ending` | `True` | 结算结局增量 → 落角色 → 写结局索引 → 按设置自动保存回放与报告 |
+| 正常结局 | `EndingHandler._generate_ending` | `True` | 结算结局增量 → 落角色 → 写结局索引 → 自动保存开关打开时保存回放与报告（无角色先询问，拒绝则不建角色、不保存） |
 | 结局已触发但生成线程未收尾 | `_handle_exit`（reason「结局已触发，生成未结束」） | `True` | 同上，避免「生成到一半退出」被误判为未完成 |
-| 用户中断、未触发结局 | `_handle_exit`（窗口关闭统一走这里） | `False` | **不**结算、**不**写 `endings.json`、**不**记挑战达成；已生成内容落盘为「未完成」回放 + 报告 |
-| 生成异常 | `_note_session_error`（不结束会话，可重试） | 视退出时是否已触发结局而定 | 同上；报告里附会话期间的异常摘要 |
+| 用户中断、未触发结局 | `_handle_exit`（窗口关闭统一走这里） | `False` | 先 `_confirm_abandon()` 确认；**不**结算、**不**写 `endings.json`、**不**记挑战达成、**不**落盘任何回放或报告、不创建角色 |
+| 生成异常 | `_note_session_error`（不结束会话，可重试） | 视退出时是否已触发结局而定 | 异常计入 `_session_errors`，退出确认里提示次数；异常本身不改变收尾语义 |
 
 `_finalized` 标志保证幂等（多条路径抢跑时只有第一次生效）。
-这是针对「未触发结局就退出导致整局丢失」的修复：**没真正走完的一局不算达成，但内容必须保住。**
+收尾语义与「能不能接续」对齐：**走到结局的一局才算数**——它结算、记索引、按需存回放；
+没走到结局的一局既不结算也不留半成品，因为本版没有中途存档，留下也接不上。
 
 ## 7. 配置治理链路（schema → validate → 运行时）
 
@@ -324,12 +325,15 @@ data/
       components/            显示组件包（官方包随分发提供）
   archives/<角色档案目录>/           目录名 = 角色的 giantess_id
       info.json  avatar/             档案本体与形象
-      回放/<名>_回放_<时间戳>[_未完成].replay.json
-      报告/<名>_报告_<时间戳>[_未完成].txt
+      回放/<名>_回放_<时间戳>.replay.json
+      报告/<名>_报告_<时间戳>.txt
   user/
       endings.json  replays/  reports/  （挑战模式与无角色场景）
       settings.json  dungeon_settings.json  api_keys.json  address_registry.json
 ```
+
+回放与报告只由「走到结局并选择保存」的一局产生；`_未完成` 标记已随「未完成局不落盘」一并退场，
+旧版留下的 `*_未完成.*` 文件仍能被回放加载与档案导出识别。
 
 `<角色档案目录>` 由 `persistence/character_repo.py::make_id()` 派生，形如
 `<名字段>_<时间戳>`。显示名可以是任意文本（原样存在 `info.json` 的 `name`），

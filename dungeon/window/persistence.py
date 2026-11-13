@@ -205,16 +205,10 @@ class DungeonPersistence:
         process_log.log(f"[Ending] 结局增量已结算：介入度{intr_d:+.2f}，破坏性{dest_d:+.2f}，"
               f"伤亡{cas_d:+.2f}，行动点数返还{refund:+d}")
 
-    def _build_scenario_report_text(self, incomplete: bool = False,
-                                   reason: str = "") -> str:
+    def _build_scenario_report_text(self) -> str:
+        """副本报告的正文。只由走到结局的一局生成。"""
         lines = [f"{self.name}    副本报告"]
         lines.append("═" * (12 + max(0, len(str(self.name)) * 2)))
-        if incomplete:
-            # 未触发结局就退出：报告仍然落盘，但明确标注本局未走完
-            detail = f"（{reason}）" if reason else ""
-            lines.append("")
-            lines.append(f"【未完成】本次副本未触发结局即结束{detail}。")
-            lines.append("以下为退出时已生成的内容；结局结算与结局索引均未发生。")
         lines.append("")
         lines.append(f"介入度：{self.dungeon_state.intrusion:.2f}")
         lines.append(f"破坏性：{self.dungeon_state.destruction:.2f}")
@@ -268,13 +262,12 @@ class DungeonPersistence:
         char.depth_destruction = getattr(self.dungeon_state, "depth_destruction", None)
         return char
 
-    def _write_replay_file(self, char, incomplete: bool = False) -> str:
-        """写入角色档案目录下的回放；``incomplete`` 时文件名带「未完成」标记。"""
+    def _write_replay_file(self, char) -> str:
+        """写入角色档案目录下的回放。"""
         replay_dir = os.path.join(data_dir(), "archives", char.giantess_id, "回放")
         os.makedirs(replay_dir, exist_ok=True)
         timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        marker = "_未完成" if incomplete else ""
-        filename = f"{id_segment(char.name) or '角色'}_回放_{timestamp}{marker}.replay.json"
+        filename = f"{id_segment(char.name) or '角色'}_回放_{timestamp}.replay.json"
         path = os.path.join(replay_dir, filename)
         try:
             # 原子写：半截回放文件不会被读到（后缀仍为 .replay.json，回放加载照旧）
@@ -284,32 +277,27 @@ class DungeonPersistence:
             return ""
         return path
 
-    def _write_report_file(self, char, incomplete: bool = False,
-                           reason: str = "") -> str:
-        """写入角色档案目录下的报告；``incomplete`` 时标注本局未走完。"""
+    def _write_report_file(self, char) -> str:
+        """写入角色档案目录下的报告。"""
         report_dir = os.path.join(data_dir(), "archives", char.giantess_id, "报告")
         os.makedirs(report_dir, exist_ok=True)
         timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        marker = "_未完成" if incomplete else ""
-        filename = f"{id_segment(char.name) or '角色'}_副本报告_{timestamp}{marker}.txt"
+        filename = f"{id_segment(char.name) or '角色'}_副本报告_{timestamp}.txt"
         path = os.path.join(report_dir, filename)
         try:
-            write_text_atomic(
-                path, self._build_scenario_report_text(incomplete=incomplete, reason=reason),
-                backup=False)
+            write_text_atomic(path, self._build_scenario_report_text(), backup=False)
         except Exception as e:
             process_log.log(f"[Replay] 报告保存失败: {e}")
             return ""
         return path
 
-    def _write_user_replay_file(self, incomplete: bool = False) -> str:
+    def _write_user_replay_file(self) -> str:
         """挑战模式/无角色场景：把回放写入 data/user/replays，不创建/更新任何角色。"""
         replay_dir = os.path.join(data_dir(), "user", "replays")
         os.makedirs(replay_dir, exist_ok=True)
         timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         scenario_key = (self.scenario_id or "副本").replace("/", "_").replace("\\", "_")
-        marker = "_未完成" if incomplete else ""
-        filename = f"{scenario_key}_回放_{timestamp}{marker}.replay.json"
+        filename = f"{scenario_key}_回放_{timestamp}.replay.json"
         path = os.path.join(replay_dir, filename)
         try:
             write_json_atomic(path, self._replay_payload(), backup=False)
@@ -362,30 +350,49 @@ class DungeonPersistence:
             entries.append({"path": path, "size": size})
         return entries
 
-    def _write_user_report_file(self, incomplete: bool = False,
-                                reason: str = "") -> str:
+    def _write_user_report_file(self) -> str:
         """挑战模式/无角色场景：报告写入 data/user/reports（与回放同层级）。"""
         report_dir = os.path.join(data_dir(), "user", "reports")
         os.makedirs(report_dir, exist_ok=True)
         timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         scenario_key = (self.scenario_id or "副本").replace("/", "_").replace("\\", "_")
-        marker = "_未完成" if incomplete else ""
-        filename = f"{scenario_key}_副本报告_{timestamp}{marker}.txt"
+        filename = f"{scenario_key}_副本报告_{timestamp}.txt"
         path = os.path.join(report_dir, filename)
         try:
-            write_text_atomic(
-                path, self._build_scenario_report_text(incomplete=incomplete, reason=reason),
-                backup=False)
+            write_text_atomic(path, self._build_scenario_report_text(), backup=False)
         except Exception as e:
             process_log.log(f"[Replay] 用户报告保存失败: {e}")
             return ""
         return path
 
     def _save_replay_record(self, auto: bool = False):
-        """保存副本回放及其附带报告。需要角色，否则自动/询问创建。"""
+        """保存副本回放及其附带报告。
+
+        两种调用时机都**不静默**：
+
+        - ``auto=False``：玩家在窗口收尾时回答「保存」，或点了面板里的
+          「立即保存」；完成后弹「保存成功」。
+        - ``auto=True``：自动保存开关打开，结局一触发就保存；成功后不弹框
+          （玩家没主动要求，不该被打断）。
+
+        两条时机在「没有角色」时走**同一条**询问链：保存必须落在某个角色
+        档案下，而副本本身没有接续能力，凭空建角色等于替玩家做决定。自动
+        保存因此也可能被玩家拒绝——拒绝就等同于本次不保存，这与未完成退出
+        「不创建角色」的口径一致。
+        """
         if self._replay_saved:
             return
-        if getattr(self, "mode", "explore") == "challenge":
+        mode = getattr(self, "mode", "explore")
+        char = self.character
+        if mode != "challenge" and char is None:
+            if not self._dialog_ask(
+                    "创建角色", "保存本次副本回放需要角色。\n是否现在创建角色？"):
+                process_log.log("[Replay] 玩家拒绝为保存回放创建角色，本次不保存")
+                self._dialog_warning("未保存", "未创建角色，本次副本回放未保存。")
+                return
+            char = self._create_character_from_session()
+            self.character = char
+        if mode == "challenge":
             # 挑战模式：不更新角色状态，只把回放写入 data/user
             replay_path = self._write_user_replay_file()
             self._replay_saved = True
@@ -396,15 +403,6 @@ class DungeonPersistence:
                 self._dialog_info(
                     "保存成功", f"挑战包回放已保存。\n回放：{replay_path}")
             return
-        char = self.character
-        if char is None:
-            if not auto:
-                if not self._dialog_ask(
-                        "创建角色", "保存副本回放需要角色。\n是否现在创建角色？"):
-                    self._dialog_warning("未保存", "未创建角色，本次副本回放未保存。")
-                    return
-            char = self._create_character_from_session()
-            self.character = char
         if self.character_repo is not None:
             try:
                 self.character_repo.save(char)
@@ -424,15 +422,16 @@ class DungeonPersistence:
 
     # ------------------ 统一收尾 ------------------
     def _finalize(self, completed: bool, reason: str = ""):
-        """副本收尾的单一入口：正常结局、用户中断、生成异常三条路径共用。
+        """副本收尾的单一入口：正常结局与用户中断两条路径共用。
 
         ``completed=True``（走到结局）：结算结局增量 → 记录重要结局索引 →
-        按设置自动保存回放（与改动前的 `_generate_ending` 收尾等价）。
+        自动保存开关打开时保存回放（无角色先询问，见 :meth:`_save_replay_record`）。
 
         ``completed=False``（未触发结局就结束）：**不**结算结局增量、**不**写
-        ``data/user/endings.json``、**不**记挑战达成——没真正走完的一局不能算达成；
-        但已经生成的内容照旧落盘（回放 + 报告，文件名带「未完成」标记），
-        避免整局丢失。
+        ``data/user/endings.json``、**不**记挑战达成、**不**落盘任何回放或报告——
+        没真正走完的一局不能算达成，而本版也没有「中途存档续玩」的能力，留一份
+        接不上的半成品只会让玩家手里多一个读不懂的文件。调用方负责先确认玩家
+        确实要放弃（见 :meth:`_handle_exit`）。
         """
         if getattr(self, "_finalized", False):
             return
@@ -448,55 +447,35 @@ class DungeonPersistence:
             if self._auto_replay_enabled():
                 self._save_replay_record(auto=True)
             return
+        process_log.log(f"[Dungeon] 未完成退出，不落盘（{reason}）")
 
-        detail = reason or "未触发结局"
-        errors = list(getattr(self, "_session_errors", None) or [])
-        if errors:
-            detail += f"；会话中出现 {len(errors)} 次生成异常（最近：{errors[-1]}）"
-        if not self.replay_data and not self.story_history:
-            self._dialog_info("副本退出", "本次副本还没有生成任何内容，未保存。")
-            return
-        replay_path, report_path = self._save_incomplete_record(detail)
-        if replay_path:
-            self._dialog_info(
-                "副本未完成",
-                f"未触发结局就退出，已把生成的内容保存为「未完成」回放：\n{replay_path}\n"
-                f"报告：{report_path}")
-        else:
-            self._dialog_warning(
-                "副本退出", "未触发结局就退出，且未完成回放保存失败，本次数据未保存。")
+    def _confirm_abandon(self) -> bool:
+        """未完成退出前的一次确认：告诉玩家这一局会消失。
 
-    def _save_incomplete_record(self, reason: str):
-        """未完成退出：把已生成的内容落盘（不创建角色、不做任何结算）。
-
-        有角色（探索模式）写角色档案目录；无角色或挑战模式写 ``data/user``。
-        返回 ``(回放路径, 报告路径)``，写入失败为空串。
+        与「保存回放」是两种语义。这里不是问要不要存档——本版没有中途存档，
+        也就没有接续；确认的是「放弃」这个动作本身。用户点「否」表达的是
+        「我不想现在退」，但窗口此时已经销毁，无法回到游戏里，所以两种情况
+        都不落盘，只是提示文案不同（见 :meth:`_handle_exit`）。
         """
-        char = self.character
-        if char is not None and getattr(self, "mode", "explore") != "challenge":
-            replay_path = self._write_replay_file(char, incomplete=True)
-            report_path = self._write_report_file(char, incomplete=True, reason=reason)
-        else:
-            replay_path = self._write_user_replay_file(incomplete=True)
-            report_path = self._write_user_report_file(incomplete=True, reason=reason)
-        # 记下来交给 SessionResult（L4）：调用方不必再自己去翻目录
-        self.replay_path = replay_path
-        self.report_path = report_path
-        process_log.log(f"[Dungeon] 未完成收尾落盘：回放={replay_path or '失败'}，"
-              f"报告={report_path or '失败'}（{reason}）")
-        if replay_path:
-            self._replay_saved = True
-        return replay_path, report_path
+        if not self.replay_data and not self.story_history:
+            return True  # 什么都没生成，没什么可失去的，不必打断
+        errors = list(getattr(self, "_session_errors", None) or [])
+        hint = f"\n（本次会话出现 {len(errors)} 次生成异常）" if errors else ""
+        return self._dialog_ask(
+            "放弃本次副本",
+            "本次副本还没有走到结局。\n"
+            "副本不支持中途存档，退出后这一局的内容不会保留，也无法接续。\n"
+            f"确定放弃吗？{hint}")
 
     def _handle_exit(self):
         """用户关闭副本窗口后的退出处理（在主线程、``hello_imgui.run()`` 返回后调用）。
 
-        未触发结局：走 ``_finalize(completed=False)``——不结算、不记结局索引，
-        但把已生成的内容保存为「未完成」回放与报告（此前直接丢弃）；
-        结局已触发（含文本仍在生成、join 超时）：按「走到结局」收尾，避免
-        结算与结局索引被误判为未完成而丢失；
-        已触发结局且收尾完毕：``_finalize(completed=True)`` 已在结局生成结束时
-        执行，这里只询问是否保存正式回放。
+        语义分两档，与「能不能接续」对齐：
+
+        - 结局已达成：值得留档，则问「是否保存本次回放」（自动保存已存过就
+          不再重复问）。
+        - 未达成结局：本版没有中途存档能力，只有「放弃」这一种结果。确认一次
+          之后什么都不落盘——不留接不上的半成品，也不创建角色。
         """
         if self.is_replay:
             return
@@ -514,6 +493,13 @@ class DungeonPersistence:
                 self._finalize(completed=True, reason="结局已触发，生成未结束")
             else:
                 self._finalize(completed=False, reason="未触发结局就退出")
+                if not self._confirm_abandon():
+                    # 窗口已销毁，回不到游戏里；只能把「没保住」说清楚，
+                    # 而不是让玩家以为点了「否」就还能继续
+                    self._dialog_info(
+                        "本次副本已结束",
+                        "窗口已关闭，这一局没有保留。\n"
+                        "下次请走到结局再退出——未达成结局的一局没有可保存的内容。")
             return
         if self._replay_saved:
             return

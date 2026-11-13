@@ -707,7 +707,7 @@ def _real_dungeon_run(app, root, cleanup_dirs):
         "reason": getattr(result, "reason", ""),
         "dialog_calls": list(MiniDialogs.calls),
     }
-    # 副本落盘的产物（未完成回放 / 报告）不属于挂件自检，测完即移出 data/
+    # 副本落盘的产物（回放 / 报告）不属于挂件自检，测完即移出 data/
     for path, snapshot in before.items():
         for rel in _snapshot_files(path) - snapshot:
             _discard(os.path.join(path, rel))

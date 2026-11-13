@@ -6,8 +6,8 @@
 覆盖：
 1. ``persistence/json_store``：原子写、覆盖前留 .bak、损坏回退、无残留 .tmp；
 2. ``persistence/scenario_repo``：正常读写 + 主文件损坏时自愈读 .bak；
-3. ``DungeonPersistence._finalize``：未完成路径（落盘「未完成」回放与报告、
-   不写 endings.json、不记结局索引、幂等、异常汇总）与完成路径（结算 + 结局索引）；
+3. ``DungeonPersistence._finalize``：完成路径（结算 + 结局索引 + 自动保存）
+   与未完成路径（什么都不落盘、不建角色、幂等、退出前确认一次放弃）；
 4. 回放身份记录（写侧）：头部 meta 取方案信封的 id / 版本 / 内容哈希，
    ``assets`` 只记记录里用到的文件与字节数。
 """
@@ -79,18 +79,19 @@ from dungeon.window.host import DIALOG_ASK, HostPort  # noqa: E402
 
 
 class RecordingHost(HostPort):
-    """记录收尾弹框；询问类一律回答「否」。
+    """记录收尾弹框；询问类按 ``answer`` 回答（默认「否」）。
 
     L2 之后 window 层只经宿主端口弹框（``dungeon/window/host.py``），
     自检因此改为注入一个记录宿主，不再打桩 ``ui.ctk.dialogs`` 模块。
     """
 
-    def __init__(self):
+    def __init__(self, answer=False):
         self.calls = []   # [(kind, title, message), ...]
+        self.answer = answer
 
     def dialog(self, kind, title, message):
         self.calls.append((kind, title, message))
-        return False if kind == DIALOG_ASK else None
+        return self.answer if kind == DIALOG_ASK else None
 
 
 HOST = RecordingHost()
@@ -123,6 +124,14 @@ class StubSession(persp.DungeonPersistence, EndingHandler):
         self.mode = mode
         self.scenario_id = "unit_test"
         self.name = "测试角色"
+        self.nick = ""
+        self.original_height = 1.6
+        self.body_parts = {}
+        self.personality = {}
+        self.greed = 0
+        self.tags = []
+        self.intro_hidden = ""
+        self.intro_visible = ""
         self.settings = {}
         self.dungeon_settings = {}
         self.height = 100.0
@@ -145,53 +154,49 @@ class StubSession(persp.DungeonPersistence, EndingHandler):
         self.replay_data = [{"step": 1, "type": "dialog", "text": "你好"}]
 
 
-# 3.1 未完成 + 有角色（探索模式）→ 写角色档案目录的「未完成」回放与报告
+# 3.1 未完成退出：不落盘任何回放 / 报告（本版没有中途存档与接续）
+replay_dir = os.path.join(session_root, "archives", "测试角色_unit", "回放")
+report_dir = os.path.join(session_root, "archives", "测试角色_unit", "报告")
+user_replays = os.path.join(session_root, "user", "replays")
+user_reports = os.path.join(session_root, "user", "reports")
+
 stub = StubSession()
 stub._finalize(completed=False, reason="未触发结局就退出")
-replay_dir = os.path.join(session_root, "archives", "测试角色_unit", "回放")
-files = os.listdir(replay_dir) if os.path.exists(replay_dir) else []
-check("未完成回放已落盘", len(files) == 1, files)
-check("回放文件名带「未完成」且后缀不变",
-      bool(files) and "_未完成" in files[0] and files[0].endswith(".replay.json"), files)
-replay_payload = json.load(open(os.path.join(replay_dir, files[0]), encoding="utf-8"))
-check("回放仍是记录数组，头部先写身份记录",
-      replay_payload[0].get("kind") == "meta", replay_payload[:1])
-check("身份记录之后是原样的记录本体",
-      replay_payload[1:] == stub.replay_data, replay_payload[1:])
-report_dir = os.path.join(session_root, "archives", "测试角色_unit", "报告")
-reports = os.listdir(report_dir) if os.path.exists(report_dir) else []
-report_text = open(os.path.join(report_dir, reports[0]), encoding="utf-8").read() if reports else ""
-check("未完成报告已落盘且标注未完成",
-      bool(reports) and "【未完成】" in report_text and "未触发结局就退出" in report_text, reports)
+check("未完成不写角色档案回放",
+      not os.path.exists(replay_dir) or not os.listdir(replay_dir))
+check("未完成不写角色档案报告",
+      not os.path.exists(report_dir) or not os.listdir(report_dir))
+check("未完成不写 data/user 回放",
+      not os.path.exists(user_replays) or not os.listdir(user_replays))
+check("未完成不写 data/user 报告",
+      not os.path.exists(user_reports) or not os.listdir(user_reports))
 check("未完成不写 endings.json",
       not os.path.exists(os.path.join(session_root, "user", "endings.json")))
 check("未完成不记结局索引", stub._achievement_record is None)
-check("未完成退出有提示", any(c[0] == "info" and "未完成" in c[1] for c in dialog_calls))
-check("未完成标记已记录（避免重复落盘）", stub._replay_saved and stub._finalized)
+check("未完成不标成已保存", stub._replay_saved is False)
+check("未完成仍置收尾标记", stub._finalized is True)
 
-# 3.2 幂等：再次调用不产生第二份文件
-stub._finalize(completed=False, reason="重复调用")
-check("_finalize 幂等", len(os.listdir(replay_dir)) == 1, os.listdir(replay_dir))
-
-# 3.3 未完成 + 无角色 → 落 data/user
-dialog_calls.clear()
+# 3.2 未完成 + 无角色：同样什么都不写，也不会顺手建角色
 stub2 = StubSession(with_character=False)
 stub2._finalize(completed=False, reason="未触发结局就退出")
-user_replays = os.path.join(session_root, "user", "replays")
-user_reports = os.path.join(session_root, "user", "reports")
-check("无角色时回放写 data/user/replays",
-      os.path.exists(user_replays) and any("_未完成" in f for f in os.listdir(user_replays)))
-check("无角色时报告写 data/user/reports",
-      os.path.exists(user_reports) and any("_未完成" in f for f in os.listdir(user_reports)))
+check("无角色未完成不创建角色", stub2.character is None)
+check("无角色未完成不写 data/user 回放",
+      not os.path.exists(user_replays) or not os.listdir(user_replays))
 
-# 3.4 完全没有内容 → 不落盘、只提示
+# 3.3 放弃确认：有内容才问，空会话不打断
 dialog_calls.clear()
 stub3 = StubSession()
-stub3.replay_data = []
-stub3.story_history = []
-stub3._finalize(completed=False, reason="未触发结局就退出")
-check("空会话不落盘", len(os.listdir(replay_dir)) == 1, os.listdir(replay_dir))
-check("空会话有提示", any(c[0] == "info" and "没有生成任何内容" in c[2] for c in dialog_calls))
+check("有内容时退出要确认", stub3._confirm_abandon() is False)  # 宿主默认答「否」
+check("确认框说明不可接续",
+      any(c[0] == "ask" and "无法接续" in c[2] for c in dialog_calls), dialog_calls)
+
+dialog_calls.clear()
+stub4 = StubSession()
+stub4.replay_data = []
+stub4.story_history = []
+check("空会话不弹确认", stub4._confirm_abandon() is True)
+check("空会话不产生询问弹框",
+      not any(c[0] == "ask" for c in dialog_calls), dialog_calls)
 
 # ---------------- 4. 回放身份记录（写侧） ----------------
 from paths import APP_VERSION  # noqa: E402
@@ -239,12 +244,11 @@ check("素材清单只记用到的文件与其字节数",
 check("身份记录之后是记录本体",
       meta_payload[1:] == meta_stub.replay_data, meta_payload[1:])
 
-# 3.5 会话异常汇总进未完成报告
-stub4 = StubSession(errors=["ValueError: 模型返回空", "TimeoutError: 超时"])
-stub4._finalize(completed=False, reason="未触发结局就退出")
-reports = sorted(os.listdir(report_dir))
-latest = open(os.path.join(report_dir, reports[-1]), encoding="utf-8").read()
-check("异常汇总进报告头", "2 次生成异常" in latest and "TimeoutError" in latest)
+# 3.5 会话异常不再进「未完成报告」——未完成路径本身已不产生报告
+err_stub = StubSession(errors=["ValueError: 模型返回空", "TimeoutError: 超时"])
+err_stub._finalize(completed=False, reason="未触发结局就退出")
+check("会话异常不再产生未完成报告",
+      not os.path.exists(report_dir) or not os.listdir(report_dir))
 
 # 3.6 正常结局：结算 + 结局索引 + 不自动存回放（开关关闭）
 stub5 = StubSession(mode="challenge")
@@ -260,25 +264,71 @@ check("自动保存关闭时不写回放", stub5._replay_saved is False)
 stub5._finalize(completed=True)
 check("完成路径幂等", calls == ["effects", "achievement"], calls)
 
-# 3.8 _handle_exit 分流（不真正落盘：只记录 _finalize 的调用参数）
+# 3.8 自动保存打开 + 无角色：仍要询问，玩家不同意就不创建角色、不保存
+dialog_calls.clear()
+auto_declined = StubSession(with_character=False)
+auto_declined.dungeon_settings = {"auto_save_replay": True}
+auto_declined._apply_ending_effects = lambda: None
+auto_declined._record_ending_achievement = lambda: None
+auto_declined._finalize(completed=True, reason="触发结局")
+check("自动保存遇到无角色也先询问",
+      any(c[0] == "ask" and "创建角色" in c[1] for c in dialog_calls), dialog_calls)
+check("自动保存被拒绝后不创建角色", auto_declined.character is None)
+check("自动保存被拒绝后不写回放", auto_declined._replay_saved is False)
+
+# 3.9 自动保存打开 + 玩家同意建角色：保存成功，且不弹「保存成功」打扰
+dialog_calls.clear()
+HOST.answer = True
+auto_accepted = StubSession(with_character=False)
+auto_accepted.dungeon_settings = {"auto_save_replay": True}
+auto_accepted._apply_ending_effects = lambda: None
+auto_accepted._record_ending_achievement = lambda: None
+auto_accepted._finalize(completed=True, reason="触发结局")
+HOST.answer = False
+check("自动保存同意后创建角色并保存",
+      auto_accepted.character is not None and auto_accepted._replay_saved, dialog_calls)
+check("自动保存成功后不弹提示框",
+      not any(c[0] == "info" for c in dialog_calls), dialog_calls)
+
+# 3.6 _handle_exit 分流（不真正落盘：只记录 _finalize 的调用参数）
 class ExitStub(StubSession):
     def _finalize(self, completed, reason=""):
         self.finalize_calls.append((completed, reason))
+        self._finalized = True
+
+    def _confirm_abandon(self):
+        self.confirm_count += 1
+        return self.confirm_answer
 
 
-def exit_stub(dungeon_ended=False, pending_ending=None, is_replay=False):
+def exit_stub(dungeon_ended=False, pending_ending=None, is_replay=False,
+              replay_saved=False, confirm_answer=True):
     stub = ExitStub()
     stub.dungeon_ended = dungeon_ended
     stub.pending_ending = pending_ending
     stub.is_replay = is_replay
+    stub._replay_saved = replay_saved
+    stub.confirm_answer = confirm_answer
     stub.finalize_calls = []
+    stub.confirm_count = 0
     return stub
 
 
 ex = exit_stub(pending_ending=None)
 ex._handle_exit()
-check("退出：未触发结局 → completed=False",
+check("退出：未触发结局 → completed=False 收尾",
       ex.finalize_calls == [(False, "未触发结局就退出")], ex.finalize_calls)
+check("退出：未触发结局先确认一次放弃", ex.confirm_count == 1, ex.confirm_count)
+
+# 玩家在「确定放弃吗」里点「否」：窗口已经销毁，不能再回到游戏里，但也不能
+# 什么都不说——提示一句「这一局没有保留」。
+dialog_calls.clear()
+ex = exit_stub(pending_ending=None, confirm_answer=False)
+ex._handle_exit()
+check("退出：点否也按未完成收尾", ex.finalize_calls == [(False, "未触发结局就退出")],
+      ex.finalize_calls)
+check("退出：点否时明确告知没有保留",
+      any(c[0] == "info" and "没有保留" in c[2] for c in dialog_calls), dialog_calls)
 
 ex = exit_stub(pending_ending={"name": "真结局"})
 ex._handle_exit()
@@ -289,6 +339,12 @@ check("退出：结局生成中补兜底结局文本", ex.ending_text == "结局
 ex = exit_stub(dungeon_ended=True)
 ex._handle_exit()
 check("退出：已达成结局不重复收尾", ex.finalize_calls == [], ex.finalize_calls)
+
+ex = exit_stub(dungeon_ended=True, replay_saved=True)
+ex._handle_exit()
+check("退出：自动保存已存过就不再问",
+      ex.finalize_calls == [] and ex.confirm_count == 0,
+      (ex.finalize_calls, ex.confirm_count))
 
 ex = exit_stub(pending_ending=None, is_replay=True)
 ex._handle_exit()

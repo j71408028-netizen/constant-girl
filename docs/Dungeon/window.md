@@ -157,7 +157,7 @@ run() → SessionResult
 | 入口页「返回」 | `_on_entry_cancel` → `_close_loop()` → `_request_close()` 置位 → `before_imgui_render` 帧边界写 `app_shall_exit` | 帧回调继续到库决定退出，走 `before_exit` → `_on_close` 清理 |
 | 会话中点窗口 X | GLFW 原生关闭 | 库关窗后走同一条 `before_exit` → `_on_close` 清理（**不再依赖 exit callback**，见 §5-C6） |
 | 回放播完 | `_replay_next_step` → `_request_close()` | 同「返回」 |
-| 会话未触发结局就退出 | `_handle_exit()` → `_finalize(completed=False)` | 落盘「未完成」回放与报告；**不**写 `endings.json`、不记挑战达成 |
+| 会话未触发结局就退出 | `_handle_exit()` → `_confirm_abandon()` → `_finalize(completed=False)` | 先确认放弃；**不**写 `endings.json`、不记挑战达成、不创建角色、不落盘任何回放或报告 |
 | 宿主关闭整个应用 | `MainWindowManager.on_closing` → 句柄 `request_close()`（协议请子进程收尾）→ `os._exit(0)`；父进程退出即管道断开，子进程的看护线程立即终结 | 父进程从不加载副本窗口栈（imgui-bundle）；子进程收尾随管道断开结束 |
 
 三条程序化关闭路径都归到 `_request_close()`（见 §5-C1）。
@@ -174,9 +174,10 @@ run() → SessionResult
 | 生成异常 `engine._note_session_error` | 不结束会话，异常记入 `_session_errors` 并显示在故事区 | — |
 | 连续空响应（重试一次仍为空） | `engine._drop_empty_step` + `_note_session_error`：撤回本段占位，**不**写对话历史、不推步数、不写回放、不跑触发器，提示后可再点一次 | — |
 
-- `completed=True`：结算结局增量 → 写 `data/user/endings.json` 结局索引 → 按设置自动保存回放。
-- `completed=False`：**不**结算、**不**写 `endings.json`、**不**记挑战达成；已生成内容落盘为「未完成」回放与报告（文件名带 `_未完成`，报告头部标注 `【未完成】` 与原因，中断退出时弹窗给出保存路径）。会话没有任何内容时只提示、不落盘。
-- 落盘位置：有角色（探索模式）写 `data/archives/<角色>/回放|报告`；无角色或挑战模式写 `data/user/replays`、`data/user/reports`。
+- `completed=True`：结算结局增量 → 写 `data/user/endings.json` 结局索引 → 自动保存开关打开时保存回放与报告（**没有角色先问一句**，玩家拒绝即不保存，也不会凭空建角色）。
+- `completed=False`：**不**结算、**不**写 `endings.json`、**不**记挑战达成、**不**落盘任何回放或报告。未达成结局的一局没有可保留的形态：本版不支持中途存档，也就没有接续，留一份接不上的半成品只会让玩家手里多一个读不懂的文件。
+- 退出确认：`_handle_exit()` 在未完成分支先调 `_confirm_abandon()` 告知「退出即放弃、无法接续」。会话毫无内容时不打断。窗口此时已销毁，玩家即使点「否」也回不到游戏里，因此只补一句「这一局没有保留」。
+- 落盘位置：有角色（探索模式）写 `data/archives/<角色>/回放|报告`；无角色或挑战模式写 `data/user/replays`、`data/user/reports`。两条路径都只覆盖「走到结局且选择保存」的一局。
 - 回放文件仍是 `[记录, ...]` 数组、后缀仍为 `.replay.json`，回放加载与档案导出照常识别。
 
 ### 2.6 GPU 纹理句柄的收尾口径（C15）

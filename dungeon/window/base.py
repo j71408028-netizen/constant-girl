@@ -181,7 +181,7 @@ class DungeonWindowBase:
         self.report_path = ""
         # 统一收尾标记：_finalize() 只允许执行一次（正常结局/用户中断/生成异常共用）
         self._finalized = False
-        # 会话内的生成异常（不再只 print：收尾时汇总进「未完成」报告）
+        # 会话内的生成异常（不再只 print：退出确认会提示，并进过程日志）
         self._session_errors = []
         self._ending_thread = None
         self._closing = False
@@ -487,8 +487,8 @@ class DungeonWindowBase:
             except Exception:
                 pass
 
-        # 用户关闭副本窗口时进行退出处理：未触发结局走 _finalize(False) 把已生成内容
-        # 落盘为「未完成」回放；已触发结局则询问是否保存正式回放
+        # 用户关闭副本窗口时进行退出处理：未触发结局先确认放弃、不落盘；
+        # 已触发结局则询问是否保存正式回放
         # 入口阶段点“返回”直接关闭窗口，不视为副本会话结束，跳过退出处理
         if self._closing and not getattr(self, "_exit_from_entry", False):
             self._handle_exit()
