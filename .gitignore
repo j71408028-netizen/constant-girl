@@ -48,6 +48,11 @@ htmlcov/
 /developer_tools/_out/
 /scripts/_out/
 
+# 题材数据（quip_profiles/*.json）：一个题材就是一位作者的口径，各人写各人的，不入库。
+# 只放行 template.json——它是复制用的通用起点，也是这目录里唯一该入库的一份。
+/developer_tools/quip_profiles/*.json
+!/developer_tools/quip_profiles/template.json
+
 # 其他本地区域
 /.workbuddy/
 .zcodeignore
