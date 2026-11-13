@@ -414,6 +414,8 @@ check("副本设置面板读写 audio_levels 键（主窗口不放音量入口�
       and not _mentions("ui/settings/__init__.py", literal="audio_levels"))
 check("副本设置面板滑条遍历总线表（新增总线自动出滑条）",
       _mentions("dungeon/window/overlay.py", attr="BUSES"))
+check("音效总线暂不出滑条（SfxPlayer 尚无调用方）",
+      _mentions("dungeon/window/overlay.py", attr="BUS_SFX"))
 check("旧的 volume / 100 换算已从播放路径消失",
       "volume / 100.0" not in _init_src and "self.volume / 100" not in _speech_src)
 check("旧的 0-100 常量已从音源模块消失",

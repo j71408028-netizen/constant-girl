@@ -330,10 +330,14 @@ class OverlayHandler:
         imgui.pop_style_color()
         imgui.separator()
 
-        # ---- 音量（四条总线，立即生效） ----
+        # ---- 音量（音乐 / 语音 / 总音量，立即生效） ----
+        # 音效总线暂不露面：它唯一的发声入口 SfxPlayer 尚无调用方，摆一条改了
+        # 也没声音的滑条等于向玩家承诺一个不存在的能力。
         self._settings_section("音量")
         levels = buses.levels_from_settings(self.dungeon_settings)
         for bus in buses.BUSES:
+            if bus == buses.BUS_SFX:
+                continue
             level = int(levels.get(bus, buses.MAX_LEVEL))
             changed, new_level, released = self._settings_slider(
                 buses.BUS_LABELS[bus], f"##dungeon_set_vol_{bus}",

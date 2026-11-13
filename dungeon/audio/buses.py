@@ -11,7 +11,7 @@
 | 层 | 谁在用 | 单位 | 范围 |
 |---|---|---|---|
 | 作者侧「档位」 | 章节 ``bgm.level`` / 方案 ``voice.level`` | **档** | ``0-4``（:data:`STEP_LABELS`） |
-| 玩家侧「滑条」 | 设置页四条滑条（``audio_levels``，副本独占设置） | 电平 | ``0-100``（:func:`to_ratio`） |
+| 玩家侧「滑条」 | 设置页滑条（``audio_levels``，副本独占设置；``sfx`` 暂不露脸） | 电平 | ``0-100``（:func:`to_ratio`） |
 | 内部「增益」 | 播放后端 | 线性 / dB | ``0.0-1.0``（:func:`db_gain`） |
 
 **为什么作者侧用档位而不是 0-100**：0-100 看着精细，其实是**假精度**——
@@ -34,7 +34,7 @@
 两套键并存会有歧义（``3`` 到底是「3% 音量」还是「中档」？），所以刻意
 **改名**而不是复用 ``volume``。
 
-**玩家侧电平**存在副本独占设置 ``audio_levels``（设置页四条滑条；键名见
+**玩家侧电平**存在副本独占设置 ``audio_levels``（设置页滑条；键名见
 :data:`SETTINGS_KEY`，文件为 ``data/user/dungeon_settings.json``，见
 ``persistence/dungeon_settings_repo.py``）。副本窗口开局时用
 :func:`set_bus_levels` 把它装进来，播放路径**不必**逐处传参——
