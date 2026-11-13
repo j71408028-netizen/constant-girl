@@ -19,9 +19,14 @@ from typing import Optional, List, Dict, Tuple
 from dungeon.terms import scenario_id_of
 from persistence.json_store import load_json_with_backup, write_json_atomic
 from persistence.resources.envelope import envelope_path, envelope_title, set_title
+from services.challenges.pack import (collect_asset_paths, extract_pack_assets,
+                                      pack_assets)
 
 #: 挑战包在资源声明里的类型 id（信封按它取 schema，与主文件后缀无关）
 CHALLENGE_TYPE_ID = "challenges"
+
+#: zip 内加密配置的条目名（素材条目前缀见 ``pack.ASSET_PREFIX``）
+CHALLENGE_DATA_ENTRY = "challenge_data.bin"
 
 
 class ChallengeService:
@@ -404,9 +409,14 @@ class ChallengeService:
         if not scenario_config:
             raise ValueError(f"无法加载副本 '{scenario_id}'")
 
+        # 方案素材（固定文本 / 背景图 / BGM / 结局图标）随包携带：配置里记的是
+        # 相对方案目录的路径，接收方没有这些文件就凑不出一局。实际打包的清单
+        # 在写 zip 时才确定（缺失的文件不列），见 pack_assets。
+        asset_paths = collect_asset_paths(scenario_config)
+
         # 构建挑战包数据字典
         pack_data = {
-            "version": "1.0",
+            "version": "2.0",
             "intro": intro,
             "character_id": character_id,
             "character_data": asdict(character_data),          # 角色数据（dataclass 转字典）
@@ -414,12 +424,16 @@ class ChallengeService:
             "landmark_data": landmark_data,                    # 地标数据字典
             "scenario_id": scenario_id,
             "scenario_config": scenario_config,                  # 副本配置字典
+            "asset_paths": asset_paths,                          # 包内素材清单（空表=无素材）
             "created_at": datetime.datetime.now().isoformat()
         }
 
         # 序列化为 JSON 字符串并加密
-        plaintext = json.dumps(pack_data, ensure_ascii=False, indent=2).encode('utf-8')
-        encrypted = self._encrypt(plaintext, key)
+        def _seal(data: dict) -> bytes:
+            raw = json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8')
+            return self._encrypt(raw, key)
+
+        encrypted = _seal(pack_data)
 
         # 确保包名有 .chal 扩展名
         if not pack_name.endswith('.chal'):
@@ -433,23 +447,23 @@ class ChallengeService:
         # 加密数据写同目录临时 zip，完成后原子替换到最终路径：
         # 写到一半崩溃不会留下截断的 .chal
         tmp_zip_path = None
-        tmp_path = None
         try:
-            fd, tmp_path = tempfile.mkstemp(suffix='.bin')
-            os.close(fd)
-            with open(tmp_path, 'wb') as f:
-                f.write(encrypted)
-
             fd, tmp_zip_path = tempfile.mkstemp(
                 suffix='.chal', dir=self.storage_dir)
             os.close(fd)
             with zipfile.ZipFile(tmp_zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-                zf.write(tmp_path, 'challenge_data.bin')
+                # 素材条目与加密配置并列；解包时按 assets/ 前缀筛
+                packed = pack_assets(zf, self.scenario_repo, scenario_id,
+                                     scenario_config)
+                if packed != asset_paths:
+                    # 配置里有、磁盘上却没有的素材不进清单：清单只列真实入包的
+                    pack_data["asset_paths"] = packed
+                    encrypted = _seal(pack_data)
+                zf.writestr(CHALLENGE_DATA_ENTRY, encrypted)
             os.replace(tmp_zip_path, output_path)
         finally:
-            for leftover in (tmp_path, tmp_zip_path):
-                if leftover and os.path.exists(leftover):
-                    os.unlink(leftover)
+            if tmp_zip_path and os.path.exists(tmp_zip_path):
+                os.unlink(tmp_zip_path)
 
         # 注册秘钥
         self._register_key(pack_name, key)
@@ -479,7 +493,7 @@ class ChallengeService:
         # 从 zip 中读取加密数据
         try:
             with zipfile.ZipFile(file_path, 'r') as zf:
-                encrypted = zf.read('challenge_data.bin')
+                encrypted = zf.read(CHALLENGE_DATA_ENTRY)
         except Exception as e:
             raise ValueError(f"读取挑战包失败: {e}")
 
@@ -499,6 +513,29 @@ class ChallengeService:
             return data
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise ValueError("挑战包数据损坏或秘钥不正确")
+
+    # ---------------- 方案素材 ----------------
+
+    def extract_assets(self, file_path: str, dest_dir: str) -> int:
+        """把挑战包携带的方案素材解到 ``dest_dir``，返回解出的文件数。
+
+        解出的目录结构与方案目录一致（``<dest_dir>/texts/a.txt``），可以直接顶替
+        方案目录参与相对路径解析（见 ``ScenarioRepo.asset_dir``）。旧包没有素材
+        条目时返回 0，调用方按「没有包内素材」处理即可。
+        """
+        if not os.path.isfile(file_path):
+            return 0
+        try:
+            return extract_pack_assets(file_path, dest_dir)
+        except (OSError, zipfile.BadZipFile) as e:
+            raise ValueError(f"挑战包素材解出失败: {e}")
+
+    def extract_assets_by_name(self, pack_name: str, dest_dir: str) -> int:
+        """按包名解素材（世界包附带目录优先，与 ``open_challenge_by_name`` 同口径）。"""
+        file_path = self.resolve_pack_path(pack_name)
+        if file_path is None:
+            raise ValueError(f"挑战包文件不存在: {pack_name}")
+        return self.extract_assets(file_path, dest_dir)
 
     def open_challenge_by_name(self, pack_name: str) -> Optional[dict]:
         """

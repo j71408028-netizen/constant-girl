@@ -356,8 +356,12 @@ class DungeonStoryEngine:
         scenario_id = getattr(self, "scenario_id", None)
         if repo is not None and scenario_id:
             try:
-                # scenario_dir 同时看世界包根与自由根，比只拼 root 更全
-                candidates.append(os.path.join(repo.scenario_dir(scenario_id), rel))
+                # asset_dir 与 scenario_dir 同源（世界包根 / 自由根），挑战包
+                # 这类素材在包外解出的会话会把它指向解包目录
+                dir_of = (getattr(repo, "asset_dir", None)
+                          or getattr(repo, "scenario_dir", None))
+                if callable(dir_of):
+                    candidates.append(os.path.join(dir_of(scenario_id), rel))
             except Exception:
                 pass
         resolved = self._background.resolve_path(rel)

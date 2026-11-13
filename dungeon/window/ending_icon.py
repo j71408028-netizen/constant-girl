@@ -30,7 +30,8 @@ def _split_rel(icon_path: str) -> list:
 def resolve_ending_icon(scenario_repo, scenario_id: str, icon_path: str):
     """解析结局图标实际文件路径。
 
-    优先级：绝对路径 → 当前副本根目录 → 自由副本根目录（data/packs/scenarios）。
+    优先级：绝对路径 → 素材目录（``repo.asset_dir``，缺省即方案目录）→
+    可写根下的方案目录 → 自由副本根目录（data/packs/scenarios）。
     返回 None 表示找不到文件。
     """
     icon_path = str(icon_path or "").strip()
@@ -41,11 +42,23 @@ def resolve_ending_icon(scenario_repo, scenario_id: str, icon_path: str):
         candidates.append(os.path.normpath(icon_path))
     rel_parts = _split_rel(icon_path)
     scenario_id = (scenario_id or "").strip("/\\")
+    # 素材目录：与背景 / 固定文本同口径（挑战包这类素材解在方案目录之外时，
+    # 由宿主仓库的 asset_dir 指向解包目录），其次可写根与自由根
+    base_of = getattr(scenario_repo, "asset_dir", None) if scenario_repo is not None else None
+    bases = []
+    if callable(base_of) and scenario_id:
+        try:
+            bases.append(base_of(scenario_id))
+        except Exception:
+            pass
     for base in (scenario_repo.root if scenario_repo is not None else None,
                  free_dungeons_root()):
         if not base or not scenario_id:
             continue
-        candidates.append(os.path.normpath(os.path.join(base, scenario_id, *rel_parts)))
+        bases.append(os.path.join(base, scenario_id))
+    for base in bases:
+        if base:
+            candidates.append(os.path.normpath(os.path.join(base, *rel_parts)))
     for path in dict.fromkeys(candidates):
         if os.path.isfile(path):
             return path

@@ -12,7 +12,9 @@ ui/mini/screens.py。
 import ctypes
 import json
 import os
+import shutil
 import sys
+import tempfile
 import uuid
 from tkinter import filedialog
 
@@ -21,7 +23,7 @@ from core.models import BodyPreset, CharacterSnapshot, Personality
 from core.resource_spec import type_labels
 from paths import APP_NAME
 from services.chat import events as chat_events
-from services.challenges import ChallengeService
+from services.challenges import ChallengeService, landmarks_from_pack
 from core import appearance
 from ui.mini import pixel as px
 from ui.mini import topmost as topmost_ctl
@@ -832,18 +834,35 @@ class MiniApp:
             self.notify(admission_error, tone="danger", title="无法进入")
             return
 
-        # 挑战包自带地标 / 描述数据，临时接管风格选择，副本窗口返回后还原。
-        saved_styles = list(self.context.selected_styles)
-        saved_quips = list(self.context.selected_quip_styles)
-        self.context.update_styles(
-            list(data.get("landmark_styles") or saved_styles),
-            list(data.get("quip_styles") or saved_quips))
+        # 地标与素材都来自包内：包里的 landmark_styles 只是分组标签，去本机
+        # 仓库按同 id 重载会在接收方没有这些风格时丢成默认风格；方案素材解在
+        # 临时目录里，会话结束即删。
+        payload["merged_landmarks"] = landmarks_from_pack(data, self.context)
+        payload["selected_styles"] = [s for s in (data.get("landmark_styles") or [])
+                                      if s]
+        asset_root = self._extract_assets(base)
         try:
             self._launch_dungeon(payload=payload, config=config,
                                  scenario_id=scenario_id, character=None,
-                                 mode="challenge")
+                                 mode="challenge", asset_root=asset_root)
         finally:
-            self.context.update_styles(saved_styles, saved_quips)
+            shutil.rmtree(asset_root, ignore_errors=True)
+
+    def _extract_assets(self, pack_base: str) -> str:
+        """把包内方案素材解到临时目录并返回（没有素材时返回空目录）。
+
+        素材不落在本机方案目录，启动时由 ``asset_root`` 让子进程去那里找；
+        会话结束由调用方删除整个目录。
+        """
+        asset_root = tempfile.mkdtemp(prefix="challenge_assets_")
+        try:
+            count = self.challenge_service.extract_assets_by_name(pack_base, asset_root)
+        except Exception as e:
+            self.notify(f"挑战包素材解出失败：\n{e}", tone="danger", title="出错了")
+        else:
+            if count:
+                print(f"[Challenge] 解出包内素材 {count} 个")
+        return asset_root
 
     def challenge_payload(self, data: dict):
         """把挑战包内容翻译成副本窗口参数：返回 (payload, config, scenario_id)。
@@ -874,10 +893,19 @@ class MiniApp:
             data.get("scenario_id", "") or "",
         )
 
-    def _launch_dungeon(self, *, payload, config, scenario_id, character, mode):
+    def _launch_dungeon(self, *, payload, config, scenario_id, character, mode,
+                        asset_root=""):
         from ui.hosting.dungeon_spawner import launch_dungeon_subprocess
         from ui.mini.dialogs import MiniDialogs
         ai_config = resolve_ai_config(self.settings)
+        # 地标 / 风格：挑战包由包内数据决定（见 launch_challenge），其余模式
+        # 用当前上下文；``asset_root`` 同理只在挑战包里有值。
+        merged_landmarks = payload.get("merged_landmarks")
+        if merged_landmarks is None:
+            merged_landmarks = self.context.landmarks_for_dungeon()
+        selected_styles = payload.get("selected_styles")
+        if selected_styles is None:
+            selected_styles = self.context.selected_styles
         # 副本会话在独立子进程里跑：DPG/GLFW 独占子进程，不再与挂件的 Tk 根
         # 同进程共存。收尾弹框用挂件自己的原生弹框（纯 Tk 根下不能拉 CTk）。
         result = launch_dungeon_subprocess(
@@ -894,12 +922,13 @@ class MiniApp:
             tags=payload.get("selected_tags", []),
             uploaded_image=payload.get("uploaded_image"),
             scenario_config=config,
-            merged_landmarks=self.context.landmarks_for_dungeon(),
-            selected_styles=self.context.selected_styles,
+            merged_landmarks=merged_landmarks,
+            selected_styles=selected_styles,
             ai_config=ai_config, is_replay=False, replay_data=None,
             scenario_id=scenario_id,
             body_parts=payload.get("body_parts", {}),
-            character=character, settings=self.settings, mode=mode)
+            character=character, settings=self.settings, mode=mode,
+            asset_root=asset_root)
         # 入口阶段失败（配置缺失/行动点数不足/校验错误）：子进程已退出，提示
         if result.failed:
             self.notify(result.launch_error, tone="danger", title="无法进入")

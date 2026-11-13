@@ -549,8 +549,12 @@ class DungeonWindowBase:
 
         # S2：启动前校验——错误级问题阻止进入，诊断经 _launch_error 交给调用方提示
         if self.scenario_repo is not None:
+            # 素材目录与背景/文本/图标的解析基准同源：挑战包这类素材解在方案
+            # 目录之外的会话，校验必须看解包目录，否则合法素材被判「不存在」
+            dir_of = (getattr(self.scenario_repo, "asset_dir", None)
+                      or self.scenario_repo.scenario_dir)
             self.scenario_diagnostics = validate_scenario_config(
-                config, scenario_dir=self.scenario_repo.scenario_dir(scenario_id))
+                config, scenario_dir=dir_of(scenario_id))
             if has_errors(self.scenario_diagnostics):
                 self._launch_error = (
                     f"副本方案「{scenario_id}」存在无法运行的问题，已阻止进入：\n\n"

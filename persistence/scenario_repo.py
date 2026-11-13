@@ -69,6 +69,14 @@ class ScenarioRepo:
                 return candidate
         return os.path.join(self._write_root, scenario_id)
 
+    def asset_dir(self, scenario_id: str) -> str:
+        """素材目录：相对路径素材（文本 / 图片 / 音频 / 图标）的解析基准。
+
+        挑战包这类「配置与素材分离」的场景会把素材解到本机方案目录之外，
+        由宿主包装本方法把会话指向解包目录；缺省与 :meth:`scenario_dir` 等价。
+        """
+        return self.scenario_dir(scenario_id)
+
 
     def display_name(self, scenario_id: str) -> str:
         """界面显示名：有显示名用显示名，否则回落成 id。"""

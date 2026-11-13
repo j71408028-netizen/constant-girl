@@ -365,8 +365,10 @@ class DungeonBackground:
             candidates.append(os.path.normpath(image_path))
         if owner.scenario_id and owner.scenario_repo:
             repo = owner.scenario_repo
-            # 与「方案目录」口径一致：世界包接管的方案不在可写根下
-            dir_of = getattr(repo, "scenario_dir", None)
+            # 与「方案目录」口径一致：世界包接管的方案不在可写根下；
+            # asset_dir 供挑战包这类素材在包外解出的会话顶替
+            dir_of = getattr(repo, "asset_dir", None) or getattr(
+                repo, "scenario_dir", None)
             base = (dir_of(owner.scenario_id) if callable(dir_of)
                     else os.path.join(repo.root, owner.scenario_id))
             if base:

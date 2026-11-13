@@ -53,15 +53,16 @@
 
 另有 `check_scenario_schema.py` 守住副本方案字段的**声明 ↔ 产出 ↔ 校验器**（`schema`
 → `normalize` → `validate`）；音频端到端链（说话人分档 / 三条引擎路径 / 降级 /
-播放收尾）在 `check_audio_chain.py`。加字段时别漏，见 §5.4。
+播放收尾）在 `check_audio_chain.py`；挑战包的**打包 → 解包 → 素材解析 → 地标还原**
+闭环在 `check_challenge_pack.py`。加字段时别漏，见 §5.4。
 
-### 1.3 当前实测数字（2026-10-30）
+### 1.3 当前实测数字（2026-11-13）
 
 ```
-[check_import_graph] 已检查 206 个模块，856 条第一方依赖边
+[check_import_graph] 已检查 220 个模块，965 条第一方依赖边
 [check_import_graph] PASSED：层间依赖方向与 UI 框架禁令均无未登记越界
 KNOWN_EXCEPTIONS = []          # 原 11 条已全部消除
-tests/run_checks.py            # 59/59
+tests/run_checks.py            # 74/74
 ```
 
 ---
@@ -323,6 +324,40 @@ status / tags / schema`。它随时可以删掉重建，内容与磁盘一致时
 `services/character/spatial.py` 与 `services/worlds/address_registry.py` 刻意不接
 索引：前者是纯文本派生视图（学的是位置历史，不是资源），后者算的是注册表申领地
 址的单元边长，都没有「资源身份」可用。
+
+---
+
+## 2.9 方案素材的解析基准：`asset_dir`
+
+方案配置里引用素材（`fixed_text.path` / `background.image_path` / `bgm.path` /
+结局 `icon_path`）一律是**相对方案目录**的路径。凡是要把这些路径变成绝对路径的
+地方，基准都取 `ScenarioRepo.asset_dir(scenario_id)`，**不要各处自己拼**
+`scenario_dir` 或 `repo.root`：
+
+| 使用点 | 位置 |
+|---|---|
+| 启动前校验（资产存在性 + 固定文本 error） | `dungeon/validate.py`（由 `window/base.py::_load_session_config` 传入目录） |
+| 背景图 / BGM 解析 | `dungeon/window/background.py::resolve_path` |
+| 固定文本 | `dungeon/window/engine.py::_resolve_scenario_file` |
+| 结局图标 | `dungeon/window/ending_icon.py::resolve_ending_icon` |
+| 挑战包打包素材 | `services/challenges/pack.py::asset_source_dir` |
+
+`asset_dir` 缺省等价于 `scenario_dir`（世界包接管时读世界包根，否则自由根）；
+只有「配置与素材分离」的会话才把它指向别处——目前唯一一处是挑战包：素材随
+`.chal` 携带（zip 内 `assets/` 前缀条目），打开时解到系统临时目录，子进程由
+`ui/hosting/dungeon_child_host.py::_AssetBackedRepo` 包一层仓库把 `asset_dir`
+指向解包目录（`launch_payload` 的 `asset_root` 参数），会话结束即删。
+
+```text
+.chal ──打包──> assets/texts|images|audio|endings/<rel>   （只收配置引用到的、
+                │                                        方案目录内的相对路径）
+                └─> 打开时解到 <临时目录>/<rel>，结构与方案目录一致
+                        └─> _AssetBackedRepo.asset_dir() ─> 五处解析点
+```
+
+新增素材类型时两处一起改：`pack.ASSET_DIRS`（打包白名单）与 `collect_asset_paths`
+（配置里哪些字段是素材路径）。素材缺失在挑战包里的降级口径与本地一致——
+校验器该报什么就报什么，不做挑战包特判。
 
 ---
 

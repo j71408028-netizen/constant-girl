@@ -144,6 +144,11 @@ deadline 轮询），子进程的结论行打印后立即 flush——「已通�
 | 子进程侧 | `ui/hosting/dungeon_child_host.py` | `ChildHost(HostPort)`：尺寸/弹框/回放文件框走协议请父进程代劳，小游戏孙进程照旧；管道断开（父进程死亡）即 `os._exit`，孤儿副本不会继续写 `data/` |
 | 线格式 | `dungeon/window/launch_payload.py` | 构造参数 dict ↔ 纯数据 dict 的往返（dataclass 落 `asdict`、宿主侧参数剔除）；`SessionResult` 的往返同文件。守卫：`tests/check_dungeon_launch_payload.py` |
 
+载荷里唯一与文件系统有关的是 `asset_root`：挑战包把方案素材解在方案目录之外
+（系统临时目录），子进程构造仓库时由 `_AssetBackedRepo` 包一层，让
+`asset_dir()` 指向该目录，其余转发真仓库（口径见 `architecture.md` §2.9）。
+它只是路径字符串，不破坏「载荷全是纯数据」这条线格式约定。
+
 协议（`multiprocessing.Pipe` 双向，JSON 安全 dict）：子 → 父发
 `show_window` / `dialog` / `open_replay_file`（带请求 id）/ 最终 `result`；
 父 → 子发 `{"reply": id, "answer": ...}`（`open_replay_file` 的应答额外带

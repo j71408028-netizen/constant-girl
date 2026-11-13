@@ -59,6 +59,35 @@ from dungeon.window.host import DIALOG_ASK, HostPort
 _IS_WINDOWS = sys.platform.startswith("win")
 
 
+class _AssetBackedRepo:
+    """素材目录顶替：把 ``asset_dir`` 指向包外解出的目录，其余转发给真仓库。
+
+    挑战包把方案素材与配置分开携带，素材解在系统临时目录里（见
+    ``services/challenges/pack.py``）。对外只多一个 ``asset_dir``，**不改**
+    ``scenario_dir``——写路径、方案列表、校验以外的场景仍然走原仓库，
+    素材目录只在几处相对路径解析（背景 / BGM / 固定文本 / 结局图标 / 校验）生效。
+    """
+
+    def __init__(self, repo, asset_dir: str):
+        self._repo = repo
+        self._asset_dir = asset_dir
+
+    def asset_dir(self, scenario_id: str) -> str:
+        if os.path.isdir(self._asset_dir):
+            return self._asset_dir
+        return self._repo.asset_dir(scenario_id)
+
+    def __getattr__(self, name):
+        return getattr(self._repo, name)
+
+
+def _scenario_repo_with_assets(repo, asset_dir):
+    """给仓库套上包外素材目录；没有素材目录时原样返回。"""
+    if not asset_dir:
+        return repo
+    return _AssetBackedRepo(repo, str(asset_dir))
+
+
 class ChildHost(HostPort):
     """子进程侧的宿主端口：能力走父进程，其余按无宿主缺省。"""
 
@@ -323,7 +352,9 @@ def _run_session(conn, payload) -> dict:
         world_manager.apply_world_settings(settings)
     except Exception:
         pass
-    kwargs["scenario_repo"] = ScenarioRepo(world_state=world_manager.world_state)
+    kwargs["scenario_repo"] = _scenario_repo_with_assets(
+        ScenarioRepo(world_state=world_manager.world_state),
+        kwargs.pop("asset_root", None))
     kwargs["character_repo"] = CharacterRepo()
     # 副本独占设置：本文件由引擎独占，子进程直接读，窗口内改后也直接写
     # （共享的 settings.json 才需要绕父进程协议）。见 dungeon/settings.py。

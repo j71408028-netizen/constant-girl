@@ -24,6 +24,8 @@
 - ``merged_landmarks`` 里的 ``Landmark`` 同样落成纯数据再还原：父进程已把
   ``address`` 换成**完整地址**（子进程没有仓库与风格注册表，解析不了相对后缀，
   见 ``docs/designs/dungeon_scene.md`` §6）；
+- ``asset_root`` 是挑战包这类「配置与素材分离」会话的素材解包目录（普通字符串），
+  子进程由宿主层包一层仓库把它当成素材目录（见 ``ui.hosting.dungeon_child_host``）；
 - 其余参数本来就是 JSON 安全的纯数据，原样透传。
 
 结果对象（:class:`~dungeon.window.result.SessionResult`）走同一条管道返回，

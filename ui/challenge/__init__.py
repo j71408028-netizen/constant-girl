@@ -1,14 +1,17 @@
 # ui/challenge/__init__.py（原 ui/challenge.py）
 import os
 import json
+import shutil
+import tempfile
 
 import ui.ctk.dialogs
 import customtkinter as ctk
 
 from core.ai import resolve_ai_config
+from dungeon import process_log
 from dungeon.terms import scenario_config_of, scenario_id_of
 from persistence.resources import registry
-from services.challenges import ChallengeService
+from services.challenges import ChallengeService, landmarks_from_pack
 from core.models import Personality, BodyPreset
 from core.address_model import world_of
 from ui.ctk.widgets import ClickableCard, CollapsibleBlock, StyleListBox, CTkScrollableDropdownFrame
@@ -539,9 +542,29 @@ class ChallengeModePanel(ctk.CTkFrame):
             ui.ctk.dialogs.showerror("错误", "无法读取挑战包内容")
             return
 
-        self._launch_dungeon_from_data(data)
+        asset_root = self._extract_assets(pack_base)
+        try:
+            self._launch_dungeon_from_data(data, asset_root=asset_root)
+        finally:
+            shutil.rmtree(asset_root, ignore_errors=True)
 
-    def _launch_dungeon_from_data(self, data: dict):
+    def _extract_assets(self, pack_base: str) -> str:
+        """把包内方案素材解到临时目录，返回该目录（没有素材时同样返回空目录）。
+
+        素材解在本机方案目录之外，启动时由 ``asset_root`` 告诉子进程去那里找；
+        会话结束由调用方删掉整个目录。
+        """
+        asset_root = tempfile.mkdtemp(prefix="challenge_assets_")
+        try:
+            count = self.challenge_mgr.extract_assets_by_name(pack_base, asset_root)
+        except Exception as e:
+            ui.ctk.dialogs.showerror("错误", f"挑战包素材解出失败: {e}")
+        else:
+            if count:
+                process_log.log(f"[Challenge] 解出包内素材 {count} 个")
+        return asset_root
+
+    def _launch_dungeon_from_data(self, data: dict, asset_root: str = ""):
         char_data = data.get("character_data", {})
         name = char_data.get("name", "未知")
         nick = char_data.get("nick", "")
@@ -581,13 +604,14 @@ class ChallengeModePanel(ctk.CTkFrame):
         gui_settings = self.gui._settings_repo.load()
         ai_config = resolve_ai_config(gui_settings)
 
-        landmark_styles = data.get("landmark_styles", [])
-
-        saved_styles = self.gui.context.selected_styles.copy()
-
-        self.gui.context.selected_styles = landmark_styles
-        self.gui.context.reload_merged_data()
-        self.gui.selected_styles = self.gui.context.selected_styles
+        # 地标来自包内数据：包里的 landmark_styles 只是分组标签，去本机仓库按
+        # 同 id 重载会在接收方没有这些风格时丢成默认风格。宿主侧的本机上下文
+        # 只用来补齐包里缺的地址，不再改动用户当前选中的风格。
+        merged_landmarks = landmarks_from_pack(data, self.gui.context)
+        selected_styles = [s for s in (data.get("landmark_styles") or []) if s]
+        if not merged_landmarks:
+            merged_landmarks = self.gui.context.landmarks_for_dungeon()
+            selected_styles = self.gui.context.selected_styles
 
         # L4：run() 返回结果对象（挑战模式无入口阶段，暂无需要处理的分支）。
         # 会话在独立子进程里跑（DPG/GLFW 独占子进程），参数与窗口构造一致。
@@ -601,14 +625,11 @@ class ChallengeModePanel(ctk.CTkFrame):
             original_height=original_height, intro_hidden=intro_hidden,
             intro_visible=intro_visible, tags=tags, uploaded_image=None,
             scenario_config=scenario_config,
-            merged_landmarks=self.gui.context.landmarks_for_dungeon(),
-            selected_styles=landmark_styles, height=height,
+            merged_landmarks=merged_landmarks,
+            selected_styles=selected_styles, height=height,
             ai_config=ai_config,
             greed=greed, is_replay=False, replay_data=None,
             scenario_id=scenario_id, body_parts=body_parts,
             character=None, settings=gui_settings, mode="challenge",
+            asset_root=asset_root,
         )
-
-        self.gui.context.selected_styles = saved_styles
-        self.gui.context.reload_merged_data()
-        self.gui.selected_styles = self.gui.context.selected_styles
