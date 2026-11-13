@@ -125,20 +125,42 @@ def worlds_dir() -> str:
     return os.path.join(data_dir(), "worlds")
 
 
+def _read_json_dict(path: str):
+    """读一个 JSON 对象文件；不存在、解析失败或不是对象时返回 None。"""
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+#: ``active_world`` 的读取顺序：资源域设置（2.0 起）→ 旧版共享设置。
+#: 前者是它现在的家，后者只为尚未迁移的旧数据保留。
+_ACTIVE_WORLD_SETTING_FILES = ("resource_settings.json", "settings.json")
+
+
 def active_world_id() -> str:
     """当前激活的世界包 id；未激活或读不到设置时返回空串。
 
     只提供路径事实（不解释资源语义）：副本子进程没有注册表与持久层，
     需要靠它定位包内的小游戏与素材。
+
+    按 :data:`_ACTIVE_WORLD_SETTING_FILES` 的顺序取第一个能读的文件，读到就
+    以它为准（哪怕里面没有这个键）——``SettingsRepo.save`` 会把资源域键从
+    ``settings.json`` 摘掉，用旧文件里的残留值兜底会让已关闭的世界包复活。
     """
-    path = os.path.join(data_dir(), "user", "settings.json")
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            data = json.load(handle)
-    except (OSError, ValueError):
-        return ""
-    value = data.get("active_world") if isinstance(data, dict) else ""
-    return value if isinstance(value, str) else ""
+    user_dir = os.path.join(data_dir(), "user")
+    for name in _ACTIVE_WORLD_SETTING_FILES:
+        file = os.path.join(user_dir, name)
+        if not os.path.exists(file):
+            continue
+        data = _read_json_dict(file)
+        if data is None:
+            continue
+        value = data.get("active_world")
+        return value if isinstance(value, str) else ""
+    return ""
 
 
 def _bootstrap_packaged_data() -> None:

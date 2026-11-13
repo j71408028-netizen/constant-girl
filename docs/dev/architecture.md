@@ -288,7 +288,10 @@ status / tags / schema`。它随时可以删掉重建，内容与磁盘一致时
 `<id>.meta.json` 一并写进包内（`_copy_envelopes`），包因此不依赖本机的
 `catalog.json` 就能被索引；解散时再写回自由目录（目标已有信封则不覆盖）。
 包内小游戏按「自由目录优先、其次激活包」解析（`dungeon.minigame_pack.pack_roots`），
-副本子进程靠 `paths.active_world_id()` 读 `settings.json` 定位；话题表在激活时
+副本子进程靠 `paths.active_world_id()` 定位：它读资源域设置
+`user/resource_settings.json`，只在文件缺失或读不出来时回退旧版 `user/settings.json`
+（`active_world` 随资源域键搬家，主设置写盘时会被摘掉，回退只服务未迁移的旧数据）；
+话题表在激活时
 整表安装、卸载时还原内置表（`services/chat/topic_tables.py`）。
 
 ### 2.8 资源 ↔ 地址：一次解析，一处身份
