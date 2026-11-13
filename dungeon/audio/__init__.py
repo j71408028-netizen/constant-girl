@@ -222,7 +222,7 @@ class MiniaudioTrack(AudioTrack):
     其余直放，只记一条日志）。每个实例独占一个 ``PlaybackDevice``（系统的
     音频后端允许多实例并存），``close`` 时释放。
 
-    回调协议的两个坑（``scripts/_test_miniaudio_playback.py`` 有实测）：
+    回调协议的两个坑（原先由一支实测脚本记下，脚本已删，结论留在这里）：
     generator 必须先 ``next()`` prime 再交给 ``device.start()``；以及所有
     供数都发生在绑定内部的回调线程上，本类只在起播前把数据准备好。
     """
@@ -291,22 +291,30 @@ class MiniaudioTrack(AudioTrack):
         while True:
             cursor = 0
             while cursor < total:
-                chunk = self._data[cursor:cursor + max(1, frames) * width]
+                # 块长取整帧：块边界落在帧边界上，增益才与样本下标一一对得上
+                step = max(1, frames) * width
+                chunk = self._data[cursor:cursor + step - step % width]
                 cursor += len(chunk)
-                frames = yield self._apply_gain(chunk)
+                frames = yield self._apply_gain(chunk, cursor - len(chunk))
             if not loop:
                 break
         self._done.set()
 
-    def _apply_gain(self, chunk: bytes) -> bytes:
+    def _apply_gain(self, chunk: bytes, offset: int = 0) -> bytes:
+        """把这一块乘以当前音量；``offset`` 是它在整段数据里的**字节**偏移。
+
+        增益必须按块自己的位置取样本：整段开头的采样只属于第一块，拿去乘
+        后面的块，听感是「每块都在放开头那一下」（非满音量才露出来）。
+        """
         volume = self._volume
         if volume >= 0.999:
             return chunk
         if self._samples is None:
             # 没有 numpy：0 当静音，其余直放（音量旋钮失灵但出声）
             return b"\x00" * len(chunk) if volume <= 0.001 else chunk
+        first = offset // 2
         count = len(chunk) // 2
-        scaled = self._samples[:count] * volume
+        scaled = self._samples[first:first + count] * volume
         return scaled.astype("<i2").tobytes()
 
     def finished(self) -> bool:

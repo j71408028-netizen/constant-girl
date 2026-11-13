@@ -53,7 +53,8 @@
 
 另有 `check_scenario_schema.py` 守住副本方案字段的**声明 ↔ 产出 ↔ 校验器**（`schema`
 → `normalize` → `validate`）；音频端到端链（说话人分档 / 三条引擎路径 / 降级 /
-播放收尾）在 `check_audio_chain.py`；挑战包的**打包 → 解包 → 素材解析 → 地标还原**
+播放收尾）在 `check_audio_chain.py`，miniaudio 逐块供数（增益与块偏移对齐）在
+`check_miniaudio_gain.py`；挑战包的**打包 → 解包 → 素材解析 → 地标还原**
 闭环在 `check_challenge_pack.py`。加字段时别漏，见 §5.4。
 
 ### 1.3 当前实测数字（2026-11-13）
@@ -62,7 +63,7 @@
 [check_import_graph] 已检查 220 个模块，965 条第一方依赖边
 [check_import_graph] PASSED：层间依赖方向与 UI 框架禁令均无未登记越界
 KNOWN_EXCEPTIONS = []          # 原 11 条已全部消除
-tests/run_checks.py            # 74/74
+tests/run_checks.py            # 75/75
 ```
 
 ---
