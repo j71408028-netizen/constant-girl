@@ -94,8 +94,10 @@ HEAD              => beta 起点，尚无提交
 ## 二、结构性不兼容（读这一节就够判断要不要迁移数据）
 
 这一代是**破坏性**的：v1.0.0 的 `data/` 里大部分文件已不被读取，部分读取路径都换了。
-`scripts/migrate_from_v1.py` 是唯一的迁移入口（幂等，`--apply` 前先整目录备份到
-`<data>.rollback-<时间戳>/`），改不动的内容会列成「需要人工处理」清单而不是静默跳过。
+迁移入口共用 `services/migration_v1_to_v2.py` 转换内核：发行包根目录的「迁移旧版数据」
+启动器（`app/maintenance.py`），或源码运行 `python scripts/migrate_v1_to_v2.py`（幂等，
+`--apply` 前先整目录备份到 `<data>.rollback-<时间戳>/`），改不动的内容会列成
+「需要人工处理」清单而不是静默跳过。
 
 ### 2.1 目录与资源布局
 
@@ -293,7 +295,7 @@ scenarios:  _default → default           巨影临城 → juying_lincheng
 - `developer_tools/` 重新入库：`archive_preview` / `behavior_hooks_report` /
   `chat_session_preview` / `evolution_dump` / `lens_preview` / `minigame_preview` / `quip_report`。
 - `scripts/`：`dungeon_autopilot`（真窗口 15 场景回归，进 CI）、`escape_sim`（无头小游戏回归，进 CI）、
-  `scenario_validate`、`migrate_from_v1`；`dpg_probe/` 原生崩溃探针留档（DPG 专属 5 支已删）。
+  `scenario_validate`、`migrate_v1_to_v2`（内核在 `services/migration_v1_to_v2.py`）；`dpg_probe/` 原生崩溃探针留档（DPG 专属 5 支已删）。
 
 ---
 
@@ -400,7 +402,7 @@ v1.0.0 上确实存在一个脆弱点，v2 把承载它的模块整段换掉，�
 | 新增了哪些文件 | `git diff --name-status 9785356..HEAD --diff-filter=A` |
 | 删除了哪些文件 | `git diff --name-status 9785356..HEAD --diff-filter=D` |
 | 某文件何时长成现在这样 | `git log --follow --oneline -- <path>` |
-| 旧数据怎么迁 | `python scripts/migrate_from_v1.py --report plan.md` |
+| 旧数据怎么迁 | `python scripts/migrate_v1_to_v2.py --report plan.md` |
 
 删除清单只有 27 条（含根目录 `logic.py` / `models.py` / `ai.py` / `context.py` /
 `behavior_runtime.py`、`ui/common/`、`ui/scenario/{dependency_dlg,trigger_mgr}.py`、

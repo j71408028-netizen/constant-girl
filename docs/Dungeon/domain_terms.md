@@ -50,7 +50,7 @@
 |---|---|
 | 方案目录 | `ScenarioRepo.__init__` 把改名前的 `packs/dungeons/` 就地并入 `packs/scenarios/`（幂等；同名时保留 `config.json` 较新的一份，旧的留 `.bak`） |
 | 世界包 | `WorldPackManifest.from_dict` 把旧 `resources["dungeons"]` 归一化为 `resources["scenarios"]`；成员核对同时接受包内 `dungeons/<id>/` 与 `scenarios/<id>/` 两种路径 |
-| 存档字段 | 读取走 `scenario_id_of()`；`python scripts/migrate_from_v1.py --apply` 可把 `endings.json` / 角色档案 / 世界包里的旧字段一次性改写为 `scenario_id`（幂等、原子写 + `.bak`，不带 `--apply` 只出清单） |
+| 存档字段 | 读取走 `scenario_id_of()`；`python scripts/migrate_v1_to_v2.py --apply` 可把 `endings.json` / 角色档案 / 世界包里的旧字段一次性改写为 `scenario_id`（幂等、原子写 + `.bak`，不带 `--apply` 只出清单） |
 | `.chal` 挑战包 | 加密格式，不做改写，读取侧兼容 |
 
 ## 4. 守卫脚本

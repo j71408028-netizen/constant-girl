@@ -1,8 +1,13 @@
-"""把 v1.0.0 的 ``data/`` 整体迁移到当前版本（一次性，幂等）。
+"""v1.0.0 数据目录 → 2.0 数据格式的转换内核（一次性，幂等）。
 
 v1.0.0 之后资源层经历过多次**破坏性**改动，旧目录里的文件大多已不被读取
-（有的连读取路径都换了）。本脚本按类型逐个改写成当前形状，并把改写不了的
-内容整理成一份「需要人工处理」清单。
+（有的连读取路径都换了）。本模块按类型逐个把 v1.0.0 数据改写成 2.0 形状，
+并把改写不了的内容整理成一份「需要人工处理」清单。
+
+两个入口共用本内核：
+
+- 开发者命令行：``scripts/migrate_v1_to_v2.py``（预览 / ``--apply`` / ``--report``）；
+- 发行包运行时入口：``app/maintenance.py``（玩家在打包版目录双击启动器触发）。
 
 十步，每步都按「已经是目标形状就跳过」判断，因此跑第二遍必须输出 0 处变更：
 
@@ -28,32 +33,22 @@ v1.0.0 之后资源层经历过多次**破坏性**改动，旧目录里的文件
 9. **结局索引**：``user/endings.json`` 记录的 ``dungeon_id`` → ``scenario_id``；
 10. **资源信封**：给每份资源补 ``<id>.meta.json``（内容哈希一致则不重写）。
 
-默认只打印计划；``--apply`` 才落盘，且先整目录备份到
+``preview()`` / ``apply()`` 返回收集到的变更与人工清单，由调用方决定展示方式；
+落盘前必须先经 :meth:`Migration.backup` 整目录备份到
 ``<data>.rollback-<时间戳>/``。回滚：把备份目录覆盖回 ``data/``。
 
 改不动的部分（旧回放、加密挑战包、旧触发器动作、行为包旧钩子等）在
-``scripts/README.md`` 的「v1.0.0 → 当前」一节，运行时也会逐条列出。
-
-用法::
-
-    python scripts/migrate_from_v1.py                    # 预览
-    python scripts/migrate_from_v1.py --apply            # 落盘
-    python scripts/migrate_from_v1.py --report plan.md   # 另存 Markdown 清单
+``scripts/README.md`` 的「v1.0.0 → 当前」一节，运行结果也会逐条列出。
 """
 
-import argparse
 import csv
 import datetime
 import json
 import os
 import re
 import shutil
-import sys
 import tempfile
 import zipfile
-
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO_ROOT)
 
 from core.resource_spec import RESOURCE_TYPES, spec_of, valid_id_for  # noqa: E402
 from dungeon.settings import LEGACY_KEYS as DUNGEON_SETTING_KEYS  # noqa: E402
@@ -943,7 +938,7 @@ def step_worlds(m: Migration):
 
 OLD_SCALARS = ("intrusion", "destruction", "total_casualties")
 OLD_LISTS = ("intrusion_evolution", "destruction_evolution", "casualties_evolution")
-MIGRATION_SOURCE = "migrate_from_v1"
+MIGRATION_SOURCE = "migration_v1_to_v2"
 
 
 def _parse_time(value, fallback):
@@ -1255,12 +1250,13 @@ STEPS = (step_settings, step_materials, step_landmarks, step_quips,
 # 报告
 # ---------------------------------------------------------------------------
 
-def _report_markdown(m: Migration, apply: bool) -> str:
+def report_markdown(m: Migration, applied: bool) -> str:
+    """把一次迁移（预览或落盘）的变更与人工清单渲染成 Markdown。"""
     stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-    lines = ["# v1.0.0 数据迁移清单", "",
+    lines = ["# v1.0.0 → 2.0 数据迁移清单", "",
              f"- 生成时间：{stamp}",
              f"- 数据目录：`{m.data_dir}`",
-             f"- 模式：{'已落盘' if apply else '预览（未落盘）'}",
+             f"- 模式：{'已落盘' if applied else '预览（未落盘）'}",
              f"- 变更：{len(m.changes)} 处",
              f"- 需人工处理：{len(m.manual)} 项", ""]
     if m.backup_dir:
@@ -1288,57 +1284,22 @@ def _report_markdown(m: Migration, apply: bool) -> str:
     return "\n".join(lines)
 
 
-def run(data_dir: str, apply: bool, report_path: str = "") -> int:
-    if not os.path.isdir(data_dir):
-        raise SystemExit(f"数据目录不存在：{data_dir}")
-    preview = Migration(data_dir, apply=False)
-    print(f"数据目录：{data_dir}" + ("（预览）" if not apply else ""))
-    for step in STEPS:
-        step(preview)
-    if not preview.changes:
-        print("\n0 处变更（数据已是当前形状）")
-        if preview.manual:
-            print(f"另有 {len(preview.manual)} 项需人工处理，见下方或 --report 输出")
-        if report_path:
-            _write_report(preview, apply, report_path)
-        return 0
-    if not apply:
-        print(f"\n共 {len(preview.changes)} 处变更、{len(preview.manual)} 项需人工处理；"
-              f"未落盘，加 --apply 执行")
-        if report_path:
-            _write_report(preview, apply, report_path)
-        return 0
+def preview(data_dir: str) -> Migration:
+    """对 ``data_dir`` 做一次预览（不碰磁盘），返回收集到的变更与人工清单。
 
-    print(f"\n共 {len(preview.changes)} 处变更，开始落盘")
+    每步把计划打印到标准输出；窗口化环境里这些输出自动丢弃，
+    结构化结果以返回值为准。
+    """
+    m = Migration(data_dir, apply=False)
+    for step in STEPS:
+        step(m)
+    return m
+
+
+def apply(data_dir: str) -> Migration:
+    """整目录备份后落盘执行迁移，返回结果（``backup_dir`` 含备份路径）。"""
     worker = Migration(data_dir, apply=True)
     worker.backup()
     for step in STEPS:
         step(worker)
-    print(f"\n完成：{len(worker.changes)} 处变更；备份在 {worker.backup_dir}")
-    if worker.manual:
-        print(f"另有 {len(worker.manual)} 项需人工处理，见下方或 --report 输出")
-    if report_path:
-        _write_report(worker, apply, report_path)
-    return 0
-
-
-def _write_report(m: Migration, apply: bool, path: str):
-    text = _report_markdown(m, apply)
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write(text)
-    print(f"清单已写入 {path}")
-
-
-def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="v1.0.0 数据目录迁移")
-    parser.add_argument("--data-dir", default=os.path.join(REPO_ROOT, "data"),
-                        help="数据目录（默认仓库内 data/）")
-    parser.add_argument("--apply", action="store_true",
-                        help="真正落盘（先整目录备份）")
-    parser.add_argument("--report", default="", help="把变更与待办写成 Markdown")
-    args = parser.parse_args(argv)
-    return run(os.path.abspath(args.data_dir), args.apply, args.report)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    return worker

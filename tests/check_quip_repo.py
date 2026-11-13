@@ -123,7 +123,8 @@ try:
         try:
             legacy.get_styles()
         except ValueError as exc:
-            check("旧版单文件布局给出迁移提示", "migrate_from_v1" in str(exc))
+            check("旧版单文件布局给出迁移提示", "迁移旧版数据" in str(exc)
+                  and "migrate_v1_to_v2" in str(exc))
         else:
             check("旧版单文件布局给出迁移提示", False, "未抛 ValueError")
         try:

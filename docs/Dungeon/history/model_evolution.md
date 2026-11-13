@@ -55,7 +55,7 @@
 |---|---|---|
 | `data/packs/dungeons/` | `data/packs/scenarios/` | `ScenarioRepo.__init__` 就地并入（幂等；同名保留 `config.json` 较新的一份，旧的留 `.bak`） |
 | 世界包 `resources["dungeons"]` | `resources["scenarios"]` | `WorldPackManifest.from_dict` 归一化；成员核对同时接受包内两种路径 |
-| 存档字段 `dungeon_id` / `dungeon_config` | `scenario_id` / `scenario_config` | 读取走 `dungeon.terms.scenario_id_of()` / `scenario_config_of()`；`scripts/migrate_from_v1.py` 可一次性改写 |
+| 存档字段 `dungeon_id` / `dungeon_config` | `scenario_id` / `scenario_config` | 读取走 `dungeon.terms.scenario_id_of()` / `scenario_config_of()`；`scripts/migrate_v1_to_v2.py` 可一次性改写 |
 
 `.chal` 挑战包是加密格式，不做改写，读取侧兼容。
 

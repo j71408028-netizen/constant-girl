@@ -234,7 +234,8 @@ class QuipRepo:
             raise ValueError(
                 "描述风格仍是旧版单文件布局: "
                 + "、".join(legacy)
-                + "；请运行 python scripts/migrate_from_v1.py --apply 完成迁移")
+                + "；请运行「迁移旧版数据」入口完成迁移"
+                + "（源码运行：python scripts/migrate_v1_to_v2.py --apply）")
         styles = _merged_styles(self._world_state, _TYPE, self._free_dir)
         if not styles and not self._owns_pack():
             self._create_defaults()
@@ -262,7 +263,8 @@ class QuipRepo:
         if legacy:
             raise ValueError(
                 f"描述风格 {style_name!r} 仍是旧版单文件布局: {legacy}；"
-                "请运行 python scripts/migrate_from_v1.py --apply 完成迁移")
+                "请运行「迁移旧版数据」入口完成迁移"
+                "（源码运行：python scripts/migrate_v1_to_v2.py --apply）")
         return read_quips_csv(self._csv_path(style_name), style_name)
 
     def load_merged(self, style_names: List[str]) -> Dict:
@@ -353,7 +355,8 @@ class QuipRepo:
         elif self._free_legacy_paths(old_name):
             raise ValueError(
                 f"描述风格 {old_name!r} 仍是旧版单文件布局；"
-                "请运行 python scripts/migrate_from_v1.py --apply 完成迁移")
+                "请运行「迁移旧版数据」入口完成迁移"
+                "（源码运行：python scripts/migrate_v1_to_v2.py --apply）")
         else:
             raise ValueError(f"风格 '{old_name}' 不存在")
         _rename_addr(self._free_dir, old_name, new_name)

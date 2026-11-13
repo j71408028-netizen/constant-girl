@@ -273,7 +273,7 @@ data/static/behaviors/imperial_units/imperial_units.py:45
 `data/packs/topics/*`）。跨过这一层，`<id>` 与 `<id>.addr.json` 谁是需要编辑的
 内容一眼可辨。
 
-三个曾经破例的数据形状已在一次性迁移（`scripts/migrate_from_v1.py`）里改掉：
+三个曾经破例的数据形状已在一次性迁移（`services/migration_v1_to_v2.py`，CLI 是 `scripts/migrate_v1_to_v2.py`）里改掉：
 
 - `news` 的表头用字段键（`size_category` / `memorial` / `intrusion` /
   `destruction` / `text` / `substitute_1` / `substitute_2`），不再是中文列名，
@@ -322,7 +322,7 @@ status / tags / schema`。它随时可以删掉重建，内容与磁盘一致时
   `名称@完整地址` 这类拼接键在改名或改址时断档。
 - **耐久表 / 地址表以 `Ref` 文本为键**（唯一出口 `AddressPlanner.durability_key()`），
   所以改地址不清零耐久。读侧把键当 `Ref` 解析（`Ref.parse`），解析不了就退回原名。
-  旧档案里的 `名称@完整地址` 键由 `scripts/migrate_from_v1.py` 的「角色档案」步改写。
+  旧档案里的 `名称@完整地址` 键由 `services/migration_v1_to_v2.py` 的「角色档案」步改写。
 - 同一件事只有一个口径：`AddressPlanner` 只是索引的门面，`landmark_address` /
   `durability_key` / `ref` 全部转发；索引内部一次性读齐风格注册地址，
   **不逐条回落磁盘**读 `.addr.json`。

@@ -23,16 +23,20 @@ GUI 冒烟）在 `tests/`，由 `python tests/run_checks.py` 统一驱动；另�
 | `platform_api_report.py` | 报告（**不判红**） | Windows 专有 API 落点清单，发布 macOS 前过一眼。原 `tests/check_platform_compat.py`；它原先兼守的"模态对话框不得构造期裸 `grab_set()`"判红约束已归 `tests/check_modal_grabs.py` 专职（AST 版 + 行为分支），2026-10-13 迁来 |
 | `scenario_validate.py` | 批量校验（**CI 显式调用**） | 副本方案配置批量校验（`validate_scenario_config`，含资产存在性），有 error 退出码 1。原 `tests/check_scenarios.py`——它校验的是 `data/` 下的用户方案而不是仓库代码：本地编辑自己的方案出错会弄红 `run_checks.py`，CI 的干净检出里没有这些方案、永远不红，方向反了；且会被 `run_checks.py` 与 CI 显式 step 各跑一遍。2026-10-13 迁来，`tests/` 只留代码守卫 |
 
-## 数据迁移（v1.0.0 → 当前）
+## 数据迁移（v1.0.0 → 2.0）
 
-`migrate_from_v1.py` 是**唯一**的数据迁移入口，取代了原先按单项改动切分的
-`migrate_resource_ids.py` / `migrate_scenario_naming.py` / `migrate_snapshot_evolution.py`
-（后三者已删除：它们只覆盖当时的某一处破坏性更改，对 v1.0.0 的完整目录跑一半就会停，
-残留的中间状态还会让后续步骤走错分支）。
+数据迁移入口有两处，共用同一个转换内核 `services/migration_v1_to_v2.py`：
 
-    python scripts/migrate_from_v1.py                    # 预览，只打印变更与待办
-    python scripts/migrate_from_v1.py --apply            # 落盘（先整目录备份）
-    python scripts/migrate_from_v1.py --report out.md    # 变更 + 人工清单写 Markdown
+- **玩家（打包版）**：发行包根目录的「迁移旧版数据」启动器，走
+  `app/maintenance.py` 的运行时入口；
+- **开发者（源码）**：`migrate_v1_to_v2.py`，取代了原先按单项改动切分的
+  `migrate_resource_ids.py` / `migrate_scenario_naming.py` / `migrate_snapshot_evolution.py`
+  （后三者已删除：它们只覆盖当时的某一处破坏性更改，对 v1.0.0 的完整目录跑一半就会停，
+  残留的中间状态还会让后续步骤走错分支）。
+
+    python scripts/migrate_v1_to_v2.py                    # 预览，只打印变更与待办
+    python scripts/migrate_v1_to_v2.py --apply            # 落盘（先整目录备份）
+    python scripts/migrate_v1_to_v2.py --report out.md    # 变更 + 人工清单写 Markdown
 
 - 幂等：第二次跑输出「0 处变更」。落盘前把整个 `data/` 复制到
   `<data>.rollback-<时间戳>/`，回滚就是把它覆盖回去；单文件改写另留 `.bak`，
@@ -73,7 +77,7 @@ GUI 冒烟）在 `tests/`，由 `python tests/run_checks.py` 统一驱动；另�
 |---|---|
 | `_out/dpg_probe/` | `dpg_probe/` 各探针的 `_*.txt` / `*.dmp`（共享常量 `OUT_DIR` / `out()` 在 `dpg_probe/_outdir.py`） |
 
-`dungeon_autopilot.py` / `escape_sim.py` / `migrate_from_v1.py` / 两个探针
+`dungeon_autopilot.py` / `escape_sim.py` / `migrate_v1_to_v2.py` / 两个探针
 （`child_dpi_probe.py`、`platform_api_report.py`）都不落盘（迁移脚本直写 `data/`，
 清单用 `--report` 显式指定路径）。
 
