@@ -148,6 +148,15 @@ class DungeonStoryEngine:
                     if self._closing:
                         return
 
+                if not full_response_buffer.strip():
+                    # 连续空响应（重试一次仍为空）：本段没有任何正文可提交。
+                    # 提交历史、推进一步、写回放、跑触发判断都会在没有正文的
+                    # 情况下消耗进度（甚至走进结局），所以整段撤回，让玩家再点。
+                    self._drop_empty_step(current_item)
+                    self._note_session_error(ValueError(
+                        "AI 连续返回空内容（已重试一次），请再点一次继续"))
+                    return
+
                 ai_text, direction, custom_directions = self._parse_final_json(full_response_buffer)
 
                 # 最终切分：整段正文按内置分句器定格，首句已由游标展示（或由此起
@@ -848,6 +857,17 @@ class DungeonStoryEngine:
         self._apply_effect_overrides()
 
     # ---------- 生成错误 ----------
+    def _drop_empty_step(self, item):
+        """撤回本段的占位：清掉排队句式与故事区里的空段落。
+
+        空响应路径不产出正文，占位条目要是留在 ``story_history`` 里，故事区
+        会多出一个空气泡（回放与截图也会带上）。
+        """
+        self._pending_units = []
+        if self.story_history and self.story_history[-1] is item:
+            self.story_history.pop()
+        self._schedule_text_update()
+
     def _note_session_error(self, error) -> None:
         """记录一次生成异常：会话仍可重试，但异常必须可见。
 

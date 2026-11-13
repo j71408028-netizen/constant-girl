@@ -172,6 +172,7 @@ run() → SessionResult
 | 会话中直接点 X 退出（未触发结局） | `_handle_exit` | `False` |
 | 点 X 时结局已触发、文本仍在生成 | `_handle_exit`（join 超时分支） | `True`（结局文本兜底为结局名） |
 | 生成异常 `engine._note_session_error` | 不结束会话，异常记入 `_session_errors` 并显示在故事区 | — |
+| 连续空响应（重试一次仍为空） | `engine._drop_empty_step` + `_note_session_error`：撤回本段占位，**不**写对话历史、不推步数、不写回放、不跑触发器，提示后可再点一次 | — |
 
 - `completed=True`：结算结局增量 → 写 `data/user/endings.json` 结局索引 → 按设置自动保存回放。
 - `completed=False`：**不**结算、**不**写 `endings.json`、**不**记挑战达成；已生成内容落盘为「未完成」回放与报告（文件名带 `_未完成`，报告头部标注 `【未完成】` 与原因，中断退出时弹窗给出保存路径）。会话没有任何内容时只提示、不落盘。
