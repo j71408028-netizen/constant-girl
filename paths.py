@@ -12,6 +12,9 @@ APP_NAME = "ConstantGirl"
 #: 机器可读处。形如 ``<repo>-<ver>-<os>-<arch>.zip``。
 APP_SLUG = "constant-girl"
 
+#: 项目仓库主页；「检查更新」据此构造 GitHub Releases API 地址与下载页链接。
+APP_REPO_URL = "https://github.com/j71408028-netizen/constant-girl"
+
 APP_VERSION = "2.0.0 beta"
 
 #: 改名前使用过的应用目录名，仅在打包版首次启动时用于整体搬迁一次。

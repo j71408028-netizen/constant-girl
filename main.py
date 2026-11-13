@@ -459,6 +459,11 @@ def main():
         from ui.hosting.mini_game_host import run as run_mini_game_host
         run_mini_game_host(sys.argv)
         return
+    # 维护子命令（migrate / check-update 等，见 app.maintenance）：命中即执行，
+    # 不启动主界面。未知维护命令给出可读提示而不是落到主程序。
+    from app.maintenance import dispatch
+    if dispatch(sys.argv[1:]):
+        return
     from app.shell import run_app
     run_app()
 
