@@ -491,15 +491,17 @@ class SettingsPanel(ctk.CTkScrollableFrame):
     def _sync_dungeon_settings(self):
         """进入设置页时回读副本独占设置并刷新相关控件。
 
-        设置页常驻，而副本窗口本身也能改这份设置（``dungeon_settings.json``），
+        设置页常驻，而副本窗口本身也会改这份设置（``dungeon_settings.json``），
         所以进页时从仓库重读一次，避免显示陈旧值。副本窗口只即时改运行期参数
-        （音量 / 帧率 / 回放 / 停靠侧），不会动本页这两个启动项。
+        （音量 / 帧率 / 停靠侧），不会动本页这三个项。
         """
         self.dungeon_settings = self.dungeon_settings_repo.load()
         self.dungeon_font_var.set(self.dungeon_settings.get("dungeon_font")
                                   or ui_fonts.dungeon_font_default())
         self.story_recent_var.set(
             str(self.dungeon_settings.get("story_recent_count", 20)))
+        self.auto_save_replay_var.set(
+            bool(self.dungeon_settings.get("auto_save_replay", False)))
 
     def _on_ui_mode_changed(self, value):
         """记录「下次启动用哪套界面」，仅此而已。
@@ -538,6 +540,16 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         row += 1
         self.auto_save_report_var = tk.BooleanVar(value=self.settings.get("auto_save_report", False))
         self.auto_save_report_switch = self._make_switch(ctrl, self.auto_save_report_var)
+
+        # 副本回放的自动保存放这里而不是副本设置面板：它只在「探索模式且已加载
+        # 角色」时生效，是档案层的开关；摆在副本面板里会让玩家以为任何一次
+        # 开局都会自动存回放。关闭它不影响手动保存——退出副本时仍会问一次。
+        _, ctrl = self._make_row(self.archive_body, row, "自动保存副本回放")
+        row += 1
+        self.auto_save_replay_var = tk.BooleanVar(
+            value=bool(self.dungeon_settings.get("auto_save_replay", False)))
+        self.auto_save_replay_switch = self._make_switch(
+            ctrl, self.auto_save_replay_var)
 
         _, ctrl = self._make_row(self.archive_body, row, "以低分辨率保存图片")
         row += 1
@@ -804,12 +816,14 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self.settings["selected_parts"] = selected_parts
         self.settings["reverse_details_order"] = self.reverse_details_var.get()
 
-        # 副本独占设置落自己的文件（data/user/dungeon_settings.json）。这里只写
-        # 下次进副本才生效的启动项；运行期参数（音量 / 帧率 / 回放 / 停靠侧）
-        # 由副本设置面板即时改，本页不碰，避免两套控件争夺同一份文件。
+        # 副本独占设置落自己的文件（data/user/dungeon_settings.json）。本页写
+        # 下次进副本才生效的启动项，外加「自动保存副本回放」——它是按档案生效
+        # 的开关，不属于副本面板的运行期参数；音量 / 帧率 / 停靠侧仍由副本面板
+        # 即时改，两边不争夺同一控件。
         self.dungeon_settings = self.dungeon_settings_repo.update({
             "dungeon_font": dungeon_font,
             "story_recent_count": self._story_recent_count_value(),
+            "auto_save_replay": bool(self.auto_save_replay_var.get()),
         })
 
         # 先保存当前（自由）设置，再应用世界包启用/卸载更改
