@@ -13,7 +13,7 @@
 """
 
 from core.address_model import format_addr_compact, parse_full
-from core.models import Landmark
+from core.models import Landmark, is_valid_landmark_size
 
 from . import schema
 
@@ -30,7 +30,7 @@ def _coerce_unique_landmark(item: dict):
     if not name:
         return None
     size = item.get("size")
-    if isinstance(size, bool) or not isinstance(size, (int, float)) or size <= 0:
+    if not is_valid_landmark_size(size):
         return None
     dimension = item.get("dimension") or schema.DEFAULT_SCENE_LANDMARK_DIMENSION
     if dimension not in schema.SCENE_LANDMARK_DIMENSIONS:

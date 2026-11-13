@@ -12,7 +12,7 @@ import random
 from typing import Dict, List, Optional
 
 from core.behavior_runtime import behavior_hook
-from core.models import Landmark
+from core.models import Landmark, is_valid_landmark_size
 from core.logic.text import contains_blocked_word, should_skip_by_part_tags
 
 
@@ -64,11 +64,15 @@ def get_comparisons(
     }
 
     all_candidates = []
+    # 计算边界：加载/导入已挡过无效尺寸，但世界包与挑战包可能绕过 CSV 直接
+    # 给出地标，这里再过滤一次，任何一条坏数据都不能让整份报告失败。
+    usable_landmarks = [lm for lm in landmarks
+                        if is_valid_landmark_size(getattr(lm, "size", None))]
     for part, size in body_parts.items():
         if part not in selected_parts:
             continue
         allowed = dim_map.get(part, ["vertical", "horizontal"])
-        for landmark in landmarks:
+        for landmark in usable_landmarks:
             if contains_blocked_word(landmark.name, blocked_words):
                 continue
             if landmark.dimension in allowed:

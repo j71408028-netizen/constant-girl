@@ -517,12 +517,17 @@ class MiniApp:
 
     def generate_report(self):
         if self.current_state is not None:
-            report = self.context.report_from_core_or_character(
-                self.current_state,
-                self.context.selected_styles,
-                self.context.selected_quip_styles,
-                consume_points=self.current_state.report_generated,
-                state_service=self.context.state_service)
+            try:
+                report = self.context.report_from_core_or_character(
+                    self.current_state,
+                    self.context.selected_styles,
+                    self.context.selected_quip_styles,
+                    consume_points=self.current_state.report_generated,
+                    state_service=self.context.state_service)
+            except Exception as e:
+                # 行动点已在报告引擎里退回，这里只报告原因
+                self.notify(f"生成失败：\n{e}", tone="danger", title="出错了")
+                return
             if report is not None:
                 self.current_state.report_generated = True
                 self._character_repo.save(self.current_state)

@@ -35,7 +35,7 @@ def _open_challenge_pack(settings_repo, pack_name):
 
 
 def import_landmark_challenge_pack(settings_repo, pack_name, repo):
-    from core.models import Landmark
+    from core.models import Landmark, is_valid_landmark_size
     data = _open_challenge_pack(settings_repo, pack_name)
     styles = data.get("landmark_styles", [])
     raw_data = data.get("landmark_data", {})
@@ -46,7 +46,24 @@ def import_landmark_challenge_pack(settings_repo, pack_name, repo):
         raw = raw_data.get(style, [])
         if not raw:
             continue
-        landmarks = [Landmark(**item) for item in raw]
+        landmarks = []
+        skipped = 0
+        for item in raw:
+            try:
+                landmark = Landmark(**item)
+            except (TypeError, ValueError):
+                skipped += 1
+                continue
+            # 包内容来自别人的机器：尺寸无效的条目留在仓库里会让之后的
+            # 每份报告都失败，导入时就丢掉。
+            if is_valid_landmark_size(landmark.size):
+                landmarks.append(landmark)
+            else:
+                skipped += 1
+        if skipped:
+            print(f"[挑战包] {style}: 跳过 {skipped} 条尺寸或字段无效的地标")
+        if not landmarks:
+            continue
         repo.save(style, landmarks)
         imported_count += len(landmarks)
         if style not in repo.get_styles():

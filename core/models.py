@@ -24,6 +24,22 @@ class Landmark:
             self.horizontal_type = "length"
 
 
+def is_valid_landmark_size(value) -> bool:
+    """地标尺寸能否参与换算：正数且有限。
+
+    0 会让「身体部位 / 尺寸」直接除零；负值方向相反；NaN / inf 能绕过
+    所有比值区间判断，再污染排序、伤害计算与文本。三类都要在入口挡住，
+    所以 CSV 读取、世界包导入、报告计算共用这一个判据。
+    """
+    if isinstance(value, bool):
+        return False
+    try:
+        size = float(value)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(size) and size > 0
+
+
 @dataclass
 class BodyPreset:
     name: str

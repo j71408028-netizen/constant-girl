@@ -7,7 +7,7 @@ import customtkinter as ctk
 
 import services.worlds.address_registry as address_registry
 import ui.ctk.dialogs
-from core.models import Landmark
+from core.models import Landmark, is_valid_landmark_size
 from persistence.landmark_repo import LandmarkRepo, DEFAULT_LANDMARK_STYLE
 from services.challenges import (
     challenge_pack_titles, get_challenge_packs, import_landmark_challenge_pack,
@@ -662,11 +662,8 @@ class LandmarkDialog(BaseDialog):
         if not self.name_var.get().strip():
             ui.ctk.dialogs.showwarning("警告", "请输入地标名称")
             return False
-        try:
-            size = float(self.size_var.get())
-            if size <= 0:
-                raise ValueError("尺寸必须大于0")
-        except ValueError:
+        # 除了正负，还要挡住 nan / inf：它们能通过除法，却会让对比结果失去意义
+        if not is_valid_landmark_size(self.size_var.get()):
             ui.ctk.dialogs.showwarning("警告", "请输入有效的正数尺寸")
             return False
         return True

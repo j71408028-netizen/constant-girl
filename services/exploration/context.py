@@ -295,23 +295,31 @@ class ExplorationContext:
                 # 供选取仲裁器加权（旧档无历史时全中性）
                 "spatial_profile": build_spatial_profile(state),
             }
-            if consume_points:
-                self.character_repo.save(state)
-
+            # 扣点只先结算在内存里，成功后才随档案落盘：报告引擎可能因为素材
+            # 或数据问题中途抛错（例如旧版导入的零尺寸地标），那种路径不能留下
+            # 「点数已扣、库里没有报告」的状态。
             report_data = None
-            for _attempt in range(5):
-                report_data = self._reports.generate(core, selected_quip_styles)
-                if report_data is None or not report_data.get("stuck"):
-                    break
-                stuck = report_data.get("stuck")
-                decision = resolve_stuck(state, stuck, self) if resolve_stuck else None
-                if decision is None:
-                    # 拒绝切换 → 负向演化并取消报告
-                    svc.apply_negative_evolution(state)
-                    self.character_repo.save(state)
-                    return None
-                core["position"] = decision.get("address") or core.get("position", "")
+            try:
+                for _attempt in range(5):
+                    report_data = self._reports.generate(core, selected_quip_styles)
+                    if report_data is None or not report_data.get("stuck"):
+                        break
+                    stuck = report_data.get("stuck")
+                    decision = resolve_stuck(state, stuck, self) if resolve_stuck else None
+                    if decision is None:
+                        # 拒绝切换 → 负向演化并取消报告（用户明确的放弃，照常落盘）
+                        svc.apply_negative_evolution(state)
+                        self.character_repo.save(state)
+                        return None
+                    core["position"] = decision.get("address") or core.get("position", "")
+            except Exception as exc:
+                if consume_points:
+                    svc.refund_action_points(state, cost)
+                print(f"⚠️ 报告生成失败，已归还本次行动点数：{exc}")
+                raise
             if report_data is None or report_data.get("stuck"):
+                if consume_points:
+                    svc.refund_action_points(state, cost)
                 return None
         else:
             core = source.copy()

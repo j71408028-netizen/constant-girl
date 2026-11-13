@@ -474,40 +474,25 @@ class ExplorationPanel(ctk.CTkFrame):
         return dialog.result
 
     def _generate_giantess(self):
-        if self.current_state:
-            consume = self.current_state.report_generated
-            report = self.context.report_from_core_or_character(
-                self.current_state,
-                self.context.selected_styles,
-                self.context.selected_quip_styles,
-                consume_points=consume,
-                state_service=self.context.state_service,
-                resolve_stuck=self._resolve_stuck_choice,
-            )
-            if report:
-                self.current_state.report_generated = True
-                self.context.character_repo.save(self.current_state)
-        else:
-            params = self.params_panel.get_params()
-            core = self.context.creation_service.core_from_params(
-                params, self.context.settings,
-                self.context.preset_repo, self.context.personality_repo
-            )
-            if core is None:
-                ui.ctk.dialogs.showerror("错误", "参数无效，请检查输入。")
-                return
-            report = self.context.report_from_core_or_character(
-                core,
-                self.context.selected_styles,
-                self.context.selected_quip_styles,
-                consume_points=False
-            )
+        try:
+            report = self._build_report()
+        except Exception as exc:
+            # 报告引擎抛错时已把本次行动点退回内存，这里只负责让用户看见原因
+            ui.ctk.dialogs.showerror(
+                "生成失败", f"报告生成失败，本次未扣除行动点数。\n{exc}")
+            return
         if report is None:
             if getattr(self, "_report_aborted_stuck", False):
                 self._report_aborted_stuck = False
                 return
+            if self.current_state is None:
+                # 表单参数无效，_build_report 已经提示过
+                return
             ui.ctk.dialogs.showerror("点数不足", "行动点数不足以生成报告。")
             return
+        if self.current_state:
+            self.current_state.report_generated = True
+            self.context.character_repo.save(self.current_state)
         self.report_panel.render_report(report)
         if self.current_state:
             self.state_panel.update_state(self.current_state)
@@ -520,6 +505,32 @@ class ExplorationPanel(ctk.CTkFrame):
                 self.current_state.name
             )
             self.report_panel.mark_saved()
+
+    def _build_report(self):
+        """按当前状态或表单参数生成报告；None 表示点数不足或用户放弃。"""
+        if self.current_state:
+            return self.context.report_from_core_or_character(
+                self.current_state,
+                self.context.selected_styles,
+                self.context.selected_quip_styles,
+                consume_points=self.current_state.report_generated,
+                state_service=self.context.state_service,
+                resolve_stuck=self._resolve_stuck_choice,
+            )
+        params = self.params_panel.get_params()
+        core = self.context.creation_service.core_from_params(
+            params, self.context.settings,
+            self.context.preset_repo, self.context.personality_repo
+        )
+        if core is None:
+            ui.ctk.dialogs.showerror("错误", "参数无效，请检查输入。")
+            return None
+        return self.context.report_from_core_or_character(
+            core,
+            self.context.selected_styles,
+            self.context.selected_quip_styles,
+            consume_points=False
+        )
 
     def _update_report_cost_label(self):
         if self.current_state is None:

@@ -2,7 +2,7 @@ import csv
 import os
 from dataclasses import asdict
 
-from core.models import Landmark
+from core.models import Landmark, is_valid_landmark_size
 from core.resource_spec import spec_of
 from .json_store import BACKUP_SUFFIX, write_text_atomic
 from .resources.registry import addr_path as _reg_addr_path
@@ -41,6 +41,9 @@ def row_to_landmark(row: dict):
     try:
         size = float(str(row.get("size") or "").strip())
     except ValueError:
+        return None
+    if not is_valid_landmark_size(size):
+        # 0 / 负数 / nan / inf：读进来就会在尺寸对比里除零或算出假比值
         return None
     return Landmark(
         name=name,
