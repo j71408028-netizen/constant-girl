@@ -22,6 +22,19 @@ def challenge_pack_titles(settings_repo, packs) -> dict:
     return {name: cm.pack_title(name) for name in packs}
 
 
+def unique_display(display: str, key: str, used: set) -> str:
+    """下拉里的一行：显示名撞车时补 id，保证每一行都能反查回各自的那一项。
+
+    三个界面的下拉都把「显示名 → 资源」记成字典，同名两行会互相覆盖——
+    后一项静默吃掉前一项的选择。撞车时统一在这里补 id。
+    """
+    display = display or str(key or "")
+    if display in used:
+        display = f"{display}（{key}）"
+    used.add(display)
+    return display
+
+
 def _open_challenge_pack(settings_repo, pack_name):
     cm = ChallengeService(settings_repo)
     file_path = os.path.join(cm.storage_dir, pack_name)

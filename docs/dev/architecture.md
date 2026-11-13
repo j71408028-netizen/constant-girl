@@ -55,15 +55,16 @@
 → `normalize` → `validate`）；音频端到端链（说话人分档 / 三条引擎路径 / 降级 /
 播放收尾）在 `check_audio_chain.py`，miniaudio 逐块供数（增益与块偏移对齐）在
 `check_miniaudio_gain.py`；挑战包的**打包 → 解包 → 素材解析 → 地标还原**
-闭环在 `check_challenge_pack.py`。加字段时别漏，见 §5.4。
+闭环在 `check_challenge_pack.py`，资源显示名的贯通（同名可区分、包往返不丢、
+名称与载荷同源）在 `check_resource_display.py`。加字段时别漏，见 §5.4。
 
 ### 1.3 当前实测数字（2026-11-13）
 
 ```
-[check_import_graph] 已检查 220 个模块，965 条第一方依赖边
+[check_import_graph] 已检查 220 个模块，966 条第一方依赖边
 [check_import_graph] PASSED：层间依赖方向与 UI 框架禁令均无未登记越界
 KNOWN_EXCEPTIONS = []          # 原 11 条已全部消除
-tests/run_checks.py            # 75/75
+tests/run_checks.py            # 76/76
 ```
 
 ---
@@ -228,11 +229,21 @@ data/static/behaviors/imperial_units/imperial_units.py:45
   「重命名资源」就是 `registry.set_title()`——只写信封，不改目录名、不动载荷、
   不进 `content_hash`，所以改一次名字不会让已选风格、地址注册、耐久表键或
   世界包清单断档，也不会被判成「内容改过」。
+- **信封名恒用不带容器后缀的 id**：挑战包列表给的 id 是 `x.chal`，信封却是
+  `x.meta.json`。凡是拼信封路径的地方都过 `registry.envelope_id()`，否则会去找
+  不存在的 `x.chal.meta.json`。
+- **世界包接管该类型时只看包内信封**：包外同 id 是另一份资源，借它的名字会让
+  两件无关的东西在界面上看起来是同一个。包内没留信封就回落成 id（不跨目录兜底）。
+  未被接管时才走「自由目录」。
+- **下拉行按显示名去重**：三处（副本方案 / 地标风格 / 描述风格）的挑战包条目
+  都过 `services.challenges.unique_display()`——同名时补 id，保证每一行都能反查
+  回自己那一项；否则显示名到资源的映射字典会互相覆盖，后一项静默吃掉前一项。
 - **载荷里的 `name` / `label` 不是资源名**：那是资源**内部条目**的名字
   （一个地标、一个话题类型）。资源名只认信封 `title`。
 
 判据落在 `tests/check_resource_spec.py`（改名后载荷与目录不变、哈希不变、
-派生 id 不逃出目录）。
+派生 id 不逃出目录）与 `tests/check_resource_display.py`（同名可区分、包往返
+名称不丢、名称与载荷同源）。
 
 **单文件 JSON 容器的主文件不带扩展名**：`topics/<id>`，路径本身就是资源地址。
 理由是三份文件挤在同一层的目录里时，`x.json` +
@@ -289,6 +300,8 @@ status / tags / schema`。它随时可以删掉重建，内容与磁盘一致时
 **世界包内资源自带信封**：`create_from_current` 会把每份导出资源的
 `<id>.meta.json` 一并写进包内（`_copy_envelopes`），包因此不依赖本机的
 `catalog.json` 就能被索引；解散时再写回自由目录（目标已有信封则不覆盖）。
+两边的文件名都过 `registry.envelope_id()`——清单里挑战包记的是 `x.chal`，
+包内信封却是 `challenges/x.meta.json`，不归一就既导不出也写不回。
 包内小游戏按「自由目录优先、其次激活包」解析（`dungeon.minigame_pack.pack_roots`），
 副本子进程靠 `paths.active_world_id()` 定位：它读资源域设置
 `user/resource_settings.json`，只在文件缺失或读不出来时回退旧版 `user/settings.json`

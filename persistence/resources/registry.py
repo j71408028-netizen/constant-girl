@@ -126,6 +126,19 @@ def primary_suffix(type_id: str) -> str:
     return tail.split("{id}", 1)[1]
 
 
+def envelope_id(type_id: str, resource_id: str) -> str:
+    """资源 id → 信封文件名里的 id（剥掉容器后缀，如 ``x.chal`` → ``x``）。
+
+    信封恒按**不带后缀**的 id 命名（``x.meta.json``），而挑战包这类列表返回的
+    是带后缀的文件名（``x.chal``）。凡是要拼信封路径的地方都得先过这里，
+    否则会去找不存在的 ``x.chal.meta.json``。
+    """
+    suffix = primary_suffix(type_id)
+    if suffix and resource_id.lower().endswith(suffix.lower()):
+        return resource_id[:-len(suffix)]
+    return resource_id
+
+
 def free_path(type_id: str, resource_id: str, data_dir: str = DEFAULT_DATA_DIR) -> str:
     """自由目录下的主文件路径（写路径恒为可写层）。"""
     return os.path.join(free_dir(type_id, data_dir),
@@ -152,7 +165,8 @@ def addr_path(type_id: str, resource_id: str, data_dir: str = DEFAULT_DATA_DIR) 
 def envelope_path_of(type_id: str, resource_id: str,
                      data_dir: str = DEFAULT_DATA_DIR) -> str:
     """信封路径（恒在自由目录，与主文件同目录）。"""
-    return envelope_path(free_dir(type_id, data_dir), resource_id)
+    return envelope_path(free_dir(type_id, data_dir),
+                         envelope_id(type_id, resource_id))
 
 
 def resource_id_from_path(type_id: str, path: str) -> str:
@@ -308,27 +322,42 @@ def _resource_dirs(type_id: str, data_dir: str = DEFAULT_DATA_DIR,
 
 def _resource_home(type_id: str, resource_id: str,
                    dirs: List[str]) -> str:
-    """资源本体所在的目录：先认信封，再认主文件或资源目录，都没有就用自由目录。"""
+    """资源本体所在的目录：先认信封，再认主文件或资源目录，都没有就用最后一个。
+
+    只在自由目录内定位用（``catalog_entry`` 这类按自由目录记账的地方）。
+    信封读写另有口径：类型由世界包接管时只看包内，见 :func:`title_of`。
+
+    调用方传的 id 可能带容器后缀（挑战包列表给的是 ``x.chal``），而信封恒按
+    不带后缀的 id 命名，所以两轮查找都按 :func:`envelope_id` 归一后再拼。
+    """
+    name = envelope_id(type_id, resource_id)
     for directory in dirs:
-        if os.path.isfile(envelope_path(directory, resource_id)):
+        if os.path.isfile(envelope_path(directory, name)):
             return directory
     for directory in dirs:
         primary = os.path.join(
             directory, primary_relpath(type_id, resource_id).replace("/", os.sep))
-        if os.path.exists(primary) or os.path.exists(
-                os.path.join(directory, resource_id)):
+        if os.path.exists(primary) or os.path.exists(os.path.join(directory, name)):
             return directory
     return dirs[-1]
 
 
 def title_of(type_id: str, resource_id: str, data_dir: str = DEFAULT_DATA_DIR,
              world_state=None) -> str:
-    """资源的显示名；未设置或读不到返回空串（界面回落成 id）。"""
+    """资源的显示名；未设置或读不到返回空串（界面回落成 id）。
+
+    启用世界包且该类型由包接管时**只看包内**：包外同 id 是另一份资源，
+    借它的名字会让两件无关的东西在界面上看起来是同一个。包内没留信封就
+    返回空串（界面回落成 id），不去自由目录找同名的那份。
+    """
     if not resource_id:
         return ""
-    directory = _resource_home(
-        type_id, resource_id, _resource_dirs(type_id, data_dir, world_state))
-    return load_envelope(directory, type_id, resource_id).get("title", "")
+    directory = pack_dir(type_id, world_state)
+    if not directory:
+        directory = _resource_home(
+            type_id, resource_id, _resource_dirs(type_id, data_dir, world_state))
+    return load_envelope(directory, type_id, envelope_id(type_id, resource_id)).get(
+        "title", "")
 
 
 def display_name(type_id: str, resource_id: str, data_dir: str = DEFAULT_DATA_DIR,
@@ -355,13 +384,15 @@ def set_title(type_id: str, resource_id: str, title,
     """写资源显示名（空串 = 清除，界面回落成 id）；返回信封路径。
 
     这是「重命名资源」的唯一实现：只写信封，不改目录名、不改载荷、不影响
-    ``content_hash``。资源在包内就写到包内那份信封，否则写自由目录。
+    ``content_hash``。该类型由世界包接管时写到包内那份信封（与
+    :func:`title_of` 的读取口径一致），否则写自由目录。
     """
     if not resource_id:
         raise ValueError("资源 id 为空，无法设置显示名")
-    directory = _resource_home(
+    directory = pack_dir(type_id, world_state) or _resource_home(
         type_id, resource_id, _resource_dirs(type_id, data_dir, world_state))
-    return _set_envelope_title(directory, type_id, str(resource_id), title)
+    return _set_envelope_title(directory, type_id, envelope_id(type_id, resource_id),
+                               title)
 
 
 # ---------------------------------------------------------------------------

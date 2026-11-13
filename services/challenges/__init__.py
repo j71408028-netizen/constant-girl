@@ -8,7 +8,7 @@
 
 from services.challenges.imports import (
     challenge_pack_titles, get_challenge_packs,
-    import_landmark_challenge_pack, import_quip_challenge_pack,
+    import_landmark_challenge_pack, import_quip_challenge_pack, unique_display,
 )
 from services.challenges.landmarks import landmarks_from_pack
 from services.challenges.service import ChallengeService

@@ -11,6 +11,7 @@ from core.models import Landmark, is_valid_landmark_size
 from persistence.landmark_repo import LandmarkRepo, DEFAULT_LANDMARK_STYLE
 from services.challenges import (
     challenge_pack_titles, get_challenge_packs, import_landmark_challenge_pack,
+    unique_display,
 )
 from ui.ctk.dialogs import BaseDialog
 from ui.ctk.managers import CardManager
@@ -161,7 +162,8 @@ class LandmarkCardManager(CardManager):
             self._style_display_map[display] = style
         titles = challenge_pack_titles(self._settings_repo, packs)
         for pack in packs:
-            display = f"⚔ {titles.get(pack) or os.path.splitext(pack)[0]}"
+            display = unique_display(
+                f"⚔ {titles.get(pack) or os.path.splitext(pack)[0]}", pack, used)
             items.append(display)
             text_colors[display] = LM_LINK
             self._pack_display_map[display] = pack

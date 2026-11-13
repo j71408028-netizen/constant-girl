@@ -11,6 +11,7 @@ from persistence import QuipRepo
 from persistence.quip_repo import DEFAULT_QUIP_STYLE
 from services.challenges import (
     challenge_pack_titles, get_challenge_packs, import_quip_challenge_pack,
+    unique_display,
 )
 from ui.ctk.managers import TreeviewManager, CardManager
 from ui.ctk.widgets import ClickableCard, CTkScrollableDropdownFrame
@@ -161,7 +162,8 @@ class QuipCardManager(CardManager):
             self._style_display_map[display] = style
         titles = challenge_pack_titles(self._settings_repo, packs)
         for pack in packs:
-            display = f"⚔ {titles.get(pack) or os.path.splitext(pack)[0]}"
+            display = unique_display(
+                f"⚔ {titles.get(pack) or os.path.splitext(pack)[0]}", pack, used)
             items.append(display)
             text_colors[display] = QUIP_LINK
             self._pack_display_map[display] = pack

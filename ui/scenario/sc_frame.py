@@ -22,6 +22,7 @@ from dungeon.terms import DEFAULT_SCENARIO_ID, scenario_config_of, scenario_id_o
 from dungeon.validate import format_diagnostics, has_errors
 from ui.scenario.character_page import CharacterPage
 from ui.scenario.component_mgr import ComponentManager
+from services.challenges import unique_display
 from ui.ctk.theme import (
     SC_BG, SC_PANEL_BG, SC_BORDER, SC_BORDER_STRONG,
     SC_HOVER, SC_MENU_HOVER, SC_CARD_HOVER, SC_TEXT,
@@ -176,7 +177,8 @@ class ScenarioEditor(ctk.CTkFrame):
             packs = self._challenge_mgr.get_available_packs()
             for pack in packs:
                 base = os.path.splitext(pack)[0]
-                display = f"⚔ {self._challenge_mgr.pack_title(pack) or base}"
+                display = unique_display(
+                    f"⚔ {self._challenge_mgr.pack_title(pack) or base}", pack, used)
                 items.append(display)
                 text_colors[display] = SC_LINK
                 self._pack_display_map[display] = pack

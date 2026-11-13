@@ -502,14 +502,16 @@ class WorldManager:
         """解散时把包内信封写回自由目录；目标已有信封时不覆盖。
 
         ``renamed`` 记录解散时的冲突改名 ``{(类型, 源 id): 目标 id}``，
-        信封必须写到目标 id 的兄弟位置，不能沿用包内源 id。
+        信封必须写到目标 id 的兄弟位置，不能沿用包内源 id。包内信封与自由
+        目录一样按不带容器后缀的 id 命名，挑战包（``x.chal``）尤其要归一。
         """
         renamed = renamed or {}
         for type_id, value in manifest.resources.items():
             if isinstance(value, bool) or not value:
                 continue
             for resource_id in value:
-                src = os.path.join(installed, type_id, f"{resource_id}.meta.json")
+                name = _registry.envelope_id(type_id, resource_id)
+                src = os.path.join(installed, type_id, f"{name}.meta.json")
                 if not os.path.isfile(src):
                     continue
                 target_id = renamed.get((type_id, resource_id), resource_id)
@@ -696,7 +698,9 @@ class WorldManager:
         """把每份导出资源的兄弟信封一并放进包内。
 
         包内资源要能脱离本机的 ``catalog.json`` 被索引，信封必须随行；
-        不可读容器（挑战包）尤其如此——它的元数据只能外挂。
+        不可读容器（挑战包）尤其如此——它的元数据只能外挂。信封恒按不带
+        容器后缀的 id 命名（``x.meta.json``），而清单里挑战包记的是
+        ``x.chal``，两边都过 :func:`envelope_id` 才对得上。
         """
         for type_id, value in manifest.resources.items():
             if isinstance(value, bool) or not value:
@@ -707,7 +711,8 @@ class WorldManager:
                 if not os.path.isfile(src):
                     continue
                 os.makedirs(dest_dir, exist_ok=True)
-                shutil.copy2(src, os.path.join(dest_dir, f"{resource_id}.meta.json"))
+                name = _registry.envelope_id(type_id, resource_id)
+                shutil.copy2(src, os.path.join(dest_dir, f"{name}.meta.json"))
 
     def _resolve_minigame(self, game_id: str) -> Optional[str]:
         """小游戏数据包目录：自由目录优先，其次是激活包内的同名目录。"""
