@@ -134,6 +134,11 @@ XDG_DATA_HOME=/tmp/gg-smoke ./constant-girl/constant-girl
 - 源码归档剔除 `data/user/`、`data/archives/`（作者本机设置与存档，打包版首启会自己
   生成）、`developer_tools/_out/`、`scripts/_out/` 与 `__pycache__` / `*.pyc` 等缓存。
 - 运行时包里带的只读资源是 `assets/`、`data/packs/`、`data/static/`；用户数据**不进包**。
+- 运行时包根目录额外带两个**维护启动器**（`迁移旧版数据.*`、`检查更新.*`，按平台为
+  `.bat` / `.command` / `.sh`，由打包器生成）：只做一件事——带 `migrate` /
+  `check-update` 子命令调起同目录主程序，结果窗口由 `app/maintenance.py` 呈现。
+  这是玩家侧的数据迁移与检查更新入口（见 audit R1）；文件名随包发布属**命名契约**，
+  与 `<name>-<version>-<os>-<arch>.zip` 一样不要随意改动，将来的更新器按它找附件。
 
 校验：
 

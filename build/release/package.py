@@ -318,6 +318,54 @@ def _dotted_version(version: str) -> str:
     return ".".join(parts[:4])
 
 
+#: 维护子命令的双击启动器：显示名 → 传给主程序的位置参数。
+LAUNCHER_COMMANDS = (("迁移旧版数据", "migrate"), ("检查更新", "check-update"))
+
+
+def write_maintenance_launchers(bundle: Path, name: str,
+                                display_name: str) -> list[str]:
+    """把维护子命令启动器写进运行时包根目录，返回文件名清单。
+
+    启动器与主程序同目录（zip 解压后的 ``<name>/`` 内），只做一件事：带子命令
+    调起主程序，由 ``app/maintenance.py`` 自带的窗口呈现结果。按当前构建平台
+    生成对应形式（打包不做交叉编译，平台即本机）；内容保持 ASCII，文件名可用
+    中文。macOS 的 ``.app`` 归档路径见 R2（audit 2.0.0），启动器按动态查找写，
+    待 R2 修复后随三平台验收核对。
+    """
+    written: list[str] = []
+
+    def emit(label: str, body: str, executable: bool):
+        path = bundle / label
+        path.write_bytes(body.encode("ascii"))
+        if executable:
+            path.chmod(0o755)
+        written.append(path.name)
+
+    if sys.platform.startswith("win"):
+        for label, command in LAUNCHER_COMMANDS:
+            emit(f"{label}.bat",
+                 f'@echo off\r\nstart "" "%~dp0{name}.exe" {command}\r\n',
+                 executable=False)
+    elif sys.platform.startswith("darwin"):
+        for label, command in LAUNCHER_COMMANDS:
+            emit(f"{label}.command",
+                 "#!/bin/bash\n"
+                 'cd "$(dirname "$0")"\n'
+                 'APP="$(ls -d *.app 2>/dev/null | head -n 1)"\n'
+                 'if [ -z "$APP" ]; then echo "not found: *.app"; exit 1; fi\n'
+                 'exec "$APP/Contents/MacOS/$(basename "$APP" .app)" '
+                 + command + "\n",
+                 executable=True)
+    else:
+        for label, command in LAUNCHER_COMMANDS:
+            emit(f"{label}.sh",
+                 "#!/bin/sh\n"
+                 'cd "$(dirname "$0")"\n'
+                 f'exec "./{name}" {command}\n',
+                 executable=True)
+    return written
+
+
 
 # --------------------------------------------------------------------------
 # 归档
@@ -533,6 +581,10 @@ def main(argv=None) -> int:
                 bundle = build_bundle(vpy, src, bundle_name, targets, console=args.console)
                 suffix = ""
             plat, arch = platform_names()
+            launchers = write_maintenance_launchers(
+                bundle, args.name, args.display_name)
+            if launchers:
+                log(f"   维护启动器：{'、'.join(launchers)}")
             archive = out / f"{args.name}-{version}-{plat}-{arch}{suffix}.zip"
             count = zip_tree(bundle, archive, arc_prefix=f"{args.name}/")
             log(f"[OK] 运行时包 {archive.name}（{count} 个文件，后端 {args.backend}）")
