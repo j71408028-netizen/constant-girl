@@ -11,8 +11,14 @@ v1.0.0（重构前的扁平旧结构、无 numpy/webview），也能打之后任
 
     <slug>-<version>-<os>-<arch>.zip   运行时包（PyInstaller onedir 整目录）
     <slug>-<version>-src.zip           源码归档（剔除作者本机数据与缓存）
-    RELEASE-NOTES-<version>.md                    发布说明（tag 注记 + 构建环境 + 产物清单）
-    SHA256SUMS.txt                                上述产物的 SHA256
+    RELEASE-NOTES-<version>-<os>-<arch>.md       发布说明（tag 注记 + 构建环境 + 产物清单）
+    SHA256SUMS-<version>-<os>-<arch>.txt         本次产物的 SHA256
+
+三平台产物与发布说明汇总到同一目录后，用 ``--sums-only`` 对**最终附件集合**统一
+生成一份 ``SHA256SUMS.txt``（发布时以此为准）。
+
+运行时包内除程序与资源外还带：仓库根 ``LICENSE``（项目许可）与 ``licenses/``
+（随包第三方依赖的许可文件，来自构建虚拟环境的 ``*.dist-info``，含索引）。
 
 ``<slug>`` 与 ``--display-name`` 均取自 ``paths.py``：文件名一律用仓库名，只有
 macOS 的 ``.app`` 用正式名（那是用户直接点开的可见产物）。
@@ -24,6 +30,7 @@ macOS 的 ``.app`` 用正式名（那是用户直接点开的可见产物）。
     python build/release/package.py --tag v1.0.0 --skip-build       # 只出源码归档
     python build/release/package.py --tag v1.0.0 --keep             # 保留暂存目录排错
     python build/release/package.py                                 # 自动取 HEAD 上的 tag
+    python build/release/package.py --sums-only                     # 汇总后统一生成 SHA256SUMS.txt
 
 打包后端：默认 ``pyinstaller``（onedir）；``--backend nuitka`` 走 Nuitka ``--standalone``。
 两者产物结构相似（一个目录：可执行文件 + 依赖），产物名带 ``-nuitka`` 后缀以示区分，
@@ -229,9 +236,29 @@ def find_icon(src: Path) -> Path | None:
     return None
 
 
+def locate_pyinstaller_bundle(src: Path, name: str, darwin: bool) -> Path:
+    """定位 PyInstaller onedir 产物：macOS windowed 是 ``dist/<name>.app``，其余是
+    ``dist/<name>``。
+
+    macOS 上 ``--windowed`` 会额外产出 ``.app`` bundle（自含 BUNDLE），旁边的
+    ``dist/<name>`` 只是裸 COLLECT 目录——没有 .app 结构，不是玩家点开的产物。
+    README 承诺交付 ``ConstantGirl.app``，归档对象必须选 ``.app``（audit R2）。
+    """
+    dist = src / "dist"
+    if darwin:
+        app = dist / f"{name}.app"
+        if not app.is_dir():
+            raise SystemExit(f"构建结束但没找到 .app：{app}（--windowed 未生效？）")
+        return app
+    bundle = dist / name
+    if not bundle.is_dir():
+        raise SystemExit(f"构建结束但没找到产物目录：{bundle}")
+    return bundle
+
+
 def build_bundle(vpy: Path, src: Path, name: str, targets: list[str],
                  console: bool = False) -> Path:
-    """用 PyInstaller onedir 构建，返回 dist/<name> 目录。"""
+    """用 PyInstaller onedir 构建，返回产物（macOS 为 .app，其余为 dist/<name> 目录）。"""
     venv_dir = vpy.parent.parent
     pyinstaller = venv_dir / ("Scripts/pyinstaller.exe" if os.name == "nt" else "bin/pyinstaller")
     sep = ";" if os.name == "nt" else ":"
@@ -252,10 +279,7 @@ def build_bundle(vpy: Path, src: Path, name: str, targets: list[str],
             args += ["--add-data", f"{src / rel}{sep}{rel}"]
     args.append(find_entry(src))
     run(args, cwd=src)
-    bundle = src / "dist" / name
-    if not bundle.is_dir():
-        raise SystemExit(f"构建结束但没找到产物目录：{bundle}")
-    return bundle
+    return locate_pyinstaller_bundle(src, name, sys.platform == "darwin")
 
 
 def build_bundle_nuitka(vpy: Path, src: Path, name: str, version: str,
@@ -318,19 +342,174 @@ def _dotted_version(version: str) -> str:
     return ".".join(parts[:4])
 
 
+# --------------------------------------------------------------------------
+# 归档暂存层：.app 归位、项目与依赖许可、维护启动器
+# --------------------------------------------------------------------------
+
+#: 项目许可文件候选（仓库根，按顺序取第一个存在的）。
+LICENSE_CANDIDATES = ("LICENSE", "LICENSE.txt", "LICENSE.md")
+
+#: 依赖许可文件的匹配模式（在构建虚拟环境的 ``*.dist-info`` 里找）。
+LICENSE_FILE_PATTERNS = ("LICENSE*", "LICENCE*", "COPYING*", "NOTICE*")
+
+
+def stage_bundle(bundle: Path, work: Path) -> Path:
+    """返回归档用的暂存层目录。
+
+    macOS 的 ``.app`` 与维护启动器、许可文件必须**同层**进 zip：启动器按
+    ``ls -d *.app`` 在自己所在目录找应用，许可要放在玩家能看见的位置。把
+    ``.app`` 从 ``dist/`` 挪进独立暂存层（``dist/`` 里还留着裸 COLLECT 目录，
+    不能一起归档）；其余平台的产物目录本身就是暂存层，原地写入。
+    """
+    if bundle.suffix != ".app":
+        return bundle
+    stage = work / "stage"
+    if stage.exists():
+        shutil.rmtree(stage)
+    stage.mkdir()
+    shutil.move(str(bundle), str(stage / bundle.name))
+    return stage
+
+
+def copy_license(src: Path, target_dir: Path) -> str | None:
+    """把仓库根的项目许可复制进暂存层根目录，返回文件名（没找到返回 None）。"""
+    for name in LICENSE_CANDIDATES:
+        lic = src / name
+        if lic.is_file():
+            shutil.copy2(lic, target_dir / lic.name)
+            return lic.name
+    return None
+
+
+def _license_from_metadata(metadata: Path) -> str | None:
+    """从 ``*.dist-info/METADATA`` 抽许可声明（wheel 没带许可文件时的兜底）。"""
+    if not metadata.is_file():
+        return None
+    import email.parser
+
+    msg = email.parser.Parser().parsestr(
+        metadata.read_text(encoding="utf-8", errors="replace"), headersonly=True)
+    value = msg.get("License-Expression") or msg.get("License")
+    if not value:
+        return None
+    return (f"{value}\n"
+            "（该依赖的 wheel 未随附许可文件，以上为其包元数据声明的许可）\n")
+
+
+def collect_dependency_licenses(site_dir: Path, out_dir: Path) -> list[str]:
+    """收集构建虚拟环境里各发行版的许可文件到 ``out_dir/<发行名>/``。
+
+    来源是 ``site-packages/*.dist-info``：优先拷贝随包附带的许可文件
+    （dist-info 根匹配 LICENSE_FILE_PATTERNS，或 PEP 639 的 ``licenses/`` 子目录）；
+    两者都没有时从 METADATA 抽 License 声明写 ``NOTICE.txt`` 兜底。同时生成
+    ``INDEX.txt`` 索引（发行名、版本、实际收集到的文件），供发布时人工核对。
+    返回发行名清单（按名称排序）。
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    import fnmatch
+
+    names: list[str] = []
+    index: list[str] = []
+    for info in sorted(site_dir.glob("*.dist-info"), key=lambda p: p.name.lower()):
+        base = info.name[: -len(".dist-info")]
+        dist_name = base.rsplit("-", 1)[0]
+        version = base[len(dist_name) + 1:] if len(base) > len(dist_name) else ""
+        dest = out_dir / dist_name
+        dest.mkdir(parents=True, exist_ok=True)
+        files: list[str] = []
+        candidates = [p for p in sorted(info.iterdir()) if p.is_file()
+                      and any(fnmatch.fnmatch(p.name, pat)
+                              for pat in LICENSE_FILE_PATTERNS)]
+        licenses_dir = info / "licenses"
+        if licenses_dir.is_dir():
+            candidates += [p for p in sorted(licenses_dir.iterdir()) if p.is_file()]
+        for cand in candidates:
+            shutil.copy2(cand, dest / cand.name)
+            files.append(cand.name)
+        if not files:
+            notice = _license_from_metadata(info / "METADATA")
+            if notice:
+                (dest / "NOTICE.txt").write_text(notice, encoding="utf-8")
+                files.append("NOTICE.txt")
+        index.append(f"{dist_name}=={version}: "
+                     + (", ".join(sorted(set(files))) or "（未找到许可信息）"))
+        names.append(dist_name)
+    (out_dir / "INDEX.txt").write_text("\n".join(index) + "\n", encoding="utf-8")
+    return names
+
+
+def site_packages_dir(vpy: Path) -> Path | None:
+    """问构建虚拟环境要 site-packages 路径（问不到就返回 None，不阻塞打包）。"""
+    probe = "import json, sysconfig; print(json.dumps(sysconfig.get_paths()['purelib']))"
+    r = subprocess.run([str(vpy), "-c", probe], capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    import json
+
+    try:
+        path = Path(json.loads(r.stdout.strip().splitlines()[-1]))
+    except Exception:
+        return None
+    return path if path.is_dir() else None
+
+
+def prepare_runtime_stage(bundle: Path, work: Path, src: Path, vpy: Path | None,
+                          name: str, display_name: str) -> tuple[Path, list[str]]:
+    """把构建产物装进归档暂存层，返回 (暂存层目录, 日志行)。
+
+    顺序无关紧要，内容固定：``.app`` 归位（仅 macOS）、仓库根 LICENSE、依赖许可
+    ``licenses/``、维护启动器。zip 归档的就是这一层。
+    """
+    stage = stage_bundle(bundle, work)
+    logs = []
+    if stage != bundle:
+        logs.append(f".app 已移入暂存层：{stage.name}/")
+    license_name = copy_license(src, stage)
+    logs.append(f"项目许可：{license_name or '（仓库根未找到 LICENSE，跳过）'}")
+    site = site_packages_dir(vpy) if vpy is not None else None
+    if site is not None:
+        dists = collect_dependency_licenses(site, stage / "licenses")
+        logs.append(f"依赖许可：{len(dists)} 个发行版 → licenses/（含 INDEX.txt）")
+    else:
+        logs.append("依赖许可：未能定位构建环境 site-packages，跳过")
+    launchers = write_maintenance_launchers(stage, name, display_name)
+    logs.append("维护启动器：" + ("、".join(launchers) if launchers else "（无）"))
+    return stage, logs
+
+
 #: 维护子命令的双击启动器：显示名 → 传给主程序的位置参数。
 LAUNCHER_COMMANDS = (("迁移旧版数据", "migrate"), ("检查更新", "check-update"))
 
 
+def launcher_body(platform: str, command: str, name: str) -> str:
+    """生成单个维护启动器的正文。``platform`` ∈ ``win`` / ``darwin`` / ``linux``。
+
+    macOS 的 ``.command`` 先找同层 ``*.app``（PyInstaller 正式包），找不到再退回
+    同名裸可执行文件（Nuitka 对照包没有 .app 结构），两种产物都能用。
+    """
+    if platform == "win":
+        return f'@echo off\r\nstart "" "%~dp0{name}.exe" {command}\r\n'
+    if platform == "darwin":
+        return ("#!/bin/bash\n"
+                'cd "$(dirname "$0")"\n'
+                'APP="$(ls -d *.app 2>/dev/null | head -n 1)"\n'
+                'if [ -n "$APP" ]; then\n'
+                '  exec "$APP/Contents/MacOS/$(basename "$APP" .app)" ' + command + "\n"
+                "fi\n"
+                f'exec "./{name}" {command}\n')
+    return ("#!/bin/sh\n"
+            'cd "$(dirname "$0")"\n'
+            f'exec "./{name}" {command}\n')
+
+
 def write_maintenance_launchers(bundle: Path, name: str,
                                 display_name: str) -> list[str]:
-    """把维护子命令启动器写进运行时包根目录，返回文件名清单。
+    """把维护子命令启动器写进暂存层根目录，返回文件名清单。
 
-    启动器与主程序同目录（zip 解压后的 ``<name>/`` 内），只做一件事：带子命令
-    调起主程序，由 ``app/maintenance.py`` 自带的窗口呈现结果。按当前构建平台
-    生成对应形式（打包不做交叉编译，平台即本机）；内容保持 ASCII，文件名可用
-    中文。macOS 的 ``.app`` 归档路径见 R2（audit 2.0.0），启动器按动态查找写，
-    待 R2 修复后随三平台验收核对。
+    启动器与产物同层（zip 解压后的 ``<name>/`` 内；macOS 是 ``<name>/`` 里
+    ``.app`` 旁边），只做一件事：带子命令调起主程序，由 ``app/maintenance.py``
+    自带的窗口呈现结果。按当前构建平台生成对应形式（打包不做交叉编译，平台即
+    本机）；内容保持 ASCII，文件名可用中文。
     """
     written: list[str] = []
 
@@ -342,27 +521,15 @@ def write_maintenance_launchers(bundle: Path, name: str,
         written.append(path.name)
 
     if sys.platform.startswith("win"):
-        for label, command in LAUNCHER_COMMANDS:
-            emit(f"{label}.bat",
-                 f'@echo off\r\nstart "" "%~dp0{name}.exe" {command}\r\n',
-                 executable=False)
+        platform = "win"
     elif sys.platform.startswith("darwin"):
-        for label, command in LAUNCHER_COMMANDS:
-            emit(f"{label}.command",
-                 "#!/bin/bash\n"
-                 'cd "$(dirname "$0")"\n'
-                 'APP="$(ls -d *.app 2>/dev/null | head -n 1)"\n'
-                 'if [ -z "$APP" ]; then echo "not found: *.app"; exit 1; fi\n'
-                 'exec "$APP/Contents/MacOS/$(basename "$APP" .app)" '
-                 + command + "\n",
-                 executable=True)
+        platform = "darwin"
     else:
-        for label, command in LAUNCHER_COMMANDS:
-            emit(f"{label}.sh",
-                 "#!/bin/sh\n"
-                 'cd "$(dirname "$0")"\n'
-                 f'exec "./{name}" {command}\n',
-                 executable=True)
+        platform = "linux"
+    for label, command in LAUNCHER_COMMANDS:
+        emit(f"{label}.{('bat' if platform == 'win' else 'command' if platform == 'darwin' else 'sh')}",
+             launcher_body(platform, command, name),
+             executable=platform != "win")
     return written
 
 
@@ -458,7 +625,8 @@ def tag_annotation(tag: str) -> str:
 
 
 def write_release_notes(out: Path, name: str, version: str, tag: str,
-                        artifacts: list[Path]) -> Path:
+                        artifacts: list[Path], plat: str, arch: str) -> Path:
+    """写本平台发布说明。文件名带平台后缀，多平台各跑一次互不覆盖。"""
     lines = [
         f"# {name} {version} 发布说明",
         "",
@@ -474,13 +642,35 @@ def write_release_notes(out: Path, name: str, version: str, tag: str,
     lines += ["## 本次产物", ""]
     lines += [f"- `{a.name}`" for a in artifacts]
     lines.append("")
-    path = out / f"RELEASE-NOTES-{version}.md"
+    path = out / f"RELEASE-NOTES-{version}-{plat}-{arch}.md"
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
 
 
-def write_checksums(out: Path, artifacts: list[Path]) -> Path:
+def write_checksums(out: Path, artifacts: list[Path],
+                    version: str, plat: str, arch: str) -> Path:
+    """写本次产物的校验和。文件名带版本与平台后缀，多平台各跑一次互不覆盖；
+    发布用的最终 SHA256SUMS.txt 由 ``--sums-only`` 对汇总后的附件集合统一生成。"""
     lines = [f"{sha256_file(a)}  {a.name}" for a in sorted(artifacts, key=lambda p: p.name)]
+    path = out / f"SHA256SUMS-{version}-{plat}-{arch}.txt"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def write_unified_checksums(out: Path) -> Path:
+    """对最终附件集合统一生成 ``SHA256SUMS.txt``（三平台产物汇总后调用）。
+
+    附件集合 = 运行时包与源码归档（``*.zip``）+ 各平台发布说明（
+    ``RELEASE-NOTES-*.md``）；各平台单跑时留下的 ``SHA256SUMS-*`` 与本文件本身
+    不进清单，目录里其他零散文件也不进。
+    """
+    artifacts = sorted(
+        [p for p in out.glob("*.zip") if p.is_file()]
+        + list(out.glob("RELEASE-NOTES-*.md")),
+        key=lambda p: p.name)
+    if not artifacts:
+        raise SystemExit(f"{out} 里没有可计入的附件（*.zip 与 RELEASE-NOTES-*.md）")
+    lines = [f"{sha256_file(a)}  {a.name}" for a in artifacts]
     path = out / "SHA256SUMS.txt"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
@@ -520,15 +710,25 @@ def main(argv=None) -> int:
                                         "安装（受限/无网环境用；Nuitka 获取 Zig 也走它）")
     ap.add_argument("--skip-build", action="store_true", help="跳过二进制构建，只出源码归档")
     ap.add_argument("--skip-source", action="store_true", help="跳过源码归档")
+    ap.add_argument("--sums-only", action="store_true",
+                    help="不构建：对 out 目录里的最终附件集合（*.zip + 发布说明）统一生成 "
+                         "SHA256SUMS.txt。三平台产物汇总到同一目录后调用，发布以它为准")
     ap.add_argument("--console", action="store_true",
                     help="排错用：构建带控制台的包以看到启动期 traceback（正式发布不要用）")
     ap.add_argument("--keep", action="store_true", help="保留暂存目录（排错用）")
     args = ap.parse_args(argv)
 
-    tag = resolve_tag(args.tag)
-    version = tag.lstrip("vV")
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
+    if args.sums_only:
+        sums = write_unified_checksums(out)
+        log(f"== 统一校验和：{sums} ==")
+        for line in sums.read_text(encoding="utf-8").splitlines():
+            log(line)
+        return 0
+
+    tag = resolve_tag(args.tag)
+    version = tag.lstrip("vV")
 
     if args.work:
         work = Path(args.work).resolve()
@@ -565,8 +765,11 @@ def main(argv=None) -> int:
             else:
                 run([vpy, "-m", "pip", "install", "--upgrade", "pip"])
             # macOS 的 .app 是用户直接点开的可见产物，用正式名；其余平台的可执行
-            # 文件与目录用技术名，免得命令行里带空格。
-            bundle_name = args.display_name if sys.platform == "darwin" else args.name
+            # 文件与目录用技术名，免得命令行里带空格。Nuitka 不产出 .app，macOS
+            # 上也用技术名（.command 启动器会退回裸可执行文件）。
+            bundle_name = (args.display_name
+                           if sys.platform == "darwin" and args.backend == "pyinstaller"
+                           else args.name)
             if args.backend == "nuitka":
                 run([vpy, "-m", "pip", "install", *pip_flags,
                      "-r", str(src / "requirements.txt"), "nuitka"])
@@ -581,12 +784,12 @@ def main(argv=None) -> int:
                 bundle = build_bundle(vpy, src, bundle_name, targets, console=args.console)
                 suffix = ""
             plat, arch = platform_names()
-            launchers = write_maintenance_launchers(
-                bundle, args.name, args.display_name)
-            if launchers:
-                log(f"   维护启动器：{'、'.join(launchers)}")
+            stage, stage_logs = prepare_runtime_stage(
+                bundle, work, src, vpy, args.name, args.display_name)
+            for line in stage_logs:
+                log(f"   {line}")
             archive = out / f"{args.name}-{version}-{plat}-{arch}{suffix}.zip"
-            count = zip_tree(bundle, archive, arc_prefix=f"{args.name}/")
+            count = zip_tree(stage, archive, arc_prefix=f"{args.name}/")
             log(f"[OK] 运行时包 {archive.name}（{count} 个文件，后端 {args.backend}）")
             artifacts.append(archive)
 
@@ -597,9 +800,11 @@ def main(argv=None) -> int:
                 f"剔除 {len(removed)} 项：{'、'.join(removed) or '无'}）")
             artifacts.append(src_archive)
 
-        notes = write_release_notes(out, args.display_name, version, tag, artifacts)
+        plat, arch = platform_names()
+        notes = write_release_notes(out, args.display_name, version, tag,
+                                    artifacts, plat, arch)
         artifacts.append(notes)
-        artifacts.append(write_checksums(out, artifacts))
+        artifacts.append(write_checksums(out, artifacts, version, plat, arch))
     finally:
         cleanup(work, args.keep)
 
@@ -609,7 +814,9 @@ def main(argv=None) -> int:
         log(f"   {a.name}")
     log("")
     log("提示：其他平台的运行时包需在对应系统上对本 tag 再跑一次")
-    log("      （两种后端都不做交叉编译）；把各平台 dist/release/ 汇总即完整发布。")
+    log("      （两种后端都不做交叉编译）；三平台产物与发布说明汇总到同一目录后，")
+    log("      用 `python build/release/package.py --sums-only --out <该目录>`")
+    log("      对最终附件集合统一生成 SHA256SUMS.txt。")
     return 0
 
 

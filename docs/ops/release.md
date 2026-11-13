@@ -31,7 +31,7 @@
   发布线自 befca6f（20260901功能新增）分出。"
   ```
 
-  这段注记会被打包器自动抄进 `RELEASE-NOTES-<version>.md`，是事后追溯的第一手材料。
+  这段注记会被打包器自动抄进 `RELEASE-NOTES-<version>-<os>-<arch>.md`，是事后追溯的第一手材料。
 
 - **发布线与基线**：当某条线要长期维护（如 v1.0.x）而 `main` 正在做下一世代时，从
   基线提交拉一条 `release/v1.0`，在这条线上只做发布与修 bug。v1.0.0 就是从
@@ -67,6 +67,9 @@ git tag -a v1.0.0 -m "v1.0.0 正式发布 ..."
 python build/release/package.py --tag v1.0.0
 
 # 5) 在另外两个系统上对**同一个 tag** 各跑一次第 4 步，汇总 dist/release/
+
+# 5.5) 对汇总后的最终附件集合统一生成 SHA256SUMS.txt
+python build/release/package.py --sums-only
 
 # 6) 推送标签与发布线
 git push origin release/v1.0
@@ -127,27 +130,45 @@ XDG_DATA_HOME=/tmp/gg-smoke ./constant-girl/constant-girl
 |---|---|
 | `<name>-<version>-<os>-<arch>.zip` | 运行时包：PyInstaller `onedir` 整目录的压缩 |
 | `<name>-<version>-src.zip` | 源码归档：`git archive` 出的 tag 源码树，**剔除作者本机数据** |
-| `RELEASE-NOTES-<version>.md` | tag 注记 + 构建平台/Python/时间 + 产物清单 |
-| `SHA256SUMS.txt` | 上述产物的 SHA256 |
+| `RELEASE-NOTES-<version>-<os>-<arch>.md` | tag 注记 + 构建平台/Python/时间 + 本平台产物清单 |
+| `SHA256SUMS-<version>-<os>-<arch>.txt` | 本平台本次产物的 SHA256 |
 
 - `<os>` ∈ `windows` / `macos` / `linux`；`<arch>` ∈ `x64` / `arm64` / `x86`。
+- 发布说明与单次校验和的文件名带平台后缀：三平台各跑一次互不覆盖，多平台目录
+  直接汇总不会丢记录（audit R4）。
 - 源码归档剔除 `data/user/`、`data/archives/`（作者本机设置与存档，打包版首启会自己
   生成）、`developer_tools/_out/`、`scripts/_out/` 与 `__pycache__` / `*.pyc` 等缓存。
 - 运行时包里带的只读资源是 `assets/`、`data/packs/`、`data/static/`；用户数据**不进包**。
-- 运行时包根目录额外带两个**维护启动器**（`迁移旧版数据.*`、`检查更新.*`，按平台为
+- 运行时包根目录额外带**项目许可与依赖许可**：仓库根 `LICENSE`，以及从构建虚拟环境
+  `*.dist-info` 收集的第三方许可目录 `licenses/`（含 `INDEX.txt` 索引，随包未附许可
+  文件的依赖退回其元数据声明的 License，audit R4）。发布前人工核对一遍索引。
+- 运行时包根目录还带两个**维护启动器**（`迁移旧版数据.*`、`检查更新.*`，按平台为
   `.bat` / `.command` / `.sh`，由打包器生成）：只做一件事——带 `migrate` /
   `check-update` 子命令调起同目录主程序，结果窗口由 `app/maintenance.py` 呈现。
   这是玩家侧的数据迁移与检查更新入口（见 audit R1）；文件名随包发布属**命名契约**，
   与 `<name>-<version>-<os>-<arch>.zip` 一样不要随意改动，将来的更新器按它找附件。
+- **macOS 的运行时包内是 `ConstantGirl.app`**（用户点开的可见产物，打包器归档
+  `dist/<name>.app` 而不是旁边的裸构建目录，audit R2），`.command` 启动器与它同层；
+  Nuitka 对照包没有 .app 结构，启动器会退回裸可执行文件。
 
 校验：
 
 ```bash
 # Windows
 certutil -hashfile dist/release/constant-girl-1.0.0-windows-x64.zip SHA256
-# macOS / Linux
-shasum -a 256 -c dist/release/SHA256SUMS.txt
+# macOS / Linux（核对本平台单跑产物）
+shasum -a 256 -c dist/release/SHA256SUMS-1.0.0-macos-arm64.txt
 ```
+
+三平台产物与发布说明汇总到同一目录后，对**最终附件集合**统一生成校验和（多平台
+单跑的 `SHA256SUMS-*` 只核对本平台，不进发布清单）：
+
+```bash
+python build/release/package.py --sums-only --out <汇总目录>
+```
+
+生成的 `SHA256SUMS.txt` 覆盖该目录下全部 `*.zip` 与 `RELEASE-NOTES-*.md`（不含
+各平台单跑的校验和与零散文件），发布附件以此为准。
 
 ## 5. 打包后端：PyInstaller（默认）与 Nuitka
 
@@ -217,8 +238,11 @@ python build/release/package.py --tag v1.0.0 --backend nuitka \
   对应系统上打；只打得出本平台时，其余平台可先用源码归档交付。
 - **Windows**：图标用 `assets/icons/icon.ico`（旧版结构退到 `assets/icon.ico`）。内置
   小游戏窗口依赖系统自带的 **WebView2**（Win10/11 默认有）。
-- **macOS**：`.app` 目录由 `--windowed` 产出。本仓暂无 `assets/icon.icns`，暂用
+- **macOS**：`--windowed` 同时产出 `.app` bundle（`dist/<name>.app`，自含）与裸
+  COLLECT 目录（`dist/<name>`）；打包器归档前者，zip 内为 `<name>/ConstantGirl.app`
+  加同层的 `.command` 启动器与许可文件。本仓暂无 `assets/icon.icns`，暂用
   PyInstaller 默认图标；补上后打包器会自动带上（候选表见脚本内 `ICON_CANDIDATES`）。
+  Nuitka 对照包在 macOS 上不产出 `.app`（裸目录 + 可执行文件），启动器已兼容。
 - **Linux**：`--icon` 被 PyInstaller 忽略（脚本只在 Windows 传图标）。无外部可选依赖
   （编辑器关系图已改为自绘画布，不再需要 Graphviz 的 `dot`）。
 - **数据目录**：打包版把可写数据放在系统用户目录（Windows `%LOCALAPPDATA%\constant-girl\data`，
