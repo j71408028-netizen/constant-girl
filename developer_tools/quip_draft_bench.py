@@ -29,6 +29,11 @@ JSON 的形状都是照 deepseek-v4 系列的反应反复改出来的。换后�
 模型的自我检查污染（parse_response 会丢弃但那一格就等于没写），破坏性 2 与 3 的
 边界在"成片"与"一块"之间仍会飘。别拿它一次跑满整档，先跑一格看。
 
+字数严进宽出：profile 的 `text.min`/`text.max` 是**题面要求**，写手照它瞄准；收卷时按
+`text.slack`（默认 15%）两头放宽，只拦明显压不够或写散了的条目。原因是同一档内自然长度
+本来就有几十字浮动（原稿里同一档最短与最长差 40~90 字），卡在题面下限上写会把句子挤断；
+而不同模型对"多少字"的把握差别也远大于 15%。宽出一段不等于鼓励写长：题面只报目标区间。
+
 用法（仓库根目录执行）：
     python developer_tools/quip_draft_bench.py doctor        # profile 体检
     python developer_tools/quip_draft_bench.py status        # 进度表
@@ -104,6 +109,9 @@ DEFAULT_STEP = (
 CIRCLED = "①②③④⑤⑥⑦⑧⑨"
 #: summary 的下限；上限随 profile 的 text.summary_max 走。
 SUMMARY_MIN = 2
+#: 字数容差（严进宽出）：题面按 text.min~text.max 报，收卷按 ±这个比例放宽。
+#: 15% 来自实测——同一档内自然长度浮动约 40~90 字，模型对篇幅的偏差也在这一量级上。
+TEXT_SLACK = 0.15
 #: 一个观测等级在设计上约 20~100 条，也是一次能把握住的规模；超过就提示分批。
 SESSION_MAX = 100
 #: 两根轴的端点在这两格互相否定，写不出来：(1,4) 是「只作为存在出现，却以摧毁为唯一
@@ -207,6 +215,8 @@ class Profile:
         text = data.get("text") or {}
         self.text_min = int(text.get("min", 12))
         self.text_max = int(text.get("max", 34))
+        #: 收卷容差：题面只报 text_min~text_max，判定按 ±这个比例放宽。
+        self.text_slack = float(text.get("slack", TEXT_SLACK))
         self.summary_max = int(text.get("summary_max", 8))
         self.sentence_min = int(text.get("sentences", (1, 3))[0])
         self.sentence_max = int(text.get("sentences", (1, 3))[1])
@@ -216,6 +226,16 @@ class Profile:
         self.craft = self._craft(data.get("craft") or {}, source)
         # 手部接触：一次一行，各有各的对象范围与后果边界
         self.touch = self._touch(data.get("touch") or [], source)
+
+    @property
+    def text_lo(self):
+        """收卷时的字数下限：题面下限往下放宽 text_slack。"""
+        return round(self.text_min * (1 - self.text_slack))
+
+    @property
+    def text_hi(self):
+        """收卷时的字数上限：题面上限往上放宽 text_slack。"""
+        return round(self.text_max * (1 + self.text_slack))
 
     @staticmethod
     def _landforms(data, source):
@@ -418,16 +438,8 @@ class Profile:
     def grid_text(self, i, d):
         return self.grid.get((int(i), int(d))) or f"{self.axis_i['label']} {i} × {self.axis_d['label']} {d}"
 
-    def craft_of(self, i, d, k=0, salt=0):
-        """按坐标轮换一张场景卡。
-
-        着重部位跟主轴（介入度）走；动作类型跟副轴（破坏性）一一对应——用多少力、
-        力落在多大范围、留下什么全由它定，与介入度无关，所以同一部位在不同破坏性下
-        可以是静态、轻触、施力或激烈动作。衣着、姿势是部位的修饰：只有该部位在
-        `part_details` 里时，才按 `wear_every` / `posture_every` 偶尔带出来，并跟部位
-        写在一起。表现手法跟副轴走，与部位各自轮换——同一张卡可以是「特写」，也可以是
-        「单一感官」，两种都不改这一段写到哪。
-        """
+    def part_pool(self, i):
+        """主轴某一级的着重部位池；本级空时按邻近级别借。"""
         level = int(i)
         parts = self.craft["parts"].get(level) or []
         if not parts:
@@ -435,15 +447,30 @@ class Profile:
                 parts = self.craft["parts"].get(level + delta) or []
                 if parts:
                     break
+        return parts
 
-        part = parts[(salt + k) % len(parts)] if parts else ""
+    def craft_of(self, i, d, k=0, salt=0, part_offset=0):
+        """按坐标轮换一张场景卡。
+
+        着重部位跟主轴（介入度）走，与 `k` 无关：同一格的几张卡共用同一个部位，
+        `part_offset` 才换（默认 0，即按盐值取池中一个）。衣着、姿势挂在部位上，
+        随部位一起定死，不再按条稀疏——它们是被固定的视觉前提的一部分。
+
+        动作类型跟副轴（破坏性）一一对应——用多少力、力落在多大范围、留下什么全由
+        它定，与介入度无关。表现手法跟副轴走，按 `k` 轮换：同一部位可以是「特写」，
+        也可以是「单一感官」，两种都不改这一段写到哪。
+        """
+        level = int(i)
+        parts = self.part_pool(i)
+
+        part = parts[(salt + part_offset) % len(parts)] if parts else ""
         wear = posture = posture_limit = ""
         detail = self.craft["part_details"].get(part)
         if detail:
-            wear_key = salt * 3 + k * 5 + level * 7
+            wear_key = salt * 3 + part_offset * 5 + level * 7
             if detail["wear"] and wear_key % detail["wear_every"] == 0:
                 wear = detail["wear"][wear_key % len(detail["wear"])]
-            posture_key = salt * 11 + k * 3 + level * 5
+            posture_key = salt * 11 + part_offset * 3 + level * 5
             if detail["posture"] and posture_key % detail["posture_every"] == 0:
                 posture, posture_limit = detail["posture"][
                     posture_key % len(detail["posture"])]
@@ -455,7 +482,7 @@ class Profile:
                 pairs = self.craft["reach_pairs"].get(int(d) + delta) or []
                 if pairs:
                     break
-        # 手法跟部位错开：两边项数相同时若用同一个下标，某个部位会永远配同一种手法。
+        # 步长 5 与常见池长（8）互素，固定部位后 k 仍能把手法池走成完整排列。
         ridex = (salt * 2 + k * 5 + int(i) * 3 + int(d)) % len(pairs) if pairs else 0
         genre, text = pairs[ridex] if pairs else ("", "")
         # 动作类型按副轴取，介入度有变体时用变体（例如 (4,4) 的占有）
@@ -765,6 +792,8 @@ def profile_problems(p):
             bad.append(f"部位修饰「{part}」不在 craft.parts 里，永远不会命中")
     if p.text_min >= p.text_max:
         bad.append(f"text.min({p.text_min}) 要小于 text.max({p.text_max})")
+    if not 0 <= p.text_slack < 0.5:
+        bad.append(f"text.slack({p.text_slack}) 要落在 0~0.5：容差再大，字数就不成要求了")
     return bad
 
 
@@ -852,26 +881,17 @@ def action_hint(mode):
         mode, "只定强度、范围与破坏边界；具体动作由你挑，不要写成姿势。")
 
 
-def build_brief(p, band, i, d, k, seed, style_note=""):
-    """一条题面。
+def build_card(p, brief, part_offset=0):
+    """按已有题面重建场景卡字段（部位、衣着、姿势、动作类型、手法）。
 
-    对外的可见部分：着重部位（可带衣着/姿势）、动作类型、表现手法、视角、
-    可接触范围；(i, d) 与未显示的修饰留在返回值的内部字段里，供落盘与原样回传。
+    部位要等切批之后才知道，所以这部分单独抽出来：`build_brief` 先给一份占位，
+    `assign_parts` 切好批再按批覆盖。视角不在这里——它只跟条序号走。
     """
-    cell_index = p.rank[band] * 16 + (i - 1) * 4 + (d - 1)
-    angle = p.pick_angle(cell_index + k * 7 + seed * 3)
-
-    ok, _near, upper, _blocked = p.contact_budget(band)
-    card = p.craft_of(i, d, k, cell_index + seed)
-
+    cell_index = p.rank[brief["band"]] * 16 + (brief["intrusion"] - 1) * 4 + (brief["destruction"] - 1)
+    k = int(brief["_k"])
+    card = p.craft_of(brief["intrusion"], brief["destruction"], k,
+                      cell_index + int(brief["_seed"]), part_offset)
     return {
-        "id": f"{band}-{i}{d}-{k + 1}",
-        "profile": p.name,
-        "band": band, "intrusion": i, "destruction": d,
-        "step": p.default_step(i, d),
-        "band_display": p.size_display(band),
-        "band_can": p.size_desc(band),
-        "band_anchor": p.size_anchor(band),
         "part": card["part"],
         "part_display": card["part_display"],
         "wear": card["wear"],
@@ -880,6 +900,29 @@ def build_brief(p, band, i, d, k, seed, style_note=""):
         "action_mode": card["action_mode"],
         "reach": card["reach"],
         "genre": card["genre"],
+    }
+
+
+def build_brief(p, band, i, d, k, seed, style_note="", part_offset=0):
+    """一条题面。
+
+    对外的可见部分：着重部位（可带衣着/姿势）、动作类型、表现手法、视角、
+    可接触范围；(i, d) 与未显示的修饰留在返回值的内部字段里，供落盘与原样回传。
+    同一格的几条共用 `part_offset`，只有 `k`（手法、视角）逐条变。
+    `_k` / `_seed` 留着以便切批之后按批重算部位（见 `assign_parts`）。
+    """
+    cell_index = p.rank[band] * 16 + (i - 1) * 4 + (d - 1)
+    angle = p.pick_angle(cell_index + k * 7 + seed * 3)
+
+    ok, _near, upper, _blocked = p.contact_budget(band)
+    brief = {
+        "id": f"{band}-{i}{d}-{k + 1}",
+        "profile": p.name,
+        "band": band, "intrusion": i, "destruction": d,
+        "step": p.default_step(i, d),
+        "band_display": p.size_display(band),
+        "band_can": p.size_desc(band),
+        "band_anchor": p.size_anchor(band),
         "witness": angle["label"],
         "witness_note": angle["note"],
         "witness_weight": angle["weight"],
@@ -889,7 +932,11 @@ def build_brief(p, band, i, d, k, seed, style_note=""):
         "contract": output_contract(p),
         "glossary": glossary(p),
         "style_note": style_note or "",
+        "_k": k,
+        "_seed": seed,
     }
+    brief.update(build_card(p, brief, part_offset))
+    return brief
 
 
 def _angle_line(b, limit=6):
@@ -1088,7 +1135,11 @@ def session_targets(p, args):
 
 
 def plan_briefs(p, targets, csv_path, count, force, seed, style_note):
-    """按已有条数补齐每格，返回（题面列表，满格跳过列表）。"""
+    """按已有条数补齐每格，返回（题面列表，满格跳过列表）。
+
+    这里只定「这一格要写几条」，不定部位：部位要等切好批之后按批抽
+    （`assign_parts`）。一条调用里的几张卡必须同部位，但不同批可以不同部位。
+    """
     counts = read_counts(csv_path)
     briefs, skipped = [], []
     for band, i, d in targets:
@@ -1102,6 +1153,26 @@ def plan_briefs(p, targets, csv_path, count, force, seed, style_note):
         print(f"! {len(briefs)} 条超过一个观测等级的常规规模（约 20~{SESSION_MAX} 条），"
               "越往后越容易写飘；分几批写，或调小 --count。", file=sys.stderr)
     return briefs, skipped
+
+
+def assign_parts(p, batches, part=None, base=0):
+    """给每批定一个部位，就地改写该批的卡。
+
+    同一批共用部位（写手不必在批内换身体姿态），不同批重新抽——一次运行里
+    同一个格可以覆盖池中的多个部位。批序号按**格内**计数，所以池里有几个部位，
+    这一格的几批就能走到几个不同部位；同一 seed 下结果可复现。
+    `part` 给定时所有批都用它。
+    """
+    seen = defaultdict(int)
+    for batch in batches:
+        b0 = batch[0]
+        cell = (b0["band"], b0["intrusion"], b0["destruction"])
+        n = seen[cell]
+        seen[cell] += 1
+        offset = part if part is not None else base + n
+        for b in batch:
+            b.update(build_card(p, b, offset))
+    return batches
 
 
 def seed_of(args):
@@ -1255,7 +1326,7 @@ def structural_issues(p, rows, first_line=2):
     issues = []
     if not rows:
         return [(0, "CSV 没有数据行")]
-    missing = [c for c in p.columns if c not in rows[0]]
+    missing = [c for c in COLUMNS if c not in rows[0]]
     if missing:
         return [(0, f"表头缺列：{'、'.join(missing)}")]
     for n, r in enumerate(rows, first_line):
@@ -1274,9 +1345,10 @@ def structural_issues(p, rows, first_line=2):
             residue = residue.replace(ph, "")
         if "{" in residue or "}" in residue:
             issues.append((n, f"含未知占位符（只认 {'、'.join(KNOWN_PLACEHOLDERS)}）"))
-        if not (p.text_min <= len(text) <= p.text_max):
-            issues.append((n, f"字数 {len(text)} 不在 {p.text_min}~{p.text_max}"
-                              + (f"（不含标记；标记另占 {len(raw) - len(text)} 字）"
+        if not (p.text_lo <= len(text) <= p.text_hi):
+            issues.append((n, f"字数 {len(text)} 不在 {p.text_lo}~{p.text_hi}"
+                              f"（题面 {p.text_min}~{p.text_max}，容差 ±{p.text_slack:.0%}）"
+                              + (f"；不含标记，标记另占 {len(raw) - len(text)} 字"
                                  if len(raw) != len(text) else "")))
         sentences = len(re.findall(r"[。！？]", text))
         if not (p.sentence_min <= sentences <= p.sentence_max):
@@ -1582,6 +1654,8 @@ def cmd_plan(args, p):
     targets = session_targets(p, args)
     briefs, skipped = plan_briefs(p, targets, args.csv,
                                   args.count, args.force, seed, _style_note(args))
+    # 出题面按 AI 的批来定部位：同一批同部位，格内不同批可以换
+    assign_parts(p, batch_of(briefs, args.batch), args.part)
     groups = group_by_cell(briefs)
     if not briefs:
         print("没有要出的题：所有目标格都已写满（--force 可强行重出）。")
@@ -1769,8 +1843,11 @@ def cmd_check(args, p):
                 print(f"\n{cell[0]}:{cell[1]}:{cell[2]}  {len(group)} 条 — {p.grid_text(cell[1], cell[2])}")
                 if cell[0] in p.rank:
                     salt = p.rank[cell[0]] * 16 + (cell[1] - 1) * 4 + (cell[2] - 1) + args.seed
+                    step = max(1, args.batch)
                     for k in range(len(group)):
-                        card = p.craft_of(cell[1], cell[2], k, salt)
+                        # 部位按批走：同一批同一个部位，换批换部位（跟出题时一致）
+                        offset = args.part if args.part is not None else k // step
+                        card = p.craft_of(cell[1], cell[2], k, salt, offset)
                         extra = ""
                         if card["posture"]:
                             extra = f"　姿势 {card['posture']}"
@@ -1830,6 +1907,8 @@ def cmd_doctor(args, p):
     covered = sum(1 for i, d in VALID_CELLS if (i, d) in p.grid)
     print(f"格释义 {covered}/{len(VALID_CELLS)} 格（每级 14 格，(1,4)/(4,1) 不写）；"
           f"视角池 {len(p.angles)} 个")
+    print(f"篇幅：题面 {p.text_min}~{p.text_max} 字，收卷放宽到 {p.text_lo}~{p.text_hi}"
+          f"（容差 ±{p.text_slack:.0%}）")
     sizes = "/".join(str(len(p.craft["parts"][lv])) for lv in range(1, 5))
     print(f"  场景卡·{p.craft['part_label']:<6} 每级 {sizes} 词")
     modes = "、".join(f"d{lv} {mode}" for lv, mode in sorted(p.craft["action_modes"].items()))
@@ -1981,12 +2060,14 @@ def cmd_write(args, p):
         print(f"跳过已满 {len(skipped)} 格。")
     print(f"seed={seed}（要复现同一批卡就用 --seed {seed}）")
     seen = {(r.get("text") or "").strip() for r in read_rows(args.csv)}
-    groups = group_by_cell(briefs)
+    # 人写是一格一口气写完的，整格算一个部位（等价于 --batch 装满一格）
+    groups = [g for _k, g in group_by_cell(briefs)]
+    assign_parts(p, groups, args.part)
     accepted = []
     total = len(briefs)
     n = 0
     quit_early = False
-    for _key, group in groups:
+    for group in groups:
         for b in group:
             n += 1
             if n > 1:
@@ -2149,7 +2230,7 @@ def cmd_prompt(args, p):
         if cell:
             avoid.setdefault(cell, []).append((r.get("text") or "").strip())
     payload = []
-    for batch in batch_of(briefs, args.batch):
+    for batch in assign_parts(p, batch_of(briefs, args.batch), args.part):
         b0 = batch[0]
         cell = (b0["band"], b0["intrusion"], b0["destruction"])
         payload.append({
@@ -2250,7 +2331,7 @@ def cmd_draft(args, p):
         if cell:
             by_cell[cell].append((r.get("text") or "").strip())
     seen = {(r.get("text") or "").strip() for r in read_rows(args.csv)}
-    batches = batch_of(briefs, args.batch)
+    batches = assign_parts(p, batch_of(briefs, args.batch), args.part)
     print(f"后端 {name or '默认'}；{len(briefs)} 条待写（{len(batches)} 次调用）；"
           f"seed={seed}。\n")
 
@@ -2345,7 +2426,7 @@ def cmd_fill(args, p):
 
     accepted, failed = [], []
     log = [] if args.json else None
-    batches = batch_of(briefs, args.batch)
+    batches = assign_parts(p, batch_of(briefs, args.batch), args.part)
     say(f"后端 {name or '默认'}；{len(briefs)} 条待写（{len(batches)} 次调用）；"
         f"重试上限 {args.retries}；seed={seed}。")
     for batch in batches:
@@ -2363,15 +2444,20 @@ def cmd_fill(args, p):
             except Exception as exc:                             # noqa: BLE001
                 say(f"  ! {pending[0]['id']} 调用失败：{type(exc).__name__}: {exc}")
                 cands = []
-            for cand in cands:
-                if not pending:
-                    break
+            missed = []
+            for pos, b in enumerate(pending):
+                # 候选按发出时的卡序对位：同格几张卡共用部位，正文分不出谁是谁，
+                # 不能靠 pop(0) 顺次认领（前面有不合格的会把后面整体错位）。
+                if pos >= len(cands):
+                    missed.append(b)
+                    continue
+                cand = cands[pos]
                 errors, warns, rec = validate_draft(p, cell[0], cell[1], cell[2],
                                                     cand["text"], cand["summary"], seen)
                 if errors:
                     rejects += errors
+                    missed.append(b)
                     continue
-                b = pending.pop(0)
                 row = draft_row(p, cell[0], cell[1], cell[2], cand["text"].strip(),
                                 cand["summary"])
                 accepted.append(row)
@@ -2382,6 +2468,7 @@ def cmd_fill(args, p):
                     log.append({"cell": f"{cell[0]}:{cell[1]}:{cell[2]}", "id": b["id"],
                                 "text": row["text"], "summary": row["summary"],
                                 "attempt": attempt, "warnings": warns})
+            pending = missed
         for b in pending:
             failed.append({"id": b["id"], "cell": f"{cell[0]}:{cell[1]}:{cell[2]}",
                            "reasons": rejects[:6]})
@@ -2588,6 +2675,11 @@ def _add_batch_arg(sp):
                     help="一次调用写几条（同格相邻的卡分到一块，默认 3；1 = 一条一调）")
 
 
+def _add_part_arg(sp):
+    sp.add_argument("--part", type=int, default=None, metavar="N",
+                    help="所有批都固定用池中第 N 个着重部位（0 起）；默认每批换一个。")
+
+
 def build_parser():
     p = argparse.ArgumentParser(
         prog="quip_draft_bench",
@@ -2605,22 +2697,27 @@ def build_parser():
 
     sp = sub.add_parser("plan", help="出题面（md/jsonl）", parents=[common])
     _add_plan_args(sp)
+    _add_batch_arg(sp)
+    _add_part_arg(sp)
     sp.add_argument("--out", help="输出目录，写 briefs.md + briefs.jsonl")
 
     sp = sub.add_parser("write", help="人写：逐条出题，边写边判", parents=[common])
     _add_plan_args(sp)
+    _add_part_arg(sp)
     sp.add_argument("--apply", action="store_true", help="收下的直接落盘")
     sp.add_argument("--draft-out", help="不落盘时草稿写哪（默认 _out/quip_draft/drafts-*.jsonl）")
 
     sp = sub.add_parser("draft", help="AI 写 + 人审", parents=[common])
     _add_plan_args(sp)
     _add_batch_arg(sp)
+    _add_part_arg(sp)
     sp.add_argument("--temperature", type=float, default=0.8)
     sp.add_argument("--apply", action="store_true", help="收下的直接落盘")
 
     sp = sub.add_parser("fill", help="agent 全自动：生成→校验→重试→入队", parents=[common])
     _add_plan_args(sp)
     _add_batch_arg(sp)
+    _add_part_arg(sp)
     sp.add_argument("--temperature", type=float, default=0.8)
     sp.add_argument("--retries", type=int, default=2, help="单条失败后的重试次数")
     sp.add_argument("--apply", action="store_true", help="真正落盘")
@@ -2629,6 +2726,7 @@ def build_parser():
     sp = sub.add_parser("prompt", help="只出提示词，不调模型", parents=[common])
     _add_plan_args(sp)
     _add_batch_arg(sp)
+    _add_part_arg(sp)
     sp.add_argument("--json", action="store_true",
                     help="输出 {cell, ids, messages} 数组（一块可含多条卡）")
 
@@ -2644,6 +2742,10 @@ def build_parser():
                     help="格内画像展开全部格（默认只展开有问题的格）")
     sp.add_argument("--seed", type=int, default=0,
                     help="回放场景卡的偏移（默认 0；出题默认随机，想对上就用同一个数）")
+    sp.add_argument("--batch", type=int, default=3,
+                    help="回放时按几批切（跟出题时的 --batch 一致，默认 3）")
+    sp.add_argument("--part", type=int, default=None, metavar="N",
+                    help="回放时假设所有批都固定用了池中第 N 个部位（0 起，同上出题时的 --part）")
     sp.add_argument("--json", action="store_true")
     sp.add_argument("--count", "--target", dest="count", type=int, default=3,
                     help="每格目标条数（默认 3；--target 同义）")
