@@ -35,6 +35,16 @@ KEY_EVENT_CHARS = 60
 FACT_CHARS = 60
 MAX_PENDING_UPDATES = 4  # 未取走的搭车角色更新批数上限
 
+#: 耦合等级缺摘要提示时的兜底（提示词缺键不应让整次压缩退回内部算法）
+SUMMARY_SYSTEM_FALLBACK = (
+    "你是剧情概要助手。把给定的故事段落压缩成 JSON 输出："
+    '{"summary": "第三人称概要", "facts": ["关键事实", ...]}。'
+    "summary 不超过100字，保留关键人物、事件与走向；"
+    "facts 记录需要长期记住的设定级信息，每条不超过30字、最多6条，"
+    "只记定性信息，不要数值；人物的当前状态不要写进 facts。"
+    "只输出 JSON 本身，不要解释。"
+)
+
 
 def _clip(text: str, limit: int = MAX_SUMMARY_CHARS) -> str:
     text = " ".join(str(text or "").split())
@@ -134,18 +144,24 @@ class StorySummarizer:
         if ai_client is not None:
             try:
                 joined = "\n".join(texts)
+                pack = coupling_prompts(self.coupling_level)
+                system_prompt = pack.get("summary_system") or SUMMARY_SYSTEM_FALLBACK
                 messages = [
-                    {"role": "system", "content": coupling_prompts(
-                        self.coupling_level)["summary_system"]},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content":
                         f"请概括以下 {len(texts)} 段剧情：\n{joined}"},
                 ]
                 raw = ai_client.generate(messages, temperature=0.3)
                 summary, facts, updates = self._parse_summary_json(raw)
                 if summary:
+                    process_log.log(
+                        f"[Summary] AI 压缩成功（{self.coupling_level or 'default'}）："
+                        f"{len(texts)} 段")
                     return summary, facts, updates
             except Exception as e:
-                process_log.log(f"[Summary] AI 压缩失败，改用内部算法: {e}")
+                process_log.log(
+                    f"[Summary] AI 压缩失败（{self.coupling_level or 'default'}），"
+                    f"改用内部算法: {e}")
         return self._fallback_summary(texts), [], []
 
     def drain_character_updates(self) -> list:

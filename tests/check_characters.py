@@ -16,7 +16,7 @@
 10. 容量淘汰：优先淘汰最久未见的非在场 emergent；
 11. 细节搭车解析：``parse_character_updates`` 新格式 / 旧格式 / 坏 JSON；
 12. ``intro_as``：seed 即临时称呼、显示名与解析、语音稳定键；
-13. 摘要搭车：``StorySummarizer`` 抽出角色更新、旧响应兼容；
+13. 摘要搭车：``StorySummarizer`` 抽出角色更新、旧响应兼容，三个耦合等级都走 AI；
 14. 合并审计（origin 手动/自动）、账本快照还原、结局回顾快照。
 """
 
@@ -45,6 +45,7 @@ def check(name, ok, extra=""):
 
 
 from dungeon import cast  # noqa: E402
+from dungeon.coupling import COUPLING_LEVELS, COUPLING_PROMPTS  # noqa: E402
 from dungeon.characters import (BRIEF_CHARS, KEY_MUTABLE_FIELDS,  # noqa: E402
                                 MAX_TRAITS, CharacterLedger,
                                 IDENTITY_REVEALED, IDENTITY_TEMPORARY,
@@ -359,6 +360,15 @@ check("摘要搭车的更新走锚点揭示",
 check("旧摘要响应没有 character_updates 时行为不变",
       StorySummarizer._parse_summary_json('{"summary": "s", "facts": ["f"]}')
       == ("s", ["f"], []))
+for _level in COUPLING_LEVELS:
+    check(f"耦合等级 {_level} 有摘要提示",
+          bool(str(COUPLING_PROMPTS[_level].get("summary_system") or "").strip()))
+    _level_summ = StorySummarizer(block_size=1, coupling_level=_level)
+    _level_summ.record("dialog", "她推开了门。", "第二幕")
+    _level_summ.maybe_compress(1, ai_client=_SummaryClient())
+    check(f"耦合等级 {_level} 的摘要走 AI 而不是内部算法",
+          bool(_level_summ.summaries) and _level_summ.summaries[0][1] == "概括",
+          _level_summ.summaries)
 
 # ---------------- 15. 合并审计与快照还原（P3） ----------------
 _audit = CharacterLedger([make_key()])
