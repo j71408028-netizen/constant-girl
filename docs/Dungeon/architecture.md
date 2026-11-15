@@ -101,7 +101,7 @@
 | `response.py` | AI 响应解析容错 | `extract_stream_text`、`parse_final_json` |
 | `splitter.py` | 内置确定性分句 | `split_stream_units`（流式：首句上屏，余句排队）、`split_full_text`（终局定格） |
 | `summary.py` | 剧情压缩与常驻记忆 | `StorySummarizer`（按块 / 按章节压缩 + 最近 N 段原文 + 关键事件 + 事实卡；响应可搭车 `character_updates`，`drain_character_updates` 交给账本） |
-| `details.py` | 细节探究 | `build_detail_query_prompt`、`parse_detail_queries`、`parse_character_updates`（细节响应搭车抽取角色状态，见 [角色系统](../designs/dungeon/characters.md) §4）、`search_replay_details` |
+| `details.py` | 细节探究：对象 + 方面查询、回放检索与注入文案 | `ASPECTS`（共用方面白名单，提示词 / 解析 / 检索同源）、`DetailQuery` / `DetailMatch`、`build_detail_query_prompt`、`parse_detail_queries`、`parse_character_updates`（细节响应搭车抽取角色状态，见 [角色系统](../designs/dungeon/characters.md) §4）、`resolve_detail_queries`、`detail_injection_line`、`format_detail_label`、`search_replay_details` |
 | `replay.py` | 回放记录的**语法与解析层**（纯领域） | `KIND_STEP/CHAPTER/TRIGGER/CHARACTERS/ENDING/META`、`classify` / `parse` / `parse_all`（坏记录返回 `None` 由调用方跳过；旧格式的 `goto` 平级环境键在此展开成章节记录）、`to_config_fragment`（反向往配置片段，回溯改写的出口）、`StepRecord` / `ChapterRecord` / `TriggerRecord` / `CharactersRecord` / `EndingRecord` / `ScenarioRecord`；写侧 `meta_record` / `material_paths`（`meta.assets` 与读侧反查同源）/ `display_text_field`（决定步进记录要不要写 `display_text`）；内嵌配置复用 `normalize_background` / `normalize_bgm` / `normalize_voice_fx` / `trigger_action_type`，见 [副本剧本](../designs/dungeon/script.md) §9.3 |
 | `schema.py` | 方案配置字段**单一真相源** | `SCENARIO_FIELDS` / `CHAPTER_FIELDS` / `TRIGGER_FIELDS` / `FieldSpec` / `empty_scenario_config()` |
 | `validate.py` | 结构化诊断（error / warning / info） | `validate_scenario_config(config, scenario_dir=...)`、`has_errors`、`format_diagnostics` |
@@ -236,7 +236,7 @@ _generate_next_text()
      commit    → prompt_builder.commit_turn(turn.effects)              登记首次出场 / 已提示部位 / 消费疑问
   6. 演化      → dungeon_logic.evolve_attributes(...)                  step_override=0 时整段冻结
   7. 解锁写入  → _apply_prompted_unlocks(正文, turn.effects.prompted_parts)
-  8. _finish_step(...) → 后台 _start_detail_query(正文)                下次生成前用回放缓存解答
+  8. _finish_step(...) → 后台 _start_detail_query(正文)                下次生成前检索；预生成等它落地再组装
 
 _finish_step()
   a. _apply_effect_overrides()      章节效果覆盖倒计时递减，到期交还章节默认

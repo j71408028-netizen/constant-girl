@@ -9,14 +9,17 @@ from dungeon import replay
 from dungeon import script_text
 from dungeon.audio.chapters import find_chapter, is_terminating_chapter, overflow_jump_target
 from dungeon.characters import CharacterLedger
-from dungeon.details import (build_detail_query_prompt, parse_character_updates,
-                             parse_detail_queries)
+from dungeon.details import (build_detail_query_prompt, format_detail_label,
+                             parse_character_updates, parse_detail_queries)
 from dungeon.models import DungeonTextType
 from dungeon.response import canonical_history_entry, extract_stream_text, parse_final_json
 from dungeon.splitter import (split_full_text, split_stream_units,
                               strip_display_markers)
 from core.ai import describe_ai_error
 from core.logic import apply_size_unlock_updates, compute_casualty
+
+#: 预生成等细节提问落地的上限；超时按现有上下文继续，不让预生成无限停摆
+DETAIL_QUERY_WAIT_SECONDS = 8.0
 
 
 class DungeonStoryEngine:
@@ -480,6 +483,9 @@ class DungeonStoryEngine:
         if client is None or self._closing:
             return
         self._detail_querying = True
+        done = getattr(self, "_detail_query_done", None)
+        if done is not None:
+            done.clear()
         chapter = str(getattr(self, "current_chapter", "") or "")
 
         def run():
@@ -487,17 +493,31 @@ class DungeonStoryEngine:
                 replay = getattr(self, "replay_data", [])
                 recent = [e.get("text") for e in replay[:-1]
                           if isinstance(e, dict) and e.get("text")]
+                chapter_obj = find_chapter(getattr(self, "chapters", None), chapter)
+                chapter_note = str((chapter_obj or {}).get("note") or "").strip()
+                summarizer = getattr(self, "story_summary", None)
+                memory = (summarizer.prompt_block()
+                          if summarizer is not None else "")
                 messages = build_detail_query_prompt(
                     paragraph_text, recent_texts=recent,
                     chapter_name=chapter,
-                    coupling_level=getattr(self, "coupling_level", None))
+                    coupling_level=getattr(self, "coupling_level", None),
+                    memory_block=memory, chapter_note=chapter_note)
                 raw = client.generate(messages, temperature=0.5)
-                queries = parse_detail_queries(raw)
+                # 校验语料只取剧情文本：提示词模板里的示例词不能充当对象
+                corpus = "\n".join(
+                    [str(paragraph_text), str(memory)]
+                    + [str(t) for t in recent if t]
+                    + [str(e.get("text") or "") for e in replay[-5:]
+                       if isinstance(e, dict)])
+                queries = parse_detail_queries(raw, corpus=corpus)
                 updates = parse_character_updates(raw)
                 if not self._closing:
                     self._detail_queries = queries
+                    self._detail_query_step = step
                     if queries:
-                        process_log.log(f"[DetailQuery] 想了解的细节: {queries}")
+                        labels = [format_detail_label(q) for q in queries]
+                        process_log.log(f"[DetailQuery] 想了解的细节: {labels}")
                     if updates:
                         # 账本只在主线程改：后台线程把结果投递回帧时钟
                         self._frame.call(
@@ -507,6 +527,8 @@ class DungeonStoryEngine:
                 process_log.log(f"[DetailQuery] 细节提问失败: {e}")
             finally:
                 self._detail_querying = False
+                if done is not None:
+                    done.set()
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -535,25 +557,35 @@ class DungeonStoryEngine:
         self._start_pregen()
 
     def _start_pregen(self):
-        """后台预生成下一段：缓存 (turn, 生成前历史, 原始响应, 段落类型)。"""
+        """后台预生成下一段：缓存 (turn, 生成前历史, 原始响应, 段落类型)。
+
+        预生成与细节提问几乎同时起跑；这里先等提问落地再组装提示词，
+        否则预生成会在细节结果返回前定型，细节补充永远慢一段。
+        等待发生在后台线程里，不占帧循环；超时则按现有上下文继续。
+        """
         # build_turn 不写会话状态；预生成失败直接丢弃产物即可，无需快照还原。
         messages_before = list(self.messages)
-        try:
-            next_type = self.dungeon_logic.get_next_text_type(self.current_text_type)
-            # 结束章节：所有段落类型被覆盖为「结局」，步进为 0
-            if self._in_terminating_chapter():
-                next_type = DungeonTextType.BACKGROUND
-            turn = self.prompt_builder.build_turn(next_type)
-        except Exception as e:
-            process_log.log(f"[Pregen] 组装预生成提示词失败: {e}")
-            return
-        request_messages = messages_before + [
-            {"role": "user", "content": turn.text}]
         self._pregen_inflight = True
 
         def run():
             response = ""
+            next_type = None
+            turn = None
             try:
+                done = getattr(self, "_detail_query_done", None)
+                if done is not None and not done.wait(
+                        timeout=DETAIL_QUERY_WAIT_SECONDS):
+                    process_log.log("[Pregen] 等细节提问超时，按现有上下文生成")
+                if self._closing:
+                    return
+                next_type = self.dungeon_logic.get_next_text_type(
+                    self.current_text_type)
+                # 结束章节：所有段落类型被覆盖为「结局」，步进为 0
+                if self._in_terminating_chapter():
+                    next_type = DungeonTextType.BACKGROUND
+                turn = self.prompt_builder.build_turn(next_type)
+                request_messages = messages_before + [
+                    {"role": "user", "content": turn.text}]
                 for chunk in self.ai_client.generate_stream(
                         request_messages, temperature=0.8):
                     if self._closing:
@@ -564,7 +596,7 @@ class DungeonStoryEngine:
                 return
             finally:
                 self._pregen_inflight = False
-            if not self._closing and response.strip():
+            if not self._closing and response.strip() and turn is not None:
                 self._pregen = {
                     "turn": turn,
                     "messages_before": messages_before,

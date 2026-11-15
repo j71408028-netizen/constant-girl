@@ -10,12 +10,13 @@ from core.scale_reference import (destruction_calibration_line,
                                   intrusion_level_title)
 from dungeon.audio.chapters import find_chapter, is_terminating_chapter
 from dungeon import cast as cast_mod
+from . import process_log
 from .characters import CharacterLedger
 from .coupling import (COMMON_OUTPUT_RULE, DEFAULT_COUPLING_LEVEL,
                        HIGHLIGHT_MARKER_RULE, SPEAKER_STABILITY_RULE,
                        coupling_prompts, normalize_coupling_level,
                        section_instruction)
-from .details import search_replay_details
+from .details import detail_injection_line, resolve_detail_queries
 from .models import DungeonTextType
 from .response import canonical_user_entry
 from .scene import place_label
@@ -67,6 +68,8 @@ class TurnEffects:
     declared_present: set = field(default_factory=set)
     #: 构建时读过细节疑问，提交后清空 ``_detail_queries``
     consume_detail_queries: bool = False
+    #: 本次读到的疑问属于哪一步（提交时只清这一批，不误伤后到的新问题）
+    detail_query_step: int | None = None
     #: 本段用过的「同时在场」地标，提交后才写入会话
     prompted_presence_landmark: str = ""
 
@@ -302,16 +305,36 @@ class DungeonPromptBuilder:
             place = place_label(chapter)
             if place:
                 chapter_line += f"当前地点：{place}\n"
-        # 细节补充：AI 在上一段生成后提出的疑问，从回放缓存检索原文解答
+        # 细节补充：AI 在上一段生成后提出的疑问，回到正文里找参考；
+        # 找不到明确记载的也保留下来，由主生成模型决定补全还是留悬念。
         detail_block = ""
         pending_queries = getattr(session, "_detail_queries", None)
+        query_step = getattr(session, "_detail_query_step", None)
+        current_step = getattr(session, "step_num", None)
+        step_matches = (query_step is None or current_step is None
+                        or int(query_step) == int(current_step))
         if pending_queries:
-            hits = search_replay_details(pending_queries,
-                                         getattr(session, "replay_data", None))
-            if hits:
-                detail_block = ("细节补充（AI 此前想了解的细节，检索自过往正文，"
-                                "仅供叙事参考）：\n" + "\n".join(f"- {h}" for h in hits) + "\n")
+            if step_matches:
+                pairs = resolve_detail_queries(
+                    pending_queries, getattr(session, "replay_data", None),
+                    memory_lines=self._detail_memory_lines(),
+                    source_step=query_step)
+                if pairs:
+                    lines = ["细节补充（AI 此前想了解、正文尚未交代清楚的线索）："]
+                    lines.extend(detail_injection_line(query, match)
+                                 for query, match in zip(pending_queries, pairs))
+                    detail_block = "\n".join(lines) + "\n"
+                    answered = sum(1 for match in pairs
+                                   if match.state == "answered")
+                    process_log.log(
+                        f"[DetailQuery] 注入 {answered}/{len(pairs)} 条线索"
+                        "（含仅提及与未记载）")
+            else:
+                process_log.log(
+                    f"[DetailQuery] 丢弃过期线索（来源步 {query_step}，"
+                    f"当前步 {current_step}）")
             effects.consume_detail_queries = True
+            effects.detail_query_step = query_step
         pack = coupling_prompts(level)
         cast_block, introduced, declared_present = self._cast_block()
         effects.introduced_cast.update(introduced)
@@ -383,7 +406,10 @@ class DungeonPromptBuilder:
         if effects.prompted_presence_landmark:
             session.prompted_presence_landmark = effects.prompted_presence_landmark
         if effects.consume_detail_queries:
-            session._detail_queries = []
+            current = getattr(session, "_detail_query_step", None)
+            if effects.detail_query_step is None or current == effects.detail_query_step:
+                session._detail_queries = []
+                session._detail_query_step = None
         ledger = getattr(session, "characters", None)
         if isinstance(ledger, CharacterLedger):
             step = int(getattr(session, "step_num", 0) or 0)
@@ -392,6 +418,17 @@ class DungeonPromptBuilder:
                 ledger.mark_declared(effects.declared_present, step=step,
                                      chapter=chapter)
             ledger.decay(step)
+
+    def _detail_memory_lines(self) -> list:
+        """细节检索可用的长期记忆行：事实卡、压缩概要与关键事件。"""
+        summarizer = getattr(self.context, "story_summary", None)
+        if summarizer is None:
+            return []
+        lines = [str(x) for x in (getattr(summarizer, "facts", None) or [])]
+        lines += [str(text) for _chapter, text in
+                  (getattr(summarizer, "summaries", None) or [])]
+        lines += [str(x) for x in (getattr(summarizer, "key_events", None) or [])]
+        return [line for line in lines if line.strip()]
 
     def _calibration_block(self) -> str:
         """本段写作校准块：坐标数值行 + 两级谓词 + 尺度上限，无坐标时为空串。

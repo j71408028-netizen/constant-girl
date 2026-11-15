@@ -13,7 +13,7 @@
 6. 归一化（别称串 / id 缺省 / 非法 role / 章节 cast 的 @ 与分隔符）；
 7. 校验器：重名撞车、非法代词、章节 cast 指向不存在的成员；
 8. 构建 / 提交分离：``build_turn`` 不写会话状态，``commit_turn`` 才生效，
-   canonical 历史只留章节与叙事指令；
+   canonical 历史只留章节与叙事指令；细节疑问按来源步消费，不误清后到的新疑问；
 9. 称呼稳定性规则只在有角色时注入；
 10. ``intro_as``：按临时称呼出场且不泄漏真名，撞车校验。
 """
@@ -44,6 +44,10 @@ def check(name, ok, extra=""):
 
 
 from dungeon import cast  # noqa: E402
+from dungeon.details import (ASPECTS, DetailQuery, build_detail_query_prompt,  # noqa: E402
+                             detail_injection_line, format_detail_label,
+                             parse_detail_queries, resolve_detail_queries,
+                             search_replay_details)
 from dungeon.models import DungeonState, DungeonTextType  # noqa: E402
 from dungeon.audio.chapters import normalize_chapter  # noqa: E402
 from dungeon.prompts import DungeonPromptBuilder  # noqa: E402
@@ -283,6 +287,121 @@ check("build_turn 不消费细节疑问",
       and _qturn.effects.consume_detail_queries)
 _qbuilder.commit_turn(_qturn.effects)
 check("commit_turn 才清空细节疑问", _queries._detail_queries == [])
+
+_detail_replay = [
+    {"text": "她把那块亮着的东西举起来，上面有一行字：我的分数。"},
+    {"text": "回稳会会给你发一个东西。"},
+]
+_detail_pairs = resolve_detail_queries(["她的分数是多少"], _detail_replay)
+check("细节检索允许部分关键词命中",
+      bool(_detail_pairs and _detail_pairs[0][1]), _detail_pairs)
+check("细节检索没命中时明确留空",
+      resolve_detail_queries(["管理员为什么在这里"], _detail_replay)[0][1] == "")
+check("细节检索不被泛词单独带偏",
+      resolve_detail_queries(
+          ["管理员为什么在这里"], [{"text": "她站在这里，看着远处。"}])[0][1] == "")
+_detail_prompt = build_detail_query_prompt(
+    "她把东西举起来。", chapter_name="第四章",
+    chapter_note="让她第一次问分数",
+    memory_block="长期记忆：回稳会发东西。", coupling_level="solea")
+_detail_text = _detail_prompt[1]["content"]
+check("细节提问带章节意图与长期记忆",
+      "让她第一次问分数" in _detail_text and "长期记忆" in _detail_text
+      and "回稳会发东西" in _detail_text)
+
+# ---------------- 结构化细节查询（对象 + 方面） ----------------
+check("提问提示词给出共用方面白名单与字段格式",
+      all(name in _detail_text for name in ASPECTS)
+      and "对象" in _detail_text and '"aspect"' in _detail_text)
+
+_corpus = "李队长把撤离令塞进怀里，为了在桥塌之前把南街的人带走。"
+_structured_raw = ('{"queries": [{"object": "桥", "aspect": "后果"}, '
+                   '{"object": "撤离令", "aspect": "背景"}], "characters": []}')
+_structured = parse_detail_queries(_structured_raw, corpus=_corpus)
+check("结构化解析保留对象与方面，最多两组",
+      _structured == [DetailQuery("桥", "后果"),
+                      DetailQuery("撤离令", "背景")]
+      and len(parse_detail_queries(
+          '{"queries": [{"object": "桥", "aspect": "后果"}, '
+          '{"object": "撤离令", "aspect": "背景"}, '
+          '{"object": "南街", "aspect": "位置"}]}', corpus=_corpus)) == 2)
+check("对象必须逐字出现在提问语料里",
+      parse_detail_queries(
+          '{"queries": [{"object": "飞船", "aspect": "目的"}]}',
+          corpus=_corpus) == [])
+check("代词被挡、表外方面降级为空方面",
+      parse_detail_queries(
+          '{"queries": [{"object": "她", "aspect": "目的"}]}',
+          corpus=_corpus) == []
+      and parse_detail_queries(
+          '{"queries": [{"object": "撤离令", "aspect": "动机"}]}',
+          corpus=_corpus) == [DetailQuery("撤离令", "")])
+check("旧格式字符串查询仍原样保留",
+      parse_detail_queries('{"queries": ["她有多大"]}') == ["她有多大"]
+      and format_detail_label(DetailQuery("桥", "后果")) == "【桥】的【后果】")
+
+_aspect_replay = [
+    {"step": 1, "text": "李队长把撤离令塞进怀里，为了在桥塌之前把南街的人带走。"},
+    {"step": 2, "text": "桥在午后塌了，南街的人没能全部撤出，扬尘遮住了半条街。"},
+    {"step": 3, "text": "她俯身看清掌心里的他，指节微微收拢。"},
+]
+_aspect_matches = resolve_detail_queries(
+    [DetailQuery("桥", "后果"), DetailQuery("撤离令", "背景")],
+    _aspect_replay, memory_lines=["撤离令原是三年前签发的"], source_step=3)
+check("方面信号词让后果线索命中，不依赖方面词字面出现",
+      _aspect_matches[0].state == "answered"
+      and "没能全部撤出" in _aspect_matches[0].text)
+check("背景线索可以命中长期记忆",
+      _aspect_matches[1].state == "answered"
+      and "三年前签发" in _aspect_matches[1].text)
+check("只提到对象未回答方面时判定为仅提及",
+      resolve_detail_queries([DetailQuery("撤离令", "")],
+                             _aspect_replay)[0].state == "mentioned")
+check("对象不在语料时判定为未记载",
+      resolve_detail_queries([DetailQuery("飞船", "目的")],
+                             _aspect_replay)[0].state == "missing")
+check("注入文案按判定档位区分，形态不允许补写设定",
+      "原文参考" in detail_injection_line(
+          DetailQuery("桥", "后果"), _aspect_matches[0])
+      and "只提到该对象" in detail_injection_line(
+          DetailQuery("撤离令", ""), ("【撤离令】", "李队长…", "mentioned"))
+      and "不要补写尺寸与外形" in detail_injection_line(
+          DetailQuery("桥", "形态"), ("【桥】的【形态】", "", "missing")))
+check("旧字符串检索与解释行接口保持可用",
+      resolve_detail_queries(["她的分数是多少"], _detail_replay)[0][1]
+      and any("【桥】的【后果】" in line for line in search_replay_details(
+          [DetailQuery("桥", "后果")], _aspect_replay)))
+
+_inject = make_session()
+_inject._detail_queries = [DetailQuery("桥", "后果")]
+_inject._detail_query_step = None
+_inject.replay_data = _aspect_replay
+_inject_turn = DungeonPromptBuilder(_inject).build_turn(_TEXT_TYPE)
+check("build_turn 注入结构化标签与命中的原文参考",
+      "【桥】的【后果】" in _inject_turn.text
+      and "没能全部撤出" in _inject_turn.text)
+
+_stale = make_session(cast_members=[_li], chapters=[{"name": "城里"}])
+_stale._detail_queries = ["她有多大"]
+_stale._detail_query_step = 4
+_stale.step_num = 5
+_stale.replay_data = [{"text": "她很巨大。"}]
+_stale_turn = DungeonPromptBuilder(_stale).build_turn(_TEXT_TYPE)
+check("过期细节疑问不进入提示词",
+      "细节补充" not in _stale_turn.text
+      and _stale_turn.effects.consume_detail_queries)
+DungeonPromptBuilder(_stale).commit_turn(_stale_turn.effects)
+check("过期细节疑问在提交后清空", _stale._detail_queries == [])
+
+_fresh = make_session(cast_members=[_li], chapters=[{"name": "城里"}])
+_fresh._detail_queries = ["旧问题"]
+_fresh._detail_query_step = 5
+_fresh.step_num = 5
+_fresh_turn = DungeonPromptBuilder(_fresh).build_turn(_TEXT_TYPE)
+_fresh._detail_queries = ["新问题"]
+_fresh._detail_query_step = 6
+DungeonPromptBuilder(_fresh).commit_turn(_fresh_turn.effects)
+check("提交旧回合不误清后到的新疑问", _fresh._detail_queries == ["新问题"])
 
 _wrapped = make_session(cast_members=[_li],
                         chapters=[{"name": "城里", "cast": ["李队长"]}])
