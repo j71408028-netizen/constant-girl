@@ -209,6 +209,7 @@ def validate_scenario_config(config, *, scenario_dir: str = None) -> list:
                       if (c.get("fixed_text") or {}).get("path")}
     trigger_names, custom_attrs = _collect_names(
         config.get("triggers"), config.get("evolution_attrs"))
+    option_codes = _collect_option_codes(config.get("triggers"))
 
     _validate_chapters(config.get("chapters"), chapters, chapter_names,
                        terminating, scenario_dir, add,
@@ -219,7 +220,8 @@ def validate_scenario_config(config, *, scenario_dir: str = None) -> list:
     _validate_triggers(config.get("triggers"), chapter_names, terminating,
                        trigger_names, custom_attrs, scenario_dir, add,
                        coupling_level=config.get("coupling_level"),
-                       fixed_chapters=fixed_chapters)
+                       fixed_chapters=fixed_chapters,
+                       option_codes=option_codes)
 
     # 结构级检查：章节与触发器之间的关系（依赖、可达性、跳转闭合、同位置动作竞争、
     # 循环依赖）。与上面那些字段级规则共用同一份诊断列表、同一个接入点——保存方案、
@@ -617,6 +619,28 @@ def _collect_names(triggers, evolution_attrs):
     return trigger_names, custom_attrs
 
 
+def _collect_option_codes(triggers):
+    """返回 {选项触发器名: 合法编号集合}——条件里写编号时的合法域。
+
+    编号口径与运行时一致：0 起下标（``window/options.py::_on_option_chosen``
+    把 ``enumerate`` 的下标记进 ``trigger_choices``）。只收 ``option`` 动作的
+    触发器；``mini_game`` 走同一条记录通道但值是游戏返回值（达成关数等），
+    编号空间由游戏自定，这里不设界。
+    """
+    codes = {}
+    for trigger in (triggers or []):
+        if not isinstance(trigger, dict):
+            continue
+        name = str(trigger.get("name") or "").strip()
+        if not name or trigger_action_type(trigger) != "option":
+            continue
+        action_data = trigger.get("action_data")
+        options = (action_data or {}).get("options") if isinstance(action_data, dict) else None
+        if isinstance(options, list) and options:
+            codes[name] = set(range(len(options)))
+    return codes
+
+
 def _asset_exists(scenario_dir: str, rel_path: str) -> bool:
     if not rel_path:
         return False
@@ -980,10 +1004,11 @@ def _validate_scene(config: dict, chapters, add) -> None:
 
 def _validate_triggers(triggers, chapter_names, terminating, trigger_names,
                        custom_attrs, scenario_dir, add, coupling_level=None,
-                       fixed_chapters=None) -> None:
+                       fixed_chapters=None, option_codes=None) -> None:
     if not isinstance(triggers, list):
         return  # 已在顶层报过
     fixed_chapters = fixed_chapters or set()
+    option_codes = option_codes or {}
     seen = set()
     for index, trigger in enumerate(triggers):
         path = f"triggers[{index}]"
@@ -1023,7 +1048,7 @@ def _validate_triggers(triggers, chapter_names, terminating, trigger_names,
                 add("warning", path + ".precondition_names",
                     f"前置触发器「{pre}」不存在，条件永远无法满足")
         _validate_condition(trigger.get("condition"), path + ".condition",
-                            add, custom_attrs, trigger_names)
+                            add, custom_attrs, trigger_names, option_codes=option_codes)
         raw_data = trigger.get("action_data")
         action_data = raw_data if isinstance(raw_data, dict) else {}
         action_type = trigger_action_type(trigger)
@@ -1172,7 +1197,9 @@ def _validate_effect_overrides(action_data, path, add, coupling_level=None) -> N
         add("warning", field_path + ".duration", "持续步数必须是 ≥1 的数字")
 
 
-def _validate_condition(condition, path, add, custom_attrs, trigger_names, depth=0) -> None:
+def _validate_condition(condition, path, add, custom_attrs, trigger_names, depth=0,
+                        option_codes=None) -> None:
+    option_codes = option_codes or {}
     if condition in (None, ""):
         return
     if not isinstance(condition, dict):
@@ -1197,7 +1224,7 @@ def _validate_condition(condition, path, add, custom_attrs, trigger_names, depth
                 add("warning", rule_path,
                     "条件组嵌套超过一层，编辑器无法完整显示，重新保存会丢失结构")
             _validate_condition(rule, rule_path, add, custom_attrs, trigger_names,
-                                depth + 1)
+                                depth + 1, option_codes=option_codes)
             continue
         if not isinstance(rule, dict):
             add("error", rule_path, "条件规则必须是对象")
@@ -1223,6 +1250,7 @@ def _validate_condition(condition, path, add, custom_attrs, trigger_names, depth
             if metric not in schema.CHOICE_METRICS:
                 add("warning", rule_path + ".metric",
                     f"选项计数不支持度量「{metric}」（允许：{', '.join(schema.CHOICE_METRICS)}）")
+            _validate_choice_code(rule, rule_path, add, option_codes.get(target_trigger))
         elif key_kind == "series":
             if metric not in schema.SERIES_METRICS:
                 add("warning", rule_path + ".metric",
@@ -1237,6 +1265,35 @@ def _validate_condition(condition, path, add, custom_attrs, trigger_names, depth
         if not _is_number(rule.get("value", 0)) and key_kind != "choice":
             add("warning", rule_path + ".value",
                 f"条件值 {rule.get('value')!r} 不是数字，数值比较恒为 False")
+
+
+def _validate_choice_code(rule, rule_path, add, valid_codes) -> None:
+    """条件里引用的选项编号必须落在该触发器的选项范围内（0 起下标）。
+
+    ``valid_codes`` 为 None 表示被引用的触发器不是选项触发器（小游戏按返回值
+    判定、或引用已失效），编号空间无从判断，跳过。两处写法都会比对一个编号：
+    ``target``（ratio / trend 的统计对象）与 ``last`` 的 ``value``（上一次的
+    编号）——后者曾在编辑器里按 1 起显示，实际按 0 起比较，是最容易写错的形态。
+    """
+    if not valid_codes:
+        return
+    used = []
+    if rule.get("metric") == "last":
+        used.append(("value", rule.get("value", 0)))
+    else:
+        used.append(("target", rule.get("target")))
+    upper = max(valid_codes)
+    for field, raw in used:
+        if raw is None:
+            continue
+        if not _is_number(raw):
+            add("warning", f"{rule_path}.{field}",
+                f"选项编号 {raw!r} 不是数字，这个条件恒为 False")
+            continue
+        if int(raw) not in valid_codes:
+            add("warning", f"{rule_path}.{field}",
+                f"选项编号 {int(raw)} 超出范围：被引用的触发器只有 "
+                f"{len(valid_codes)} 个选项，合法编号是 0~{upper}（0 起）")
 
 
 def _condition_key_kind(key, custom_attrs):

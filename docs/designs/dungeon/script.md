@@ -341,6 +341,12 @@ AI 生成**（`normalize_fixed_text` 把缺路径的配置归一成空 dict，�
 | `选择:<触发器名>` | 该选项触发器的选择记录 | `count` / `ratio` / `trend` / `last` |
 | 自定义演化量名 | `evolution_attrs` 中 `type == "custom"` 的属性 | — |
 
+「选择:」记录的值是**选项编号，0 起**（`window/options.py` 把 `enumerate` 的下标
+记入 `trigger_choices`，回放同构）。条件里写编号的两处——`ratio` / `trend` 的
+`target` 与 `last` 的 `value`——都用这套 0 起编号；编辑器表单的选项行标与条件值
+口径一致。`mini_game` 触发器共用这条记录通道，但记的是游戏返回值（达成关数等），
+编号空间由游戏自定，校验器不对它做范围检查；选项触发器超出选项数的编号会报 warning。
+
 - 比较符（`CONDITION_COMPARATORS`）：`>=` `<=` `>` `<` `==` `!=`
 - 整体关系（`CONDITION_OPERATORS`）：`and` / `or`
 - 一层组合：`rules` 的元素还可以是 `{"operator": ..., "rules": [...]}` 的子条件组

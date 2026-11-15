@@ -51,7 +51,7 @@ class TriggerEditDialog(BaseDialog):
         ),
         "option": (
             "至少填 2 项，编号从 0 开始；玩家的选择按编号记入本触发器的选择记录。\n"
-            "其他触发器可用「选择:本触发器名称」判定。"
+            "其他触发器可用「选择:本触发器名称」判定，条件值也写这个编号。"
         ),
         "effect": (
             "在指定步数内临时改写本章节的部分「环境」（至少勾选一个），走完后交还章节默认值。"
@@ -417,11 +417,11 @@ class TriggerEditDialog(BaseDialog):
                                 self.FORM_SPLIT_TEXT)
         self.option_entries = []
         for index in range(4):
-            ctk.CTkLabel(frame, text=f"{index + 1}.", anchor='e', width=24,
+            ctk.CTkLabel(frame, text=f"{index}.", anchor='e', width=24,
                          font=self.UI_FONT, text_color=TRIGGER_LABEL).grid(
                              row=index, column=0, sticky='e', padx=(10, 12), pady=(0, 8))
             entry = self._entry_field(
-                frame, width=240, placeholder=f"选项 {index + 1} 提示（可留空）")
+                frame, width=240, placeholder=f"选项 {index} 提示（可留空）")
             entry.grid(row=index, column=1, sticky='we', padx=(0, 10), pady=(0, 8))
             self.option_entries.append(entry)
         return frame

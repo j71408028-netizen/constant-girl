@@ -651,7 +651,7 @@ class TriggerHandler:
             options = action_data.get("options") or []
             chosen = options[idx] if 0 <= idx < len(options) else {}
             text = (record.choice_text
-                    or chosen.get("text") or chosen.get("prompt") or f"选项 {idx + 1}")
+                    or chosen.get("text") or chosen.get("prompt") or f"选项 {idx}")
             self.trigger_choices.setdefault(name, []).append(idx)
             self.option_choice = {
                 "name": name,

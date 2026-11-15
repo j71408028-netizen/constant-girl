@@ -248,6 +248,43 @@ check("无章节无触发器：提示无结局路径",
       any(d.level == "info" and "结局路径" in d.message
           for d in validate_scenario_config(schema.empty_scenario_config())))
 
+# 选项编号口径：0 起下标（与运行时 trigger_choices 一致），越界必须报出来
+_code_config = schema.empty_scenario_config()
+_code_config["chapters"] = [{"name": "开场", "start": True}, {"name": "终幕", "ending": True}]
+_code_config["triggers"] = [
+    {"name": "岔路", "chapter": "开场", "action_type": "option",
+     "action_data": {"options": [{"id": 0, "prompt": "左"}, {"id": 1, "prompt": "右"}]}},
+    {"name": "测量", "chapter": "开场", "action_type": "mini_game",
+     "action_data": {"game": "reaction", "target_level": 5}},
+    {"name": "越界", "chapter": "开场", "action_type": "none",
+     "condition": {"operator": "and", "rules": [
+         {"key": "选择:岔路", "comparator": "==", "value": 2, "metric": "last"},
+         {"key": "选择:岔路", "comparator": ">=", "value": 0.5, "metric": "ratio", "target": 5},
+     ]}},
+    {"name": "合规", "chapter": "开场", "action_type": "none",
+     "condition": {"operator": "and", "rules": [
+         {"key": "选择:岔路", "comparator": "==", "value": 1, "metric": "last"},
+         {"key": "选择:岔路", "comparator": ">=", "value": 0.5, "metric": "ratio", "target": 0},
+     ]}},
+    {"name": "小游戏按返回值", "chapter": "开场", "action_type": "none",
+     "condition": {"operator": "and", "rules": [
+         {"key": "选择:测量", "comparator": ">=", "value": 5, "metric": "last"},
+     ]}},
+]
+_code_diags = validate_scenario_config(_code_config)
+_code_bad = [(d.path, d.level) for d in _code_diags if "超出范围" in d.message]
+check("选项编号越界报 warning（last 的 value 与 ratio 的 target 各一条）",
+      sorted(path for path, _lvl in _code_bad) == [
+          "triggers[2].condition.rules[0].value",
+          "triggers[2].condition.rules[1].target"]
+      and all(lvl == "warning" for _p, lvl in _code_bad),
+      format_diagnostics(_code_diags, include_info=True))
+check("合法编号与小游戏返回值（编号空间由游戏自定）都不报越界",
+      not [d for d in _code_diags
+           if "超出范围" in d.message
+           and (d.path.startswith("triggers[3]") or d.path.startswith("triggers[4]"))],
+      format_diagnostics(_code_diags, include_info=True))
+
 # ending_policy：作者显式声明开放式方案后不再提示"无结局路径"
 _open_config = schema.empty_scenario_config()
 _open_config["ending_policy"] = "open"

@@ -98,7 +98,7 @@ class OptionHandler:
         if self._last_option_record is not None:
             labels = pending.get("labels") or []
             label = (labels[idx] if 0 <= idx < len(labels)
-                     else chosen.get("text") or chosen.get("prompt") or f"选项 {idx + 1}")
+                     else chosen.get("text") or chosen.get("prompt") or f"选项 {idx}")
             self._last_option_record["choice_index"] = idx
             self._last_option_record["choice_text"] = label
             self._last_option_record["option_prompt"] = chosen.get("prompt", "")
