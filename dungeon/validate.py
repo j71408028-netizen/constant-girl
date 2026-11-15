@@ -226,7 +226,8 @@ def validate_scenario_config(config, *, scenario_dir: str = None) -> list:
     # 结构级检查：章节与触发器之间的关系（依赖、可达性、跳转闭合、同位置动作竞争、
     # 循环依赖）。与上面那些字段级规则共用同一份诊断列表、同一个接入点——保存方案、
     # 启动副本前、离线批量校验三处自动都覆盖到。判据见
-    # docs/Dungeon/scenario_graph.md §3（error 级只走「乐观」的章节可达性口径）。
+    # docs/Dungeon/scenario_graph.md §3（可达性一律走「乐观」的章节口径，且只报
+    # warning：创作期短接、暂不接入实验性章节都不该拦住进入副本）。
     for level, path, message in lint_graph(build_graph(config)):
         add(level, path, message)
 

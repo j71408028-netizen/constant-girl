@@ -52,7 +52,7 @@ from ui.ctk.theme import (
     ACTION_FILL_SENSITIVITY,
     DEPENDENCY_ERR, DEPENDENCY_OK, DEPENDENCY_TEXT, DEPENDENCY_TEXT_SOFT,
     GRAPH_CANVAS_BG, GRAPH_CANVAS_TEXT, GRAPH_CANVAS_TEXT_SOFT,
-    GRAPH_EDGE_CHOICE, GRAPH_EDGE_ENTRY, GRAPH_EDGE_ERR, GRAPH_EDGE_GOTO,
+    GRAPH_EDGE_CHOICE, GRAPH_EDGE_ENTRY, GRAPH_EDGE_GOTO,
     GRAPH_EDGE_HIGHLIGHT, GRAPH_EDGE_OVERFLOW, GRAPH_EDGE_PRECOND, GRAPH_LANE_BG,
     GRAPH_LANE_BORDER, GRAPH_NODE_ERR_BORDER, GRAPH_NODE_HEAD_FILL,
     GRAPH_NODE_MUTED_FILL, GRAPH_NODE_OUTLINE,
@@ -425,7 +425,8 @@ class GraphCanvas(ctk.CTkFrame):
                 y += BOX_H + FLOW_GAP_Y
             bottom = y - FLOW_GAP_Y
             if level == unreachable_level:
-                label, accent = "不可达（从起始章节走不到）", _pick(GRAPH_EDGE_ERR)
+                # 走不到的章节只算提示（创作期短接常见），用警示橙而非错误红
+                label, accent = "不可达（从起始章节走不到）", _pick(GRAPH_EDGE_OVERFLOW)
             elif level == 0:
                 label, accent = "起点", _pick(GRAPH_EDGE_ENTRY)
             else:

@@ -8,9 +8,10 @@
 1. 建图：三类节点、六类边、泳道顺序（章节 → 章节不存在的占位泳道 → 任意/无章节）；
    配置里类型不对（chapters 不是数组…）时不崩；
 2. 两个可达性口径：章节可达**忽略条件与前置**（乐观），可触发集合**含**前置的 AND
-   语义——这正是 error 级不误报的前提；
+   语义——这正是可达性诊断不误报的前提；
 3. 强连通分量与「种子」判定：互锁环、自环都激活不了；链式前置能激活；
 4. 五条图校验规则各命中一次，且**只在应该报的地方报**：
+   - 「走不到的章节」只报 warning、不阻止进入副本（创作期短接是常态）；
    - 骨架方案（章节齐、一条跳转都没接）不刷可达性诊断——这条是被真实门禁
      （``check_scenario_schema.py`` 的干净配置）逼出来的，别再退回去；
    - 走不到任何结束章节时，结束章节不再逐条报 R1（同一原因不刷两遍）；
@@ -269,9 +270,10 @@ R1 = {
     ],
 }
 r1 = lint_graph(build_graph(R1))
-check("R1 不可达章节：error 级、定位到 chapters[i].name",
-      _paths(_rules(r1, "error")) == ["chapters[2].name"]
-      and "荒废" in _rules(r1, "error")[0][2],
+check("R1 不可达章节：warning 级、定位到 chapters[i].name、不阻止进入副本",
+      _paths(_rules(r1, "warning", "走不到")) == ["chapters[2].name"]
+      and "荒废" in _rules(r1, "warning", "走不到")[0][2]
+      and not _rules(r1, "error"),
       str(r1))
 
 # R1 抑制一：没有起始章节时不报（顶层已有 error，逐章刷是噪音）
@@ -303,9 +305,10 @@ r1b = lint_graph(build_graph({
     "triggers": [{"name": "去乙", "chapter": "甲", "action_type": "goto",
                   "action_data": {"chapter": "乙"}}],
 }))
-check("有可达结束章节时，多余的结束章节仍按 R1 报 error",
-      _paths(_rules(r1b, "error")) == ["chapters[2].name"]
-      and not _rules(r1b, "warning", "走不到任何结束章节"),
+check("有可达结束章节时，多余的结束章节照旧按 R1 报 warning",
+      _paths(_rules(r1b, "warning", "走不到")) == ["chapters[2].name"]
+      and not _rules(r1b, "warning", "走不到任何结束章节")
+      and not _rules(r1b, "error"),
       str(r1b))
 
 # R3 前置永远无法成立（前置自己陷在互锁里）
@@ -424,12 +427,21 @@ check("旧键的触发器动作类型归一后与规范键一致",
       and _legacy_graph.node(trigger_node_id("两键并存")).action_type == "goto")
 
 # ---------------- 5. 与既有诊断体系一致 ----------------
+# R1 现在只报 warning，所以接入链路的验证用「没有起始章节」这个顶层 error：
+# 它同样走 validate_scenario_config → has_errors 这条路，与图校验共用接入点。
 merged = validate_scenario_config(R1)
 check("图校验结果并入了 validate_scenario_config 的诊断列表",
-      any(d.level == "error" and d.path == "chapters[2].name" for d in merged),
+      any(d.level == "warning" and d.path == "chapters[2].name" for d in merged),
       str([str(d) for d in merged]))
-check("图校验的 error 被 has_errors 认到（保存 / 启动前的拦截自动生效）",
-      has_errors(merged))
+check("走不到的章节不阻止进入副本（无 error 级）", not has_errors(merged),
+      str([str(d) for d in merged]))
+_blocked = validate_scenario_config({
+    "chapters": [{"name": "甲"}, {"name": "乙"}],
+    "triggers": [{"name": "跳", "chapter": "甲", "action_type": "goto",
+                  "action_data": {"chapter": "乙"}}],
+})
+check("error 级诊断被 has_errors 认到（保存 / 启动前的拦截自动生效）",
+      has_errors(_blocked), str([str(d) for d in _blocked]))
 check("图校验三元组与 Diagnostic 的 path 体系一致（可直接定位）",
       all(isinstance(item[0], str) and isinstance(item[1], str) and item[2]
           and item[1].startswith(("chapters", "triggers"))

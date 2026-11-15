@@ -15,7 +15,7 @@
 ========================  =======  ================================================
 规则                      级别     判据
 ========================  =======  ================================================
-章节走不到                error    不在 :meth:`chapter_reachability` 的章节
+章节走不到                warning  不在 :meth:`chapter_reachability` 的章节
 走不到任何结束章节        warning  结束章节存在，但一个都不在可达集合里
 前置永远无法成立          warning  前置不在可触发集合里
 自跳转                    warning  ``goto`` 目标就是自己所在的章节
@@ -24,6 +24,9 @@
 
 三处口径值得单独说明
 --------------------
+- **走不到的章节只报 warning，不阻止进入副本。** 创作过程中短接一段、把实验性章节
+  先写出来暂不接入，都是正常工作方式，走不到不等于配置写错。真正会出错的是「一局
+  收不了尾」，那由 R2 表达。
 - **可达性规则只在方案真的会在章节间移动时才生效。** 一节都没接线（没有任何
   ``goto``、也没有指向章节的 ``overflow_target``）的方案，除起始章节外全部不可达，
   逐章刷一遍只是噪音——作者还在搭骨架，多半就是从 ``empty_scenario_config()`` 改
@@ -96,9 +99,11 @@ def lint_graph(graph) -> list:
 # ---------------- R1 ----------------
 
 def _lint_unreachable_chapters(chapters, endings, reached, found) -> None:
-    """章节走不到。
+    """章节走不到（warning，不阻止进入副本）。
 
-    没有任何结束章节可达时跳过结束章节（由 R2 统一表达），避免同一个原因报两遍。
+    走不到在创作期是常态：短接一段重排、把实验性章节先写出来暂不接入。它本身不是
+    配置错误，所以只提示，不拦。没有任何结束章节可达时跳过结束章节（由 R2 统一表达），
+    避免同一个原因报两遍。
     """
     has_reachable_ending = any(chapter.id in reached for chapter in endings)
     for chapter in chapters:
@@ -107,9 +112,9 @@ def _lint_unreachable_chapters(chapters, endings, reached, found) -> None:
         if chapter.has(FLAG_ENDING) and not has_reachable_ending:
             continue
         found.append((
-            "error", _chapter_path(chapter),
+            "warning", _chapter_path(chapter),
             f"章节「{chapter.name}」走不到：没有任何可触发的跳转或超限跳转进入它，"
-            f"这段内容永远不会播放"))
+            f"这段内容不会播放（创作期短接可忽略）"))
 
 
 # ---------------- R2 ----------------
