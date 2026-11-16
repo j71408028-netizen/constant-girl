@@ -388,7 +388,7 @@ AI 生成**（`normalize_fixed_text` 把缺路径的配置归一成空 dict，�
 | `effect` | 效果覆盖 | `filter, bgm_level, voice_fx, sensitivity, duration` | 运行时；限时改写章节环境（背景滤镜 / 音乐档位 / 语音效果 / 敏感效果），`duration` 步后各维度交还章节默认值；只写出来的维度才被覆盖，详见 §7 |
 | `fx` | 窗口视效 | `fx, duration, intensity` | 运行时；操作整个会话窗口的瞬时画面（闪光 / 振动 / 反色 / 色差分离），`duration` 为绝对时间（秒，0.1~10），按 `intensity`（0~100）定峰值亮度 / 振幅 / 错位幅度；详见 §7 |
 | `goto` | 跳转章节 | `chapter`（空串 = 离开章节） | 运行时；进入目标章节，应用其背景与持续敏感效果 |
-| `mini_game` | 小游戏挑战 | `game, target_level, win_goto, lose_goto` | 运行时；按包 manifest 的 `backend` 分派：`py` → 会话窗口内覆盖层舞台（`dungeon/window/minigame/`，ESC=无结果中止），`web` → 子进程 pywebview 独立窗口；步进暂停，结果经 `finish(won, result)` 回传后按 `win_goto`/`lose_goto` 跳转（空串=原地继续），无结果=原地继续。结果随触发器记录落盘，回放不进游戏直接复现 |
+| `mini_game` | 小游戏挑战 | `game, target_level, win_goto, lose_goto` | 运行时；在会话窗口内覆盖层舞台运行（`dungeon/window/minigame/`，ESC=无结果中止）；步进暂停，结果经 `finish(won, result)` 回传后按 `win_goto`/`lose_goto` 跳转（空串=原地继续），无结果=原地继续。结果随触发器记录落盘，回放不进游戏直接复现 |
 | `none` | 条件标记 | `{}` | 运行时；无动作，只标记条件成立，供其他触发器作前置条件 |
 | `ending` | 结局（旧配置） | — | **已删除**：运行时直接跳过（与 `background` / `sensitivity` 同走未知动作路径），仅回放兼容（旧存档按记录复现结局）；编辑器显示「旧版·已失效」，新方案由「结束章节」承担 |
 | `background` / `sensitivity`（早期拼写 `sensitive`） | 旧版·已失效 | — | **运行时不认识**：不在注册表里，落入「未知的触发器动作类型」通用路径（不执行、不记入已触发集合、不重置间隔计数，只打印一行提示） |

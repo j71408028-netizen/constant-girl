@@ -5,7 +5,7 @@
 设计目标：**一次发布只依赖一个 tag**。工作副本是否脏、当前在哪个分支、那个 tag
 里是什么目录结构，都不影响结果——脚本在临时目录里为 tag 建一份干净 worktree，
 按 **该 tag 自己的** ``requirements.txt`` 装依赖并构建。因此同一份脚本既能打
-v1.0.0（重构前的扁平旧结构、无 numpy/webview），也能打之后任何版本。
+v1.0.0（重构前的扁平旧结构、依赖较少），也能打之后任何版本。
 
 产物统一落在 ``dist/release/``：::
 
@@ -74,11 +74,11 @@ DEFAULT_DISPLAY_NAME = APP_NAME
 ENTRY_CANDIDATES = ("main.py",)
 
 #: 需要 ``--collect-all`` 的第三方包（按 **import 名** 写）。实际只对**该版本装得上**
-#: 的生效，所以同一份清单能同时适配 v1.0.0（无 numpy/webview）与更新版本。
+#: 的生效，所以同一份清单能同时适配 v1.0.0（依赖较少）与更新版本。
 #: 不再有 networkx / graphviz：编辑器关系图已改为自绘画布（见
 #: docs/Dungeon/scenario_graph.md §5）。
 COLLECT_ALL_IMPORTS = (
-    "customtkinter", "imgui_bundle", "PIL", "openai", "numpy", "webview",
+    "customtkinter", "imgui_bundle", "PIL", "openai", "numpy",
 )
 
 #: 随包发布的只读资源目录（存在才收）。用户数据（data/user、data/archives）**不进包**：

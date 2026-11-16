@@ -453,12 +453,6 @@ def main():
     # 打包模式的 multiprocessing 子进程（副本会话子进程、启动屏）在这里拦截并
     # 接管；正常启动是无操作。必须先于任何其它逻辑：子进程不该跑主程序流程。
     multiprocessing.freeze_support()
-    if "--mini-game-host" in sys.argv:
-        # 打包模式：内置小游戏子进程经应用可执行文件路由到这里
-        # （源码运行直接跑 ui/hosting/mini_game_host.py，不走本分支）
-        from ui.hosting.mini_game_host import run as run_mini_game_host
-        run_mini_game_host(sys.argv)
-        return
     # 维护子命令（migrate / check-update 等，见 app.maintenance）：命中即执行，
     # 不启动主界面。未知维护命令给出可读提示而不是落到主程序。
     from app.maintenance import dispatch

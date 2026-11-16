@@ -64,9 +64,8 @@ def _mini_game_problem(game_id: str) -> str:
     规则与 ``dungeon.window.minigame.resolve_mini_game`` 的判定一致（这里只
     做静态检查，不 import 游戏文件——那交给契约脚本 ``check_minigame.py``）：
 
-    - ``manifest.json`` 声明 ``py`` 后端 → ``entry`` 必须存在；
-    - 声明 ``web`` 后端 → ``session.html`` 必须存在；
-    - 无 manifest → 有 ``session.html`` 即按 web 兼容（历史包），否则缺入口。
+    - ``manifest.json`` 的 ``entry`` 指向的入口文件必须存在（默认 ``game.py``）；
+    - 声明了 ``backend`` 但非 ``py`` → 不支持。
     """
     game_id = str(game_id or "").strip()
     if not game_id or os.sep in game_id or "/" in game_id:
@@ -88,19 +87,13 @@ def _mini_game_problem(game_id: str) -> str:
         if not isinstance(manifest, dict):
             return "manifest.json 必须是对象"
         backend = str(manifest.get("backend") or "").strip()
-        if backend == "py":
-            entry = str(manifest.get("entry") or "game.py")
-            if not os.path.isfile(os.path.join(root, entry)):
-                return f"py 后端入口「{entry}」不存在"
-            return ""
-        if backend == "web":
-            if not os.path.isfile(os.path.join(root, "session.html")):
-                return "web 后端缺少 session.html"
-            return ""
-        return f"未知后端「{backend}」（允许：py / web）"
-    if os.path.isfile(os.path.join(root, "session.html")):
-        return ""  # 历史 web 包无 manifest：兼容
-    return "缺少 manifest.json 或 session.html"
+        if backend and backend != "py":
+            return f"不支持的后端「{backend}」（仅支持 py）"
+        entry = str(manifest.get("entry") or "game.py")
+        if not os.path.isfile(os.path.join(root, entry)):
+            return f"py 后端入口「{entry}」不存在"
+        return ""
+    return "缺少 manifest.json"
 
 
 # 已退场的旧版动作：只为了把「运行时静默跳过」变成作者能看见的**专项**提示

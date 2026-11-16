@@ -35,7 +35,7 @@
 | 端口定义 | `dungeon/window/host.py::HostPort`（含无宿主的缺省实现） |
 | Tk 实现 | `ui/hosting/tk_host.py::TkHost`——window 层之外唯一的 Tk 细节所在地（自检/自动驾驶用；产品路径已改走子进程宿主） |
 | 子进程实现 | `ui/hosting/dungeon_child_host.py::ChildHost`——子进程内的宿主端口，宿主能力走协议请父进程代劳（§7） |
-| 端口方法表 | 见 [窗口索引](window.md) §5.2（尺寸/DPI、显隐、事件泵、弹框、回放文件选择、小游戏窗口、活动窗口登记、字体） |
+| 端口方法表 | 见 [窗口索引](window.md) §5.2（尺寸/DPI、显隐、事件泵、弹框、回放文件选择、活动窗口登记、字体） |
 | 注入方式 | 父进程：`launch_dungeon_subprocess(...)`（`ui/hosting/dungeon_spawner.py`）；子进程内构造等价于 `DungeonSessionWindow(host=ChildHost(...), **deserialize_launch(payload))`；不传 host = `HostPort()`（无宿主，自检走这条路径） |
 | 守卫 | `tests/check_dungeon_layering.py`：`dungeon/window/*.py` 里出现 `tkinter` / `customtkinter` / `ui` 即失败 |
 
@@ -141,7 +141,7 @@ deadline 轮询），子进程的结论行打印后立即 flush——「已通�
 | 件 | 位置 | 职责 |
 |---|---|---|
 | 父进程侧 | `ui/hosting/dungeon_spawner.py` | 序列化构造参数（`dungeon/window/launch_payload.py`）→ `multiprocessing.Process` 拉起子进程 → 泵循环（`host_window.update()`）→ 代答协议请求 → 还原 `SessionResult`；会话期把句柄登记到 `app._active_dungeon_window`（老代码的「副本进行中」守卫与 `request_close()` 因此零改动） |
-| 子进程侧 | `ui/hosting/dungeon_child_host.py` | `ChildHost(HostPort)`：尺寸/弹框/回放文件框走协议请父进程代劳，小游戏孙进程照旧；管道断开（父进程死亡）即 `os._exit`，孤儿副本不会继续写 `data/` |
+| 子进程侧 | `ui/hosting/dungeon_child_host.py` | `ChildHost(HostPort)`：尺寸/弹框/回放文件框走协议请父进程代劳；管道断开（父进程死亡）即 `os._exit`，孤儿副本不会继续写 `data/` |
 | 线格式 | `dungeon/window/launch_payload.py` | 构造参数 dict ↔ 纯数据 dict 的往返（dataclass 落 `asdict`、宿主侧参数剔除）；`SessionResult` 的往返同文件。守卫：`tests/check_dungeon_launch_payload.py` |
 
 载荷里唯一与文件系统有关的是 `asset_root`：挑战包把方案素材解在方案目录之外

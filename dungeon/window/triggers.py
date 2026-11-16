@@ -26,7 +26,7 @@ from dungeon.response import canonical_history_entry
 from dungeon.rules import TriggerRules
 from dungeon.splitter import strip_display_markers
 from dungeon.window.fx import parse_fx_params
-from dungeon.window.minigame import BACKEND_PY, resolve_mini_game
+from dungeon.window.minigame import resolve_mini_game
 
 
 def _mini_game_return_value(result) -> int:
@@ -417,8 +417,8 @@ class TriggerHandler:
                     process_log.log(f"[Trigger] 找不到小游戏「{game_id}」，"
                                     f"触发器 {trigger['name']} 已跳过")
                     action_accepted = False
-                elif resolved.backend == BACKEND_PY:
-                    # py 后端：会话窗口内的覆盖层舞台（dungeon.window.minigame.stage）
+                else:
+                    # 会话窗口内的覆盖层舞台（dungeon.window.minigame.stage）
                     try:
                         launched = self._open_mini_game_stage(
                             resolved, action_data,
@@ -427,30 +427,6 @@ class TriggerHandler:
                         process_log.log(f"[Trigger] 小游戏「{game_id}」打开异常: {exc}")
                         launched = False
                     if not launched:
-                        action_accepted = False
-                    else:
-                        self.pending_mini_game = {
-                            "name": trigger["name"],
-                            "action_data": action_data,
-                            "trigger_index": trigger_index,
-                        }
-                        process_log.log(f"[Trigger] 已触发: {trigger['name']}，"
-                                        f"小游戏「{game_id}」开始")
-                        self._last_mini_game_record = self._record_trigger_action(
-                            trigger, action_type, action_data)
-                else:
-                    # web 后端：子进程 pywebview 独立窗口（宿主端口能力）
-                    try:
-                        launched = self.host.launch_mini_game(
-                            game_id, action_data,
-                            on_result=self._on_mini_game_result)
-                    except Exception as exc:
-                        process_log.log(f"[Trigger] 小游戏「{game_id}」启动异常: {exc}")
-                        launched = False
-                    if not launched:
-                        # 宿主不支持 / 目录缺失：触发器不生效，副本流程照常
-                        process_log.log(f"[Trigger] 小游戏「{game_id}」不可用，"
-                                        f"触发器 {trigger['name']} 已跳过")
                         action_accepted = False
                     else:
                         self.pending_mini_game = {

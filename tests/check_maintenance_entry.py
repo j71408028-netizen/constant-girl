@@ -51,7 +51,7 @@ calls = []
 runner = calls.append
 
 check("空参数走主程序", dispatch([], runner=runner) is False and not calls)
-check("纯旗标不拦截", dispatch(["--mini-game-host"], runner=runner) is False)
+check("纯旗标不拦截", dispatch(["--verbose"], runner=runner) is False)
 check("未知位置参数不拦截", dispatch(["unknown-mode"], runner=runner) is False)
 check("migrate 命中并执行", dispatch(["migrate"], runner=runner) is True
       and calls == ["migrate"])

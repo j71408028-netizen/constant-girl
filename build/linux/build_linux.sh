@@ -217,7 +217,7 @@ fi
 # linux_compat_plan.md §5），imgui 迁移后尚未在 Linux 复测，放进打包自检只会
 # 把第三方风险记成打包问题。
 SELF_CHECK_BIN="$ROOT/dist/$SELF_CHECK_NAME/$SELF_CHECK_NAME"
-SCENES=(entry-start session-close entry-replay chapter-bgm mini-game mini-game-py)
+SCENES=(entry-start session-close entry-replay chapter-bgm mini-game-py mini-game-repeat)
 FAILED=0
 for scene in "${SCENES[@]}"; do
     echo

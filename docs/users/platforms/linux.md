@@ -39,7 +39,6 @@ python main.py
   |---|---|
   | `edge-tts` | 对话语音不出声（联网合成），副本照常能玩 |
   | `miniaudio` / `soundfile` | 章节语音的「物理效果」退回零依赖的播放侧近似（回声 / 缓抖），方案校验会给出提示；装上即消除 |
-  | `pywebview` | 内置小游戏窗口（`web` 后端的兼容通道）打不开，触发器会明确提示；`py` 后端小游戏不受影响 |
 - 中文字体（两条链路，都靠系统装中文字体，建议 `sudo apt install fonts-noto-cjk`）：
   - 主界面（Tk / CustomTkinter）走 `ui/ctk/fonts.py` 的家族候选链
     （Noto Sans CJK SC / 文泉驿微米黑），由 Tk 自己按家族名向 fontconfig 取字体；
@@ -183,7 +182,7 @@ PYTHON_BIN=python3.12 bash build/linux/build_linux.sh   # 指定解释器
   另打 `dist/constant-girl-linux-<arch>.tar.gz` 目录包。AppImage / deb 与桌面集成
   （`.desktop`、PATH 安装）不在本期。
 - **依赖收集**：与 Windows / macOS 脚本同一套 `--collect-all`（customtkinter / imgui_bundle /
-  PIL / openai / numpy / webview），**不带** `zai`（项目没有该依赖，见
+  PIL / openai / numpy），**不带** `zai`（项目没有该依赖，见
   附录A §2.3）。关系图不再需要 Graphviz 的 `dot` 二进制，打包无外部可选依赖。
   官方显示组件包 `dungeon.window.component_pack` 由 `component_registry` 以**字面量的
   函数内 `import`** 加载——不能改回 `importlib.import_module(字符串)`，否则
@@ -191,8 +190,7 @@ PYTHON_BIN=python3.12 bash build/linux/build_linux.sh   # 指定解释器
   （2026-10-21 打包自检的 `session-close` 就是这样挂的，见
   [linux-history.md](linux-history.md) §8.1-7）。
 - **构建环境**：脚本自建 `.venv-buildlinux` 并 `pip install -r requirements.txt pyinstaller`，
-  不污染开发 venv。Python 3.14 下 `pywebview` 会装到 6.2.1（更新的版本声明 `<3.14`），
-  web 后端小游戏窗口照常可用。
+  不污染开发 venv。
 - **数据目录**：打包版走 XDG —— `$XDG_DATA_HOME/constant-girl/data`
   （默认 `~/.local/share/constant-girl/data`），首启从包内 `data/packs`、`data/static`
   拷贝出可写副本；源码运行仍用仓库内 `data/`（见 `paths.py`）。
@@ -203,8 +201,8 @@ PYTHON_BIN=python3.12 bash build/linux/build_linux.sh   # 指定解释器
      失败时区分「进程已退出 / 数据目录未就绪」并打印退出码与**完整**的 `app.log`；
   2. 在**打包态**里逐场景真开副本窗口（6 个）：`entry-start`（探索入口 → 进副本）、
      `session-close`（中途快照 + 收尾落盘）、`entry-replay`（入口回放）、
-     `chapter-bgm`（章节背景音乐）、`mini-game`（小游戏触发器返回值链）、
-     `mini-game-py`（py 后端小游戏覆盖层舞台）。`text-components` 不在其中：
+     `chapter-bgm`（章节背景音乐）、`mini-game-py`（小游戏覆盖层舞台）、
+     `mini-game-repeat`（可再次触发的小游戏）。`text-components` 不在其中：
      它在 Linux/X11 上曾触发 DPG/GLFW 段错误，组件覆盖由 `smoke_switch` /
      `smoke_mini` 与离线 `check_component_pack` 兜底。
 

@@ -6,7 +6,7 @@
 
 manifest 层：
 - ``manifest.json`` 存在且可解析；``id`` 与目录名一致（声明了才查）；
-- ``backend`` ∈ {py, web}；``py`` → ``entry`` 存在；``web`` → ``session.html`` 存在；
+- ``backend`` 缺省或为 ``py``；``entry`` 指向的入口文件存在（默认 ``game.py``）；
 - ``params`` 声明结构合法（key/label/type，min<=max）。
 
 py 游戏代码层（AST 扫描 ``entry``）：
@@ -30,7 +30,7 @@ _ROOT = os.path.dirname(_HERE)
 _PACK_ROOT = os.path.join(_ROOT, "data", "packs", "minigames")
 _BUILTIN_ROOT = os.path.join(_ROOT, "dungeon", "window", "minigame", "games")
 
-_ALLOWED_BACKENDS = ("py", "web")
+_SUPPORTED_BACKEND = "py"
 #: py 游戏代码里禁止 import 的顶层模块
 FORBIDDEN_IMPORTS = {
     "imgui_bundle": "绘制必须走 GameAPI（运行时才持有渲染后端）",
@@ -58,7 +58,7 @@ def fail(path, lineno, message):
 def check_manifest(pack_dir):
     manifest_path = os.path.join(pack_dir, "manifest.json")
     if not os.path.isfile(manifest_path):
-        return None  # 历史 web 包无 manifest：由校验器兼容，此处不重复报
+        return None  # 无 manifest：由 resolve_mini_game 按默认 game.py 兜底，此处不重复报
     try:
         with open(manifest_path, "r", encoding="utf-8") as fh:
             manifest = json.load(fh)
@@ -73,15 +73,12 @@ def check_manifest(pack_dir):
     if declared and declared != pack_id:
         fail(manifest_path, 0, f"manifest id「{declared}」与目录名「{pack_id}」不一致")
     backend = str(manifest.get("backend") or "").strip()
-    if backend not in _ALLOWED_BACKENDS:
-        fail(manifest_path, 0, f"backend「{backend}」非法（允许：{'/'.join(_ALLOWED_BACKENDS)}）")
+    if backend and backend != _SUPPORTED_BACKEND:
+        fail(manifest_path, 0, f"backend「{backend}」非法（仅支持 {_SUPPORTED_BACKEND}）")
         return manifest
-    if backend == "py":
-        entry = str(manifest.get("entry") or "game.py")
-        if not os.path.isfile(os.path.join(pack_dir, entry)):
-            fail(manifest_path, 0, f"py 后端入口「{entry}」不存在")
-    elif backend == "web" and not os.path.isfile(os.path.join(pack_dir, "session.html")):
-        fail(manifest_path, 0, "web 后端缺少 session.html")
+    entry = str(manifest.get("entry") or "game.py")
+    if not os.path.isfile(os.path.join(pack_dir, entry)):
+        fail(manifest_path, 0, f"小游戏入口「{entry}」不存在")
     params = manifest.get("params")
     if params is not None:
         if not isinstance(params, list):
@@ -190,11 +187,15 @@ def main():
         if not os.path.isdir(pack_dir):
             continue
         manifest = check_manifest(pack_dir)
-        if manifest and str(manifest.get("backend") or "") == "py":
-            entry = str(manifest.get("entry") or "game.py")
-            entry_path = os.path.join(pack_dir, entry)
-            if os.path.isfile(entry_path):
-                check_py_game(entry_path, name)
+        if manifest is None:
+            continue
+        backend = str(manifest.get("backend") or "").strip()
+        if backend not in ("", _SUPPORTED_BACKEND):
+            continue
+        entry = str(manifest.get("entry") or "game.py")
+        entry_path = os.path.join(pack_dir, entry)
+        if os.path.isfile(entry_path):
+            check_py_game(entry_path, name)
     if os.path.isdir(_BUILTIN_ROOT):  # 未来内置游戏（REGISTRY 登记）
         for name in sorted(os.listdir(_BUILTIN_ROOT)):
             if name.endswith(".py") and name != "__init__.py":

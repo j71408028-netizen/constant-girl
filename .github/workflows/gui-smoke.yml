@@ -92,7 +92,7 @@ jobs:
 
       # 打包 + 打包自检：PyInstaller onedir，然后在**打包态**里启动发布包、
       # 引导 XDG 数据目录、真开副本窗口跑 entry-start / session-close /
-      # entry-replay / chapter-bgm / mini-game / mini-game-py 六个场景。
+      # entry-replay / chapter-bgm / mini-game-py / mini-game-repeat 六个场景。
       - name: 打包 + 打包自检
         run: |
           xvfb-run -a -s "-screen 0 1600x1000x24" \

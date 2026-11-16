@@ -169,7 +169,7 @@ data/
 
 | 平台 | 状态 | 说明 |
 |---|---|---|
-| Windows 10/11 | ✅ 支持 | 发行包；小游戏依赖 WebView2 运行时 |
+| Windows 10/11 | ✅ 支持 | 发行包 |
 | macOS 12+（Apple Silicon） | ✅ 支持 | 发行包；渲染后端暂无 Intel 轮子 |
 | Linux · X11 | ✅ 支持 | 发行包（onedir + tar.gz）；需 `python3-tk` 与中文字体 |
 | Linux · Wayland + XWayland | ⚠️ 可用 | 副本窗口经 XWayland 显示，窗口置顶依赖窗口管理器的 EWMH 支持 |

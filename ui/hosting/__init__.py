@@ -7,7 +7,6 @@
 - ``x11`` / ``x11_boot``：Linux/X11 进程级引导与 EWMH 置顶（零 GUI 框架依赖）；
 - ``tk_host``：dungeon 层宿主端口在 Tk/CTk 主程序侧的适配器；
 - ``dungeon_spawner`` / ``dungeon_child_host``：副本会话独立子进程的父/子两侧；
-- ``mini_game_host``：内置小游戏的 pywebview 子进程宿主。
 
 准入规则（``tests/check_mini_layering.py`` 会守住）：本包**不得顶层 import**
 CTk 界面组件（``ui.ctk.theme/widgets/dialogs`` 等）——需要弹框能力时一律

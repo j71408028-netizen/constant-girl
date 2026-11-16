@@ -33,9 +33,8 @@
 | `entry-cancel` | 探索模式入口页 → 中途读一次 `ui_snapshot()` 断言入口页状态 → 点「返回」 | 9 项 |
 | `entry-replay` | 入口页「加载回放」→ 取消一次 → 再选文件 → **同一窗口内**切回放（L4 回归；「取消那一刻仍停在入口页」也由快照断定） | 12 项 |
 | `entry-start` | 探索模式入口页 → 点「开始副本」→ 步进 → 关闭 | 8 项 |
-| `mini-game` | web 后端小游戏触发器：整数返回值落选择记录、关联 goto 同步跳转、中断不清章节（桩宿主立即回传结果） | 2 项 |
-| `mini-game-escape` | py 后端 `escape_giantess` 真覆盖层舞台：离屏画布 GL 纹理上传 + 每帧绘制指令 + ESC 中止 | 1 项 |
-| `mini-game-py` | py 后端小游戏（覆盖层舞台）：打开 / 结算记返回值 / ESC 中止 | 1 项 |
+| `mini-game-escape` | `escape_giantess` 真覆盖层舞台：离屏画布 GL 纹理上传 + 每帧绘制指令 + ESC 中止 | 1 项 |
+| `mini-game-py` | 小游戏覆盖层舞台：打开 / 结算记返回值 / ESC 中止 | 1 项 |
 | `mini-game-repeat` | 可再次触发的小游戏：结算后回副本主页面（不原地重启）、后续步进可再进 | 1 项 |
 | `native-close` | 视口通过原生关闭键（X / `WM_CLOSE`）关闭：队列不得残留 `WM_QUIT`、收尾提示与宿主计时器不卡死 | 7 项 |
 | `native-input` | 真原生按键（`SendMessage` 直投 `WM_KEYDOWN`）落到窗口**自己的输入接线**上并在帧循环线程执行（原名 `callback-thread`：立即模式没有回调线程，这条不变量换了个守法的对象） | 6 项 |

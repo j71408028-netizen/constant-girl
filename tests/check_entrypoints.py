@@ -84,7 +84,6 @@ ADDDATA_RE = re.compile(r'--add-data\s+"?([^";\s]+)[;:]')
 #: 发行名 -> import 名的特例（其余同名）。
 DIST_TO_IMPORT = {
     "Pillow": "PIL",
-    "pywebview": "webview",
 }
 
 #: 未写进 requirements.txt 但**合法**的顶层名 -> 理由。

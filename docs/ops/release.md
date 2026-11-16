@@ -236,8 +236,7 @@ python build/release/package.py --tag v1.0.0 --backend nuitka \
 
 - **不能交叉编译**：PyInstaller 的产物与本机平台绑定。三平台的运行时包必须各自在
   对应系统上打；只打得出本平台时，其余平台可先用源码归档交付。
-- **Windows**：图标用 `assets/icons/icon.ico`（旧版结构退到 `assets/icon.ico`）。内置
-  小游戏窗口依赖系统自带的 **WebView2**（Win10/11 默认有）。
+- **Windows**：图标用 `assets/icons/icon.ico`（旧版结构退到 `assets/icon.ico`）。
 - **macOS**：`--windowed` 同时产出 `.app` bundle（`dist/<name>.app`，自含）与裸
   COLLECT 目录（`dist/<name>`）；打包器归档前者，zip 内为 `<name>/ConstantGirl.app`
   加同层的 `.command` 启动器与许可文件。本仓暂无 `assets/icon.icns`，暂用

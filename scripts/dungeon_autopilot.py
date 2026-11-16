@@ -93,7 +93,7 @@ _DATA_ROOT = os.path.join(tempfile.mkdtemp(prefix="dungeon_autopilot_data_"), "d
 os.makedirs(os.path.join(_DATA_ROOT, "user"), exist_ok=True)
 paths.data_dir = lambda: _DATA_ROOT
 
-# 内置小游戏包（py 后端按当前 data_dir 解析加载）也要进隔离数据目录，
+# 内置小游戏包按当前 data_dir 解析加载也要进隔离数据目录，
 # mini-game-py 场景才能真的触发覆盖层舞台。用 resource_root() 而不是 __file__
 # 相对路径：打包态（PyInstaller）里入口脚本的 __file__ 不在 data/ 这棵树上。
 import shutil  # noqa: E402
@@ -101,15 +101,6 @@ import shutil  # noqa: E402
 _MINIGAMES_SRC = os.path.join(paths.resource_root(), "data", "packs", "minigames")
 if os.path.isdir(_MINIGAMES_SRC):
     shutil.copytree(_MINIGAMES_SRC, os.path.join(_DATA_ROOT, "packs", "minigames"))
-
-# web 分派链路的桩包（escape_giantess 已迁到 py 后端；web 通道用桩包回归）
-_WEB_STUB = os.path.join(_DATA_ROOT, "packs", "minigames", "web_stub")
-os.makedirs(_WEB_STUB, exist_ok=True)
-with open(os.path.join(_WEB_STUB, "manifest.json"), "w", encoding="utf-8") as fh:
-    json.dump({"id": "web_stub", "name": "web桩", "backend": "web",
-               "entry": "session.html"}, fh, ensure_ascii=False)
-with open(os.path.join(_WEB_STUB, "session.html"), "w", encoding="utf-8") as fh:
-    fh.write("<html><body>web stub</body></html>")
 
 # 官方组件包是窗口层常驻 Python 包（dungeon/window/component_pack），随 registry
 # 正常导入，与 data_dir 重定向无关——这里不再需要任何注入。
@@ -1714,92 +1705,6 @@ def scene_text_components():
               win._check_results)
 
 
-class _MiniGameHost(ScriptedHost):
-    """小游戏宿主桩：记录 launch 调用并立即回传预置结果（模拟 TkHost 异步链）。
-
-    真实 TkHost 从子进程 watch 线程回调；桩在调用线程直接回调
-    ``on_result``——window 侧经 ``_frame.call`` 并入帧线程，线程语义一致。
-    """
-
-    def __init__(self, results):
-        super().__init__()
-        self.results = list(results)
-        self.launch_calls = []
-
-    def launch_mini_game(self, game_id, config=None, on_result=None) -> bool:
-        self.launch_calls.append((game_id, dict(config or {})))
-        result = self.results.pop(0) if self.results else None
-        if callable(on_result):
-            on_result(result)
-        return True
-
-
-def scene_mini_game():
-    """mini_game 触发器：整数返回值落选择记录、关联 goto 同步跳转、中断不清章节。
-
-    流程：第一步进后触发「小游戏·开场」（返回值 3 → 关联 goto 触发器按
-    「选择:小游戏·开场」同一步内跳「返回值章」）；第二次触发发生在
-    「返回值章」（无结果 → 挂起解除、原地继续）。小游戏自身不配任何跳转。
-    """
-    host = _MiniGameHost([
-        {"level": 3},   # 触发器一：结算返回值 3
-        None,           # 触发器二：用户关窗，无结果
-    ])
-    # 单句段落：一次 click 恰好完成一次步进（多句段落要多次点击逐句揭示）
-    _AI.paragraphs = ["街道在脚下震颤。", "人群开始骚动。", "她低头笑了。"]
-    _AI.index = 0
-    config = _scenario_config()
-    config["chapters"] = [{"name": "开场", "start": True}, {"name": "返回值章"}]
-    config["triggers"] = [
-        # 只结算一次：否则结算后的重判会立刻再次触发
-        {"name": "小游戏·开场", "chapter": "开场", "action_type": "mini_game",
-         "action_data": {"game": "web_stub", "target_level": 3},
-         "repeatable": False},
-        # 置于关联 goto 之前：结算后的重判里先因章节不符跳过，下一步才触发
-        {"name": "小游戏·返回值章", "chapter": "返回值章", "action_type": "mini_game",
-         "action_data": {"game": "web_stub", "target_level": 1}},
-        # 结算重判与步进判定同一套条件：返回值 3 → 跳「返回值章」
-        {"name": "结算跳转", "chapter": "开场", "action_type": "goto",
-         "condition": {"operator": "and", "rules": [
-             {"key": "选择:小游戏·开场", "metric": "last", "target": 3,
-              "comparator": "==", "value": 3}]},
-         "action_data": {"chapter": "返回值章"}},
-    ]
-    win, result = _make_window(
-        [("click", 1), ("sleep", 1.5), ("check", _check_mini_game_win),
-         ("click", 1), ("sleep", 1.5), ("check", _check_mini_game_abort),
-         ("close", None)],
-        explore=False, host=host,
-        config_overrides={"chapters": config["chapters"],
-                          "triggers": config["triggers"]})
-    check("小游戏：launch 恰好两次",
-          len(host.launch_calls) == 2
-          and all(gid == "web_stub" for gid, _cfg in host.launch_calls),
-          host.launch_calls)
-    check("小游戏：场景断言全部通过",
-          bool(win._check_results) and all(s == "ok" for s, _ in win._check_results),
-          win._check_results)
-
-
-def _check_mini_game_win(win):
-    assert win.current_chapter == "返回值章", win.current_chapter
-    assert win.pending_mini_game is None, win.pending_mini_game
-    records = [e for e in win.replay_data
-               if e.get("kind") == "trigger" and e.get("action_type") == "mini_game"]
-    assert records and records[0].get("game_result") == {"level": 3}, records
-    assert records[0].get("choice_value") == 3, records[0]
-    assert win.trigger_choices.get("小游戏·开场") == [3], win.trigger_choices
-    assert any(h.get("type_str") == "【小游戏】" for h in win.story_history)
-
-
-def _check_mini_game_abort(win):
-    assert win.current_chapter == "返回值章", win.current_chapter
-    assert win.pending_mini_game is None, win.pending_mini_game
-    records = [e for e in win.replay_data
-               if e.get("kind") == "trigger" and e.get("action_type") == "mini_game"]
-    assert len(records) == 2 and "game_result" not in records[1], records
-
-
 def scene_mini_game_py():
     """py 后端小游戏（覆盖层舞台）：打开 / 结算记返回值 / ESC 中止。
 
@@ -2041,7 +1946,6 @@ SCENES = {
     "chapter-bgm": scene_chapter_bgm,
     "chapter-voice-fx": scene_chapter_voice_fx,
     "dialogue-voice": scene_dialogue_voice,
-    "mini-game": scene_mini_game,
     "mini-game-escape": scene_mini_game_escape,
     "mini-game-py": scene_mini_game_py,
     "mini-game-repeat": scene_mini_game_repeat,

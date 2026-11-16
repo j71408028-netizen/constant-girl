@@ -121,9 +121,8 @@
 
 | 脚本 | 覆盖 | 命令 |
 |---|---|---|
-| `dungeon_autopilot.py` | 真窗口生命周期：构造 → `run()` → 步进 → 关闭 → 落盘（15 场景，含原生输入线程、章节背景音乐、章节对话语音物理效果、小游戏触发器（py 覆盖层舞台与 web 子进程两条链路的胜负分支与中断、escape 移植版真渲染冒烟）、对话语音与文本组件接管冒烟） | `python scripts/dungeon_autopilot.py` |
-| `smoke_mini_game.py` | 小游戏子进程链路（需显示器 + pywebview）：子进程自动结算回传 / 中断按无结果处理 | `python tests/smoke_mini_game.py` |
-| `check_minigame.py` | 小游戏包契约：manifest（backend/entry/params）+ py 游戏代码（恰一个 MiniGame 子类、禁渲染后端/线程/print、禁私有面 `api._`） | `python tests/check_minigame.py` |
+| `dungeon_autopilot.py` | 真窗口生命周期：构造 → `run()` → 步进 → 关闭 → 落盘（14 场景，含原生输入线程、章节背景音乐、章节对话语音物理效果、小游戏覆盖层舞台的结算分支与中断、escape 移植版真渲染冒烟、对话语音与文本组件接管冒烟） | `python scripts/dungeon_autopilot.py` |
+| `check_minigame.py` | 小游戏包契约：manifest（backend/entry/params）+ 游戏代码（恰一个 MiniGame 子类、禁渲染后端/线程/print、禁私有面 `api._`） | `python tests/check_minigame.py` |
 
 判定方式详见 [调试自动化](window_automation.md) §4：**看结论行，不看退出码**（默认如此；
 `--require-clean-exit` 复测退出路径时退出状态也计入验收）。

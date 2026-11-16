@@ -4,13 +4,9 @@
 
 1. **内置注册表**（``REGISTRY``：id → :class:`~.base.MiniGame` 子类）——
    常驻框架包，随应用发布；
-2. **数据包** ``data/packs/minigames/<id>/``——``manifest.json`` 声明后端：
-   - ``"py"``：``entry`` 指向的 Python 文件里**恰一个** MiniGame 子类，
-     运行时动态加载（契约由 ``tests/check_minigame.py`` 守卫）；
-   - ``"web"``：``session.html``，交给宿主端口 ``launch_mini_game()``
-     用子进程 pywebview 打开（兼容通道，见 ui/hosting/mini_game_host.py）。
-
-无 manifest 但存在 ``session.html`` 的目录按 web 兼容（历史包）。
+2. **数据包** ``data/packs/minigames/<id>/``——``manifest.json`` 的 ``entry``
+   指向的 Python 文件里**恰一个** MiniGame 子类，运行时动态加载（契约由
+   ``tests/check_minigame.py`` 守卫）。小游戏在副本会话窗口内的覆盖层舞台运行。
 
 本模块**不 import 渲染后端**（解析发生在触发器线程，渲染只在 stage）；游戏文件
 里禁止出现 imgui_bundle / dearpygui / tkinter / threading 等，一律由契约脚本扫出来。
@@ -27,10 +23,8 @@ from dungeon.minigame_pack import (load_manifest as _load_manifest,
                                    pack_root as _pack_root)
 from .base import GameAPI, MiniGame, clamp_dt  # noqa: F401  （作者只 import 本包）
 
-#: 支持的后端
+#: 小游戏后端标识：仅 py（会话窗口内覆盖层舞台），保留常量供编辑器候选清单与诊断使用。
 BACKEND_PY = "py"
-BACKEND_WEB = "web"
-BACKENDS = (BACKEND_PY, BACKEND_WEB)
 
 #: 内置游戏注册表（id → MiniGame 子类）。当前内置游戏都在数据包里，
 #: 留空作为框架扩展点：这里登记的游戏优先于数据包同名 id。
@@ -92,24 +86,16 @@ def resolve_mini_game(game_id):
     manifest = _load_manifest(root) or {}
     backend = str(manifest.get("backend") or "").strip()
     label = str(manifest.get("name") or game_id)
-    if backend == BACKEND_PY:
-        entry = str(manifest.get("entry") or "game.py")
-        entry_path = os.path.join(root, entry)
-        if not os.path.isfile(entry_path):
-            process_log.log(f"[MiniGame] 小游戏「{game_id}」的入口不存在：{entry_path}")
-            return None
-        return ResolvedMiniGame(game_id, BACKEND_PY, label=label,
-                                root=root, entry=entry_path)
-    if backend == BACKEND_WEB:
-        if not os.path.isfile(os.path.join(root, "session.html")):
-            process_log.log(f"[MiniGame] web 小游戏「{game_id}」缺少 session.html")
-            return None
-        return ResolvedMiniGame(game_id, BACKEND_WEB, label=label, root=root)
-    # 无 manifest / 未声明后端：session.html 存在即按 web 兼容（历史包）
-    if os.path.isfile(os.path.join(root, "session.html")):
-        return ResolvedMiniGame(game_id, BACKEND_WEB, label=label, root=root)
-    process_log.log(f"[MiniGame] 小游戏「{game_id}」既无有效 manifest 也无 session.html")
-    return None
+    if backend and backend != BACKEND_PY:
+        process_log.log(f"[MiniGame] 小游戏「{game_id}」声明了不支持的后端「{backend}」")
+        return None
+    entry = str(manifest.get("entry") or "game.py")
+    entry_path = os.path.join(root, entry)
+    if not os.path.isfile(entry_path):
+        process_log.log(f"[MiniGame] 小游戏「{game_id}」的入口不存在：{entry_path}")
+        return None
+    return ResolvedMiniGame(game_id, BACKEND_PY, label=label,
+                            root=root, entry=entry_path)
 
 
 def mini_game_params(game_id):
@@ -137,6 +123,6 @@ def list_mini_games():
 
 
 __all__ = ["GameAPI", "MiniGame", "ResolvedMiniGame", "REGISTRY",
-           "MINI_GAME_DEFAULT_ID", "BACKEND_PY", "BACKEND_WEB", "BACKENDS",
+           "MINI_GAME_DEFAULT_ID", "BACKEND_PY",
            "clamp_dt", "resolve_mini_game", "list_mini_games",
            "mini_game_params"]

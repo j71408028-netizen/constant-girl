@@ -19,9 +19,6 @@ X11 连接——子进程内的上下文销毁只影响它自己的 GL 栈，父
 ``discard_pending_quit``  空操作（本进程只有 GLFW 一个 GUI，消息归自己）
 ``dialog``            协议请求，父进程用界面自己的弹框实现代问
 ``open_replay_file``  协议请求，父进程弹文件框并回传回放数据与文件路径
-``launch_mini_game``  与 ``TkHost`` 同款：孙进程跑 ``mini_game_host``，
-                      结果写文件、watch 线程回调（子进程没有 Tk 弹框，
-                      失败只记过程日志）
 ``register_active_window``  空操作（宿主整体退出靠管道断开，见下）
 ``default_font``      空串（字体家族随构造参数传入，不依赖宿主）
 ====================  ====================================================
@@ -45,14 +42,9 @@ X11 连接——子进程内的上下文销毁只影响它自己的 GL 栈，父
 ``data/``。
 """
 
-import importlib.util
-import json
 import os
-import subprocess
 import sys
-import tempfile
 import threading
-import time
 
 from dungeon.window.host import DIALOG_ASK, HostPort
 
@@ -196,80 +188,6 @@ class ChildHost(HostPort):
         if not isinstance(data, list):
             return None
         return data, str(box.get("path") or "")
-
-    # ---------------- 内置小游戏 ----------------
-    def launch_mini_game(self, game_id, config=None, on_result=None) -> bool:
-        """孙进程跑 ``mini_game_host``（与 ``TkHost.launch_mini_game`` 同款）。
-
-        差异只有失败提示：子进程没有 Tk 弹框可用，一律记入过程日志。
-        """
-        from dungeon import process_log
-        from paths import data_dir
-
-        if importlib.util.find_spec("webview") is None:
-            process_log.log("[MiniGame] 未安装 pywebview，小游戏窗口不可用"
-                            "（pip install pywebview）")
-            return False
-        entry = os.path.join(data_dir(), "packs", "minigames", str(game_id),
-                             "session.html")
-        if not os.path.isfile(entry):
-            process_log.log(f"[MiniGame] 找不到小游戏「{game_id}」的入口文件：{entry}")
-            return False
-
-        config = config if isinstance(config, dict) else {}
-        try:
-            target = max(1, int(float(config.get("target_level", 3) or 3)))
-        except (TypeError, ValueError):
-            target = 3
-        out_path = os.path.join(
-            tempfile.gettempdir(),
-            f"giantessgenerator_minigame_{os.getpid()}_{time.time_ns()}.json")
-
-        def _emit(result):
-            if callable(on_result):
-                try:
-                    on_result(result)
-                except Exception as exc:
-                    process_log.log(f"[MiniGame] 结果回调异常: {exc}")
-
-        def _watch():
-            try:
-                if getattr(sys, "frozen", False):
-                    cmd = [sys.executable, "--mini-game-host", entry,
-                           str(target), out_path]
-                else:
-                    host_script = os.path.join(
-                        os.path.dirname(os.path.abspath(__file__)),
-                        "mini_game_host.py")
-                    cmd = [sys.executable, host_script, entry, str(target), out_path]
-                flags = (subprocess.CREATE_NO_WINDOW if _IS_WINDOWS else 0)
-                proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
-                                        stderr=subprocess.DEVNULL,
-                                        creationflags=flags)
-                code = proc.wait()
-                if code != 0:
-                    process_log.log(f"[MiniGame] 小游戏进程异常退出（退出码 {code}）")
-            except Exception as exc:
-                process_log.log(f"[MiniGame] 小游戏进程启动失败: {exc}")
-                _emit(None)
-                return
-            result = None
-            try:
-                if os.path.isfile(out_path):
-                    with open(out_path, "r", encoding="utf-8") as fh:
-                        loaded = json.load(fh)
-                    result = loaded if isinstance(loaded, dict) and loaded else None
-            except (OSError, ValueError):
-                result = None
-            try:
-                os.remove(out_path)
-            except OSError:
-                pass
-            _emit(result)
-
-        threading.Thread(target=_watch, daemon=True,
-                         name="mini-game-watch").start()
-        return True
 
 
 # ==================== 子进程主体 ====================

@@ -157,7 +157,8 @@ scenarios:  _default → default           巨影临城 → juying_lincheng
 - 副本渲染后端 **Dear PyGui → imgui-bundle**（原 `dearpygui` 依赖移除）。
 - 新增支持 **Linux（X11 / XWayland）**与 **macOS（arm64 只有 wheel）**。
 - 新增依赖：`imgui-bundle`、`numpy`、`darkdetect`；可选 `edge-tts`（语音）、
-  `miniaudio`（语音物理效果）、`pywebview`（内置小游戏窗口，Windows 走 WebView2）。
+  `miniaudio`（语音物理效果）。小游戏始终在副本会话窗口内的覆盖层舞台运行，
+  不引入额外依赖（早期规划的 `pywebview`/`web` 后端已砍掉）。
 - 单文件名改号：`GiantessGenerator` → **`ConstantGirl`**，数据目录 `constant-girl`
   （`_LEGACY_SLUGS = ("GiantessGenerator",)` 承接旧目录）。
 
@@ -226,9 +227,9 @@ scenarios:  _default → default           巨影临城 → juying_lincheng
 ### 3.6 小游戏
 
 - `dungeon/minigame_pack.py` + `dungeon/window/minigame/{base,stage}.py`：
-  小游戏作为**资源类型**打包（`data/packs/minigames/<id>/game.py` + `manifest.json`）。
+  小游戏作为**资源类型**打包（`data/packs/minigames/<id>/game.py` + `manifest.json`），
+  在副本会话窗口内的覆盖层舞台运行。
 - 内置两个：`escape_giantess`（逃脱）、`reaction`（反应）。
-- 窗口托管：`ui/hosting/mini_game_host.py`（`pywebview`，Windows 走 WebView2，可选依赖）。
 
 ### 3.7 角色聊天
 

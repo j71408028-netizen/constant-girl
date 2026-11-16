@@ -1,8 +1,7 @@
 """小游戏运行时：会话窗口内的全屏覆盖层舞台（imgui 立即模式）。
 
-进入方式：``mini_game`` 触发器按 manifest 后端分派——``py`` 后端走这里，
-把游戏渲染成**叠在副本界面上的覆盖层**；``web`` 后端仍走宿主端口
-``launch_mini_game()`` 的子进程 pywebview（兼容通道）。
+进入方式：``mini_game`` 触发器解析出小游戏包后走这里，把游戏渲染成
+**叠在副本界面上的覆盖层**。
 
 画布结构（P6 起）：舞台是 ``_draw_frame`` **最后**绘制的一个顶层窗口，铺满客户区
 （半透明压暗底），窗口内用 ``imgui.get_window_draw_list()`` 逐帧画游戏画面——
@@ -24,9 +23,8 @@ drawlist」等价，见 ``.workbuddy/imgui-migration/50-analysis-canvas-as-compo
   ``begin`` 因而压在工具条之上，鼠标也落在舞台上（工具条不会被误点）；
 - ESC：会话级 ESC 回调转交 :meth:`MiniGameStageHandler._minigame_escape`
   → 中止（无结果，副本照常继续）；
-- 游戏自身 ``api.finish()``：结算 → 销毁舞台 → 结果经与 web 后端同一条
-  ``_on_mini_game_result`` 管线记入返回值与回放（小游戏不区分胜负，
-  分支由其他触发器按返回值判定）。
+- 游戏自身 ``api.finish()``：结算 → 销毁舞台 → 结果经 ``_on_mini_game_result``
+  管线记入返回值与回放（小游戏不区分胜负，分支由其他触发器按返回值判定）。
 
 离屏画布（:class:`_CanvasTexture`）：**宿主自持的一张 GL 纹理** + 按脏矩形
 ``glTexSubImage2D`` 增量上传（见 ``dungeon/window/gl_texture.py`` 与
@@ -839,7 +837,7 @@ class _MiniGameStage:
         self._on_result = None
         if on_result is not None:
             # 结果必回传一次：正常结算给结果字典；中止 / 异常给 None
-            # （与 web 后端「用户关窗 = 无结果」同一语义，接收方据此清挂起态）
+            # （接收方据此清挂起态）
             on_result(self._result)
 
     # ---------------- 结算 ----------------
