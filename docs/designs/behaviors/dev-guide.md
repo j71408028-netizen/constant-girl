@@ -24,7 +24,8 @@
 - `report`（`services/exploration/arbiter.py` 报告选取仲裁 +
   `services/exploration/report.py` 报告引擎）：车道窗口 / 联合分 /
   近匹配提拔是模块策略；仲裁模型参数与引擎的伤亡 / 耐久参数是
-  `report.model.*` 常量钩子。硬闸、物理走查与 stuck 判定不开放
+  `report.model.*` 常量钩子。硬闸、物理走查与 stuck 判定不开放；
+  描述选句 `select_quip_with_budget` 已收回为内部函数，不在开放面
   （见 [hooks-report.md](hooks-report.md) 的 `report` 组）。
 - `chat`（`services/chat/`，聊天提示词与投递节奏）：世界语境、话题候选 /
   措辞、关系与聊天习惯文案、三轴坐标、主动搭话门槛与回复延迟是模块策略，

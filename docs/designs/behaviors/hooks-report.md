@@ -8,8 +8,10 @@
 自由偏离）。`ruling` 参数是 :class:`~services.exploration.arbiter.SlotRuling`
 （字段 `cand` / `addr` / `lanes` / `affordance` / `starved` / `promoted` /
 `env_estimate`）。硬闸（可达 / 私有名 / 维度 / 耐久）、物理走查（位置
-演化）与 stuck 判定不开放。`logic.select_quip_with_budget` /
-`logic.get_comparisons` 的 key 不变（scope `logic` 是已部署契约）。
+演化）与 stuck 判定不开放。描述选句 `select_quip_with_budget` 与尺寸对比
+`get_comparisons` 都不在开放面：前者已收回为内部函数（资格过滤见 `_quip_candidates`，
+预算选取见 `select_quip_with_budget`），后者作为 `logic.get_comparisons` 保留
+（scope `logic` 是已部署契约）。
 
 报告引擎（`services/exploration/report.py`）的伤亡 / 耐久数值也在此组：
 突破概率缩放、耐久伤害系数、残破阈值与无事件兜底（见下表常量行）。
@@ -29,7 +31,7 @@
 | `report.model.pool_neighborhood` | 常量 float | `2.0` | 充裕度坐标邻域口径（坐标距离上限）。 |
 | `report.model.promotion_cap_divisor` | 常量 float | `2.0` | 提拔上限 = 对比槽位数 / 该除数（除数下限 1.0）。 |
 | `report.model.reach_multiplier` | 常量 float | `10.0` | 可达范围 = 身高倍数；硬闸语义不开放，仅开放数值。 |
-| `report.model.env_consistency` | 常量 float | `0.5` | 描述文本环境一致性加分上限（消费于 `logic.select_quip_with_budget`）。 |
+| `report.model.env_consistency` | 常量 float | `0.5` | 描述文本环境一致性加分上限（消费于内部函数 `select_quip_with_budget` 的预算选取段）。 |
 | `report.model.env_dev_range` | 常量 float | `1.4` | 环境偏差归一分母（环境因子值域全宽）。 |
 | `report.model.breakthrough_scale` | 常量 float | `1.0` | 终局坐标突破概率整体缩放（`0` = 永不突破）；`will` 门控与「涩涩」直通语义不开放。 |
 | `report.model.durability_damage_scale` | 常量 float | `0.1` | 独特地标单次耐久伤害系数（伤害 = 对比倍率 × 身高比² × 破坏性 × 本系数）。 |

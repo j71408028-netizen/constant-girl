@@ -141,43 +141,27 @@ def _report_model(key: str) -> float:
     return float(get_runtime().resolve_value(key))
 
 
-@behavior_hook("logic", "select_quip_with_budget")
-def select_quip_with_budget(
+def _quip_candidates(
         size_cat: str,
         intrusion_val: float,
         destruction_val: float,
         quips_working: Dict,
         locked_coords: Set,
-        cumulative_actual: float,
-        cumulative_base: float,
-        rate_factor: float = 1.0,
-        step_index: int = 0,
-        selected_tags: Optional[List[str]] = None,
-        skip_base_prob: float = 0.0,
-        posture_list: Optional[List[int]] = None,
-        blocked_words: Optional[List[str]] = None,
-        lanes: Optional[List] = None,
-        env_estimate: Optional[float] = None,
-) -> Tuple[Optional[str], Optional[str], Optional[Tuple[int, int]], float, float, float]:
-    """按坐标邻域与步进预算选一条描述。
+        selected_tags: Optional[List[str]],
+        skip_base_prob: float,
+        posture_list: Optional[List[int]],
+        blocked_words: Optional[List[str]],
+        lanes: Optional[List],
+) -> List:
+    """资格过滤（裁定级）：车道窗口 / 坐标邻域 / 屏蔽词 / tag / 姿态。
 
-    lanes：选取仲裁器的资格窗口 ``[(风格, 车道权重)]``（裁定级）。None =
-    不分层（仅限未走仲裁的直接调用）。窗口外风格不参与选取；窗口内风格
-    按车道权重获得排序加分（只影响优先序，不排除低权重者）。消费语义不
-    变：选中的条目仍从 ``quips_working`` 中移除。行为包覆盖实现必须接受
-    这两个参数并遵循其语义，否则与报告引擎的契约不匹配。
-
-    env_estimate：槽位地址的环境估计（档案环境轴）。None = 零证据，
-    软权重中性缺席；非空时对每条候选文本单次采样 ``compute_environment_
-    factor``，与估计偏差越小排序加分越高——软权重，不做硬闸，矛盾文本
-    仍可被选（池耗尽降级不受影响）。
+    返回 ``[(coord, quip, dist)]``；只筛不取，不消费 ``quips_working``。
+    窗口外风格、邻域外坐标、屏蔽词命中、tag / 姿态不符的条目一律不入池。
     """
-    lane_weights = None
-    if lanes is not None:
-        lane_weights = {s: w for s, w in lanes}
+    lane_weights = {s: w for s, w in lanes} if lanes is not None else None
     matrix = quips_working.get(size_cat, {})
     if not matrix:
-        return None, None, None, 0.0, cumulative_actual, cumulative_base
+        return []
 
     nearest_coord = (round(intrusion_val), round(destruction_val))
     nearest_list = matrix.get(nearest_coord)
@@ -211,7 +195,7 @@ def select_quip_with_budget(
                         candidates.append(((i, d), q, dist))
 
     if not candidates:
-        return None, None, None, 0.0, cumulative_actual, cumulative_base
+        return []
 
     if selected_tags and skip_base_prob > 0:
         has_dress = "裙装" in selected_tags
@@ -247,7 +231,7 @@ def select_quip_with_budget(
             candidates = filtered
 
     if not candidates:
-        return None, None, None, 0.0, cumulative_actual, cumulative_base
+        return []
 
     if posture_list is not None and len(posture_list) > 0:
         filtered2 = []
@@ -260,10 +244,43 @@ def select_quip_with_budget(
                 continue
             filtered2.append((coord, q, dist))
         candidates = filtered2
+    return candidates
 
+
+def select_quip_with_budget(
+        size_cat: str,
+        intrusion_val: float,
+        destruction_val: float,
+        quips_working: Dict,
+        locked_coords: Set,
+        cumulative_actual: float,
+        cumulative_base: float,
+        rate_factor: float = 1.0,
+        step_index: int = 0,
+        selected_tags: Optional[List[str]] = None,
+        skip_base_prob: float = 0.0,
+        posture_list: Optional[List[int]] = None,
+        blocked_words: Optional[List[str]] = None,
+        lanes: Optional[List] = None,
+        env_estimate: Optional[float] = None,
+) -> Tuple[Optional[str], Optional[str], Optional[Tuple[int, int]], float, float, float]:
+    """按坐标邻域与步进预算选一条描述（预算选取段）。
+
+    资格过滤（车道窗口 / 邻域 / 屏蔽词 / tag / 姿态）已拆到
+    ``_quip_candidates``，裁定级语义集中在那里，本函数不再接受行为包覆盖。
+    车道权重 ``lanes`` 在此转为文本加分（软权重，只调优先序）；``env_estimate``
+    是槽位环境估计，偏差越小加分越高，同样不做硬闸。选中的条目仍从
+    ``quips_working`` 就地移除，返回 6 元组不变。
+    """
+    empty = (None, None, None, 0.0, cumulative_actual, cumulative_base)
+    candidates = _quip_candidates(
+        size_cat, intrusion_val, destruction_val, quips_working, locked_coords,
+        selected_tags, skip_base_prob, posture_list, blocked_words, lanes)
     if not candidates:
-        return None, None, None, 0.0, cumulative_actual, cumulative_base
+        return empty
 
+    lane_weights = {s: w for s, w in lanes} if lanes is not None else None
+    matrix = quips_working.get(size_cat, {})
     steps = [q['step'] for _, q, _ in candidates]
     base_step = sorted(steps)[len(steps) // 2]
 

@@ -12,7 +12,7 @@
 |---|---|---|
 | 1. 尺寸匹配 | `core/logic/quips.py::get_comparisons` | 按部位 × 地标的倍率挑候选，只管「合不合身」，完全不知道空间；姿态类标签（能躺着不站着 / 四处走走等）在这里生效 |
 | 2. 选取仲裁 | `services/exploration/arbiter.py::SelectionArbiter` | 空间硬闸（可达 / 私有名 / 维度 / 耐久）＋ 描述配对车道 ＋ 顺序调解（本文 §2 / §3） |
-| 3. 描述选取 | `core/logic/quips.py::select_quip_with_budget` | 在仲裁给出的车道窗口内，按坐标邻域与步进预算选一条描述 |
+| 3. 描述选取 | `services/exploration/quips.py::select_quip_with_budget` | 在仲裁给出的车道窗口内，按坐标邻域与步进预算选一条描述（资格过滤拆在 `_quip_candidates`，选句不再对行为包开放） |
 | 4. 演化推进 | `services/exploration/report.py::ReportEngine` | 坐标 / 步长 / 伤亡演化、地标耐久扣减、位置写回 |
 
 设计定位一句话：仲裁器是**配对的裁决者，不是指挥官**——只有配对资格
@@ -91,9 +91,9 @@
 - 每份报告携带 `coverage`（星槽数 / 浪费风格 / 实际触发的风格）与
   `promotions`（提拔记录：谁让位给谁），供后续界面展示与调试——目前
   只作为数据，未上界面；
-- 描述选取的覆盖实现必须接受 `lanes` / `env_estimate` 参数并遵循其
-  语义（车道资格窗口是裁定级，环境一致性是软权重），引擎不再提供
-  旧签名兼容路径；
+- 描述选取已收回为内部函数、不再对行为包开放：`_quip_candidates` 负责
+  `lanes` 资格过滤（裁定级），`select_quip_with_budget` 负责预算选取，
+  `env_estimate` 环境一致性仍为软权重，引擎不再提供旧签名兼容路径；
 - 仲裁的决策面已开放为 `report` 组：车道窗口 / 联合分 / 近匹配提拔是
   模块策略钩子，模型参数（容差、提拔上限、联合分权重、可达范围等）是
   `report.model.*` 常量钩子；硬闸、物理走查与 stuck 判定不开放
@@ -108,7 +108,8 @@
 | 关注点 | 位置 |
 |---|---|
 | 仲裁主入口 / 车道 / 充裕度 / 提拔 / 物理走查 | `services/exploration/arbiter.py` |
-| 描述选取与车道窗口 / 环境一致性加分 | `core/logic/quips.py::select_quip_with_budget`（`lanes` / `env_estimate` 参数） |
+| 描述选取：资格过滤（`lanes` 车道窗口） | `services/exploration/quips.py::_quip_candidates` |
+| 描述选取：预算选取 / 环境一致性加分（`env_estimate`） | `services/exploration/quips.py::select_quip_with_budget` |
 | 报告引擎接线 | `services/exploration/report.py::generate` |
 | 角色空间档案（区域 / 环境轴 / 环境偏好轴 + TAG 先验 + 活动区域） | `services/character/spatial.py` |
 | 地标地址解析 / stuck 选项 | `services/exploration/address_plan.py` |
