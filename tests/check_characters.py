@@ -305,6 +305,10 @@ check("坏 JSON 解析为空列表", parse_character_updates("不是JSON") == []
 check("提问解析兼容新格式", parse_detail_queries(_raw) == ["她有多大"])
 check("提问解析保留非 JSON 行兜底",
       parse_detail_queries("想问她多大\n想问外面情况") == ["想问她多大", "想问外面情况"])
+check("只有 characters 的 JSON 不再把原文当问题",
+      parse_detail_queries('{"characters": [{"handle": "甲"}]}') == [])
+check("提问最多保留 2 条",
+      len(parse_detail_queries('{"queries": ["一", "二", "三"]}')) == 2)
 
 # ---------------- 13. intro_as 与语音解析 ----------------
 _mystery = cast.normalize_member({
@@ -363,6 +367,8 @@ check("旧摘要响应没有 character_updates 时行为不变",
 for _level in COUPLING_LEVELS:
     check(f"耦合等级 {_level} 有摘要提示",
           bool(str(COUPLING_PROMPTS[_level].get("summary_system") or "").strip()))
+    check(f"耦合等级 {_level} 有细节提示",
+          bool(str(COUPLING_PROMPTS[_level].get("detail_system") or "").strip()))
     _level_summ = StorySummarizer(block_size=1, coupling_level=_level)
     _level_summ.record("dialog", "她推开了门。", "第二幕")
     _level_summ.maybe_compress(1, ai_client=_SummaryClient())

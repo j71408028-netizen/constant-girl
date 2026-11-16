@@ -489,6 +489,26 @@ check("校验：临时称呼与别称撞车 → error",
       any(d.level == "error" and "李队" in d.message for d in _diag_intro),
       _intro_messages)
 
+# ---------------- 11. 预生成等待接线（源码级，防字段漏初始化） ----------------
+# 42e3c27 提交了 engine/prompts 里对这两个字段的消费，却漏了 base.py 的初始化，
+# 导致 getattr(..., None) 恒为空、等待静默失效。这里钉住"消费方与提供方仍在"。
+def _source(rel_path):
+    with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           rel_path), encoding="utf-8") as fh:
+        return fh.read()
+
+
+_base_source = _source(os.path.join("dungeon", "window", "base.py"))
+_engine_source = _source(os.path.join("dungeon", "window", "engine.py"))
+_prompts_source = _source(os.path.join("dungeon", "prompts.py"))
+check("窗口初始化细节提问来源步", "self._detail_query_step = None" in _base_source)
+check("窗口初始化并放行预生成等待 Event",
+      "self._detail_query_done = threading.Event()" in _base_source
+      and "self._detail_query_done.set()" in _base_source)
+check("预生成消费等待 Event", "_detail_query_done" in _engine_source
+      and ".wait(" in _engine_source)
+check("提示词消费并清空来源步", "_detail_query_step" in _prompts_source)
+
 # ---------------- 结论 ----------------
 print()
 print(f"共 {total} 项，失败 {len(failures)} 项")

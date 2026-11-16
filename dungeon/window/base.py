@@ -30,6 +30,7 @@
 """
 
 import os
+import threading
 from collections import deque
 
 from core.ai import create_client
@@ -259,7 +260,11 @@ class DungeonWindowBase:
         self._advance_due = 0.0
         # 细节探究：AI 在后台提出的想了解细节，下次生成前检索解答并消费
         self._detail_queries = []
+        self._detail_query_step = None
         self._detail_querying = False
+        # 预生成会等这次提问落地再组装提示词（见 engine._start_pregen）
+        self._detail_query_done = threading.Event()
+        self._detail_query_done.set()
         # 预演化：下一步的预生成结果（玩家点击前提前发出的生成调用）。
         # _pregen = {"turn", "messages_before", "response", "text_type"}
         self._pregen = None
