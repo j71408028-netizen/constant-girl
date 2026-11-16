@@ -217,8 +217,15 @@ asm_bundle.mkdir()
 _mk(asm_bundle / "constant-girl.exe", "exe")
 asm_src = ROOT / "asm_src"
 _mk(asm_src / "LICENSE", "MIT")
-stage2, logs2 = pkg.prepare_runtime_stage(asm_bundle, asm_work, asm_src, None,
-                                          "constant-girl", "ConstantGirl")
+# 下面按 Windows 产物断言 .bat 启动器；prepare_runtime_stage 按当前平台选扩展名，
+# 在 Linux/macOS runner 上会生成 .sh / .command，因此临时切到 win32 保持口径一致。
+_platform_before_stage = sys.platform
+try:
+    sys.platform = "win32"
+    stage2, logs2 = pkg.prepare_runtime_stage(asm_bundle, asm_work, asm_src, None,
+                                              "constant-girl", "ConstantGirl")
+finally:
+    sys.platform = _platform_before_stage
 check("装配返回产物目录本身", stage2 == asm_bundle)
 check("装配日志含许可/跳过/启动器三项",
       len(logs2) == 3 and any("项目许可：LICENSE" in l for l in logs2)

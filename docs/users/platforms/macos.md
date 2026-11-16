@@ -30,11 +30,16 @@
 [`macos.yml`](../../../.github/workflows/macos.yml) 在 `macos-latest`（当前为 arm64）runner 上分两档验证：
 
 - **每 PR / 推 main**：整份依赖安装、导入自检、全部离线守卫、默认方案校验、小游戏无头模拟；
-- **每晚 + 手动**：原生窗口下的副本窗口自动驾驶、`smoke_mini`、`smoke_switch`，以及用官方
-  `build/macos/build_macos.sh` 打包后核对 `.app` 结构（含随包原生库清单）并上传产物。
+- **推 main / 每晚 / 手动**：用官方 `build/macos/build_macos.sh` 打包后核对 `.app` 结构
+  （`Contents/MacOS`、`Info.plist`、可执行入口与随包原生库清单）并上传产物。
+
+**真窗口冒烟不在这套 CI 里**：GitHub 托管的 macOS runner 没有 Aqua 登录会话，GLFW 建不出窗口
+（实测 22/26 场景超时），窗口/GL/字体验证由 Linux 上的
+[`gui-smoke.yml`](../../../.github/workflows/gui-smoke.yml)（xvfb + llvmpipe）承担。
 
 这些是**自动化证据**，不等于所有平台验收完成。以下项目 CI 无法覆盖，仍需真实用户环境补全：
 
+- macOS 上副本窗口/GL/字体链路的实际运行；
 - 下载后带 `com.apple.quarantine` 隔离属性时的「首次打开」体验与公证提示；
 - 真实音频外放听感、字体渲染与动画的人眼观感；
 - 真实旧版本数据目录的升级路径。
