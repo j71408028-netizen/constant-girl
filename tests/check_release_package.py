@@ -145,7 +145,14 @@ for plat, name in (("win", "constant-girl.exe"), ("linux", "constant-girl")):
 
 win_bundle = work / "stage_win"
 win_bundle.mkdir()
-written = pkg.write_maintenance_launchers(win_bundle, "constant-girl", "ConstantGirl")
+# write_maintenance_launchers 按当前平台选扩展名；这里要测的是 Windows 分支，
+# 在 Linux/macOS runner 上临时切到 win32，否则会生成 .sh 而非 .bat。
+_platform_before_launchers = sys.platform
+try:
+    sys.platform = "win32"
+    written = pkg.write_maintenance_launchers(win_bundle, "constant-girl", "ConstantGirl")
+finally:
+    sys.platform = _platform_before_launchers
 check("Windows 启动器落盘为 .bat", written == ["迁移旧版数据.bat", "检查更新.bat"], written)
 check("Windows 启动器内容 ASCII",
       all(all(b < 128 for b in (win_bundle / n).read_bytes()) for n in written))

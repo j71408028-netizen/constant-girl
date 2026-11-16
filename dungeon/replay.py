@@ -423,6 +423,7 @@ def material_paths(records, limit: int = MATERIAL_PATH_LIMIT) -> list:
     ``meta.assets`` 与读取侧的方案反查都从这里取，两边不会各列一份。
     """
     paths = []
+    cwd = os.path.abspath(os.getcwd())
     for record in records:
         if isinstance(record, ChapterRecord):
             candidates = ((record.background or {}).get("image_path"),
@@ -434,8 +435,22 @@ def material_paths(records, limit: int = MATERIAL_PATH_LIMIT) -> list:
         else:
             continue
         for candidate in candidates:
-            path = str(candidate or "").strip().lstrip("/\\")
-            if not path or os.path.isabs(path) or path in paths:
+            raw = str(candidate or "").strip()
+            if not raw:
+                continue
+            # 带盘符的 Windows 绝对路径不依赖方案目录，直接排除。
+            if os.path.splitdrive(raw)[0]:
+                continue
+            if os.path.isabs(raw):
+                # POSIX 上 "/images/a.png" 这类"方案根相对"写法同样满足 isabs，
+                # 不能一概排除：真正的系统绝对路径（os.path.abspath 产物）落在
+                # 当前工作目录内，方案内路径通常在其之外。据此区分——落在 cwd 内
+                # 的排除，其余去掉前导斜杠照常收录。
+                absolute = os.path.abspath(raw)
+                if absolute == cwd or absolute.startswith(cwd + os.sep):
+                    continue
+            path = raw.lstrip("/\\")
+            if not path or path in paths:
                 continue
             paths.append(path)
             if len(paths) >= limit:

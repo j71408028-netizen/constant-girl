@@ -122,9 +122,9 @@ check("描述风格已转目录布局",
       os.path.isfile(os.path.join(data, "packs", "quips", "events", "quips.csv"))
       and os.path.isfile(os.path.join(data, "packs", "quips", "events",
                                       "config.json")))
-check("取材表已归组",
-      os.path.isfile(os.path.join(data, "static", "materials", "A", "names.csv"))
-      and os.path.isfile(os.path.join(data, "static", "materials", "A",
+check("取材表已归组（组名归一为小写 a）",
+      os.path.isfile(os.path.join(data, "static", "materials", "a", "names.csv"))
+      and os.path.isfile(os.path.join(data, "static", "materials", "a",
                                       "presets.csv")))
 check("设置分家完成",
       os.path.isfile(os.path.join(data, "user", "resource_settings.json")))
