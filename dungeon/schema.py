@@ -21,6 +21,9 @@ from dungeon.audio import buses
 from dungeon.audio.chapters import (DEFAULT_BGM_FADE_SECONDS, DEFAULT_BGM_LEVEL)
 from dungeon.coupling import COUPLING_LEVELS, DEFAULT_COUPLING_LEVEL
 from dungeon.models import DungeonTextType
+from dungeon.speaker_notation import (DEFAULT_SPEAKER_NOTATION,
+                                      SPEAKER_NOTATIONS,
+                                      normalize_speaker_notation)
 from dungeon.audio.speech import (DEFAULT_OTHER_VOICES, DEFAULT_RATE,
                             DEFAULT_VOICE_HER, DEFAULT_VOICE_LEVEL,
                             DEFAULT_VOICE_PROTAGONIST, normalize_voice)
@@ -105,7 +108,7 @@ SCENARIO_FIELDS = (
     FieldSpec("initial_prompt", "text", "故事基调与设定", "", note="留空表示无开局设定"),
     FieldSpec("coupling_level", "enum", "耦合等级", DEFAULT_COUPLING_LEVEL, choices=COUPLING_LEVELS),
     FieldSpec("protagonist_title", "str", "主角称呼", "",
-              note="对话段落里主角台词的说话人标注；仅 Solea/Bulla 使用，留空回退「主角」"),
+              note="tagged 记法下主角台词的说话人标注；留空回退「主角」"),
     FieldSpec("protagonist_background", "text", "主角身份背景", "",
               note="故事开始时的样子：他是谁、为什么在这儿、想要什么、怎么看她；"
                    "之后的变化由剧情决定，不改这里"),
@@ -115,6 +118,11 @@ SCENARIO_FIELDS = (
     FieldSpec("text_component", "enum", "文本组件", DEFAULT_TEXT_COMPONENT,
               choices=TEXT_COMPONENT_IDS,
               note="文本主组件三选一：text=底部渐变、text_card=底部卡片、text_nvl=全屏NVL"),
+    FieldSpec("speaker_notation", "enum", "说话人写法", DEFAULT_SPEAKER_NOTATION,
+              choices=SPEAKER_NOTATIONS,
+              note="方案二选一的强制规则：tagged=对话句写 @说话人@ 行内标记；"
+                   "literary=自由文学写法、正文不写标记。与耦合等级、文本组件正交，"
+                   "运行时只读本字段"),
     FieldSpec("entry_action_cost", "int", "进入所需行动点数", 0, note="0 表示免费"),
     FieldSpec("entry_address", "str", "入口地址（主世界）", "",
               note="方案入口在主世界中的锚点地址；角色有地址时，与它的距离需不超过上限；留空不限制"),
@@ -140,10 +148,11 @@ SCENARIO_FIELDS = (
               note="文本主组件之外的组件（如属性条）；文本组件写在这里会被忽略"),
     FieldSpec("components_params", "dict", "显示组件参数"),
     FieldSpec("voice", "dict", "对话语音", None,
-              note="Solea/Bulla 对话句的朗读音色；需联网（edge-tts），未启用则不出声"),
+              note="带结构化说话人的台词的朗读音色；需联网（edge-tts），未启用则不出声"),
 )
 
-# 对话语音（Solea/Bulla）：音色按「她 / 主角 / 其他角色」三类分配
+# 对话语音：音色按「她 / 主角 / 其他角色」三类分配；是否朗读只看有没有结构化
+# 说话人，与耦合等级、说话人记法无关（见 dungeon/audio/speech.py）
 VOICE_FIELDS = (
     FieldSpec("enabled", "bool", "启用对话语音", True),
     FieldSpec("voice_her", "str", "她的音色", DEFAULT_VOICE_HER),
@@ -346,6 +355,7 @@ def empty_scenario_config() -> dict:
         "protagonist_background": "",
         "cast": [],
         "text_component": DEFAULT_TEXT_COMPONENT,
+        "speaker_notation": DEFAULT_SPEAKER_NOTATION,
         "entry_action_cost": 0,
         "entry_address": "",
         "entry_address_max_distance_m": None,

@@ -34,8 +34,10 @@ from dungeon.scenario_graph import build_graph
 from dungeon.audio import buses
 from dungeon.audio.chapters import (BGM_SUPPORTED_EXTS, CHAPTER_NONE,
                               DEFAULT_MAX_PARAGRAPHS, normalize_chapters)
-from dungeon.coupling import (BULLA, COUPLING_LEVEL_LABELS, COUPLING_LEVELS,
-                              SOLEA, VELUM, normalize_coupling_level)
+from dungeon.coupling import COUPLING_LEVELS
+from dungeon.speaker_notation import (LITERARY, SPEAKER_NOTATIONS,
+                                      has_speaker_markers,
+                                      normalize_speaker_notation)
 from dungeon.overrides import OVERRIDE_KEYS, OVERRIDE_LABELS
 from dungeon.audio.speech import normalize_rate
 from dungeon.audio.voice_fx import (MAX_INTENSITY, PARAM_LABELS, PARAM_RANGES,
@@ -272,9 +274,6 @@ def _validate_top_level(config: dict, add) -> None:
     title = config.get("protagonist_title", "")
     if not isinstance(title, str):
         add("warning", "protagonist_title", "主角称呼必须是字符串")
-    elif title.strip() and config.get("coupling_level") == VELUM:
-        add("info", "protagonist_title",
-            "耦合等级为 Velum（读者模式）时对话段落不标注说话人，主角称呼不会使用")
     cost = config.get("entry_action_cost", 0)
     if not _is_number(cost) or cost < 0:
         add("warning", "entry_action_cost", "进入所需行动点数必须是非负数字")
@@ -283,6 +282,12 @@ def _validate_top_level(config: dict, add) -> None:
         add("warning", "text_component",
             f"文本组件「{config.get('text_component')}」无效"
             f"（允许：{', '.join(schema.TEXT_COMPONENT_IDS)}），运行时回退为默认")
+    raw_notation = config.get("speaker_notation")
+    if raw_notation is not None and normalize_speaker_notation(raw_notation) != str(
+            raw_notation).strip().lower():
+        add("warning", "speaker_notation",
+            f"说话人写法「{raw_notation}」无效"
+            f"（允许：{', '.join(SPEAKER_NOTATIONS)}），运行时按默认处理")
     raw_policy = config.get("ending_policy")
     if raw_policy is not None and schema.normalize_ending_policy(raw_policy) != str(
             raw_policy).strip().lower():
@@ -309,6 +314,25 @@ def _validate_top_level(config: dict, add) -> None:
     _validate_cast(config.get("cast"),
                    protagonist_title=str(config.get("protagonist_title") or ""),
                    add=add)
+    # 方案内不许混用：声明自由文学写法时，作者手写的正文里不能出现 @说话人@。
+    # 只扫明确属于「正文」的字段，不碰音色 / 背景图 / 数值等配置值。
+    if normalize_speaker_notation(config.get("speaker_notation")) == LITERARY:
+        authored = [("initial_prompt", config.get("initial_prompt")),
+                    ("protagonist_background",
+                     config.get("protagonist_background"))]
+        prompts = config.get("section_prompts")
+        if isinstance(prompts, dict):
+            authored.extend((f"section_prompts.{k}", v)
+                            for k, v in prompts.items() if isinstance(v, str))
+        for index, trigger in enumerate(config.get("triggers") or []):
+            data = trigger.get("action_data") if isinstance(trigger, dict) else None
+            if isinstance(data, dict) and isinstance(data.get("text"), str):
+                authored.append((f"triggers[{index}].action_data.text",
+                                 data["text"]))
+        for path, value in authored:
+            if isinstance(value, str) and has_speaker_markers(value):
+                add("error", path,
+                    "方案声明自由文学写法，这里却出现了 @说话人@ 标记（不许混用）")
 
 
 #: 描述性字段的建议长度：每段都会随提示词发送，超长会挤占预算
@@ -455,13 +479,16 @@ def _validate_admission(config: dict, add) -> None:
 
 
 def _validate_voice(voice_raw, coupling_level, add) -> None:
-    """对话语音配置（Solea/Bulla 才用得上，因此按耦合等级给不同级别的提示）。"""
+    """对话语音配置：出声与否只看显示单元有没有结构化说话人。
+
+    ``coupling_level`` 仍由调用链传入，但语音不再按耦合等级区分——留着参数
+    是为了不动章节/触发器的校验调用链。
+    """
     if voice_raw is None:
         return
     if not isinstance(voice_raw, dict):
         add("warning", "voice", "对话语音配置不是对象，已按默认值处理")
         return
-    level = normalize_coupling_level(coupling_level)
     enabled = bool(voice_raw.get("enabled", True))
     # 未知键只提示一次，避免和 chapters 那样逐条刷屏；``volume`` 是旧版音量键，不算未知
     known = set(schema.field_map(schema.VOICE_FIELDS)) | {"volume"}
@@ -470,9 +497,6 @@ def _validate_voice(voice_raw, coupling_level, add) -> None:
         add("info", "voice", f"未知字段：{', '.join(sorted(unknown))}（会原样保留）")
     if not enabled:
         return
-    if level not in (SOLEA, BULLA):
-        add("info", "voice", "对话语音只对 Solea / Bulla 的对话句生效，"
-                             f"当前耦合等级为 {COUPLING_LEVEL_LABELS.get(level, level)}")
     for key, label in (("voice_her", "她的音色"),
                        ("voice_protagonist", "主角的音色")):
         value = str(voice_raw.get(key) or "").strip()
@@ -820,12 +844,8 @@ def _validate_voice_fx(raw_fx, path: str, add, coupling_level=None) -> None:
             add("info", slot_path,
                 f"「{preset.label}」要靠离线渲染才完整（pip install miniaudio 或 "
                 f"soundfile），本机没装解码器，运行时只有播放侧近似或原声")
-    if configured and coupling_level is not None:
-        level = normalize_coupling_level(coupling_level)
-        if level not in (SOLEA, BULLA):
-            add("info", f"{path}.voice_fx",
-                "对话语音效果只对 Solea / Bulla 的对话句生效，"
-                f"当前耦合等级为 {COUPLING_LEVEL_LABELS.get(level, level)}")
+    # 章节级声音效果与语音同源：有结构化说话人的台词才施加，与耦合等级、
+    # 说话人记法无关。``coupling_level`` 仍由调用链传入，这里不再据此分级。
 
 
 def _validate_chapters(chapters_raw, effective, chapter_names, terminating,

@@ -47,6 +47,7 @@ from dungeon.audio.chapters import find_chapter, normalize_chapters
 from dungeon.cast import normalize_cast
 from dungeon.characters import CharacterLedger
 from dungeon.coupling import normalize_coupling_level
+from dungeon.speaker_notation import normalize_speaker_notation
 from dungeon.scene import landmarks_for_chapter, place_label
 from dungeon.window.frame import FrameScheduler
 from dungeon.window.host import HostPort
@@ -210,7 +211,7 @@ class DungeonWindowBase:
         self._applied_voice_fx = {}
         self._bgm = BgmPlayer(resolver=self._background.resolve_path,
                               logger=process_log.log)
-        # 对话语音：Solea/Bulla 的带说话人台词由它朗读（音色在会话初始化时
+        # 对话语音：带结构化说话人的台词由它朗读（音色在会话初始化时
         # 按方案配置填进去，见 _configure_voice）
         self._speech = SpeechDirector(logger=process_log.log, enabled=False)
 
@@ -293,6 +294,9 @@ class DungeonWindowBase:
         # 必须在会话初始化之前就绪——_init_session 会立刻据此构建系统提示。
         self.coupling_level = normalize_coupling_level(
             (scenario_config or {}).get("coupling_level"))
+        # 说话人写法：方案级内容契约，与耦合等级、文本组件正交；运行时只读它。
+        self.speaker_notation = normalize_speaker_notation(
+            (scenario_config or {}).get("speaker_notation"))
         # 显示组件（见 component_pack/ 与 dungeon/window/components.py）。
         # 这里先给入口阶段用的空默认值，运行阶段进入时由 _init_components 复位重建。
         self._components = []
@@ -588,6 +592,8 @@ class DungeonWindowBase:
         self.triggers = config.get("triggers", [])
         self.chapters = normalize_chapters(config.get("chapters", []))
         self.coupling_level = normalize_coupling_level(config.get("coupling_level"))
+        self.speaker_notation = normalize_speaker_notation(
+            config.get("speaker_notation"))
         # 迟到初始化：此时才创建 AI 客户端与提示词
         self._init_session(config)
         self._session_initialized = True
@@ -663,8 +669,8 @@ class DungeonWindowBase:
             self.ai_client = None
 
         self.initial_prompt = scenario_config.get("initial_prompt", "")
-        # 主角称呼：Solea/Bulla 对话分支里主角台词的说话人标注
-        # （提示词构建器读取，留空回退「主角」；Velum 不使用）
+        # 主角称呼：tagged 记法下主角台词的说话人标注
+        # （提示词构建器读取，留空回退「主角」；与耦合等级无关）
         self.protagonist_title = str(
             scenario_config.get("protagonist_title", "") or "").strip()
         # 主角的身份背景（故事开始时的样子）；留空时系统提示词不多这一块
@@ -730,7 +736,7 @@ class DungeonWindowBase:
         self._configure_voice(scenario_config)
 
     def _configure_voice(self, scenario_config=None):
-        """按方案配置装配对话语音（Solea/Bulla 对话句朗读）。
+        """按方案配置装配对话语音（带结构化说话人的台词朗读）。
 
         「玩家不想听」不再有独立开关——把设置页「音量」里的**语音总线**拧到 0
         即可：既不看方案配置，也不合成（见 ``dungeon/audio/speech.py`` 的总线

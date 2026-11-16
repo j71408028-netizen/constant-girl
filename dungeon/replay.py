@@ -34,6 +34,7 @@ from dungeon.audio.chapters import normalize_background, normalize_bgm
 from dungeon.audio.voice_fx import normalize_voice_fx
 from dungeon.models import (PREFIX_ENDING, DungeonTextType)
 from dungeon.splitter import strip_display_markers
+from dungeon.speaker_notation import normalize_speaker_notation
 
 #: 步进记录（无 kind）。
 KIND_STEP = "step"
@@ -152,6 +153,8 @@ class ScenarioRecord:
     saved_at: str
     #: ``({"path", "size"}, …)``；``size`` 为 ``None`` 表示记录里没写
     assets: tuple
+    #: 方案当时声明的说话人写法（记法版本）；旧回放没有这个键，空串 = 不知道
+    speaker_notation: str = ""
 
 
 # ---------------- 容错取数 ----------------
@@ -329,6 +332,8 @@ def _parse_meta(raw: dict) -> ScenarioRecord:
         app=_text(raw.get("app")),
         saved_at=_text(raw.get("saved_at")),
         assets=_assets(scenario.get("assets")),
+        speaker_notation=(normalize_speaker_notation(raw["speaker_notation"])
+                          if raw.get("speaker_notation") else ""),
     )
 
 
@@ -493,14 +498,16 @@ def display_text_field(raw: str) -> str:
 
 # ---------------- 正向：身份记录 ----------------
 
-def meta_record(*, scenario=None, app: str = "", saved_at: str = "") -> dict:
+def meta_record(*, scenario=None, app: str = "", saved_at: str = "",
+                speaker_notation: str = "") -> dict:
     """回放身份记录（:data:`KIND_META`）。
 
     ``scenario`` 认 ``id`` / ``content_hash`` / ``version_tag`` / ``assets``，
     与读取侧的 :class:`ScenarioRecord` 一一对应：没值的键不写（空串与
     「不知道」是两回事，不在这里混）。``assets`` 超过
     :data:`MATERIAL_PATH_LIMIT` 条的部分丢掉——它只用于发现同名素材被替换，
-    不是素材清单的副本。
+    不是素材清单的副本。``speaker_notation`` 记方案当时的说话人写法，让回放
+    自解释：以后结构化响应 speaker 接上时，不必靠文本组件或耦合等级反推。
     """
     source = dict(scenario or {})
     payload = {}
@@ -521,4 +528,6 @@ def meta_record(*, scenario=None, app: str = "", saved_at: str = "") -> dict:
         record["app"] = app
     if saved_at:
         record["saved_at"] = saved_at
+    if speaker_notation:
+        record["speaker_notation"] = normalize_speaker_notation(speaker_notation)
     return record

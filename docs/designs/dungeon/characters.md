@@ -31,7 +31,7 @@
 
 | 字段 | 类型 | 默认 | 说明 |
 |---|---|---|---|
-| `protagonist_title` | str | `""` | 称呼（说话人标记用），留空回退「主角」 |
+| `protagonist_title` | str | `""` | 称呼（`tagged` 记法下 `@说话人@` 标注用），留空回退「主角」；`literary` 下不作说话人标注 |
 | `protagonist_background` | text | `""` | 身份背景：他是谁、为什么在这儿、想要什么、怎么看她 |
 
 `protagonist_background` 非空时，系统提示词的设定区（`initial_prompt` 之前）多一块：
@@ -129,9 +129,9 @@ AI 定的线索**不回写配置**：方案跨局复用，写回会让下一局�
 与叙事指令（`canonical_user_entry`），在场行与简报由下一轮提示词重新渲染，不留在
 历史里变成过期现状。
 
-**说话人规则**（`coupling.py::SPEAKER_MARKER_RULE`，配置里有角色时才追加）：未知名
+**说话人规则**（`speaker_notation.py::SPEAKER_STABILITY_RULE`，仅 `tagged` 记法且有角色时才追加）：未知名
 第一次说话用正文已出现的稳定临时称呼做标记、不要每段换叫法；真名揭示后一律用真名；
-一个角色一段只有一个标记。空配置逐字不变。
+一个角色一段只有一个标记。`literary` 记法与空配置都不追加，逐字不变。
 
 ## 4. 运行期账本（`dungeon/characters.py`）
 

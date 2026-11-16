@@ -14,7 +14,8 @@ from dungeon.details import (build_detail_query_prompt, format_detail_label,
 from dungeon.models import DungeonTextType
 from dungeon.response import canonical_history_entry, extract_stream_text, parse_final_json
 from dungeon.splitter import (split_full_text, split_stream_units,
-                              strip_display_markers)
+                              strip_display_markers, strip_speaker_markers)
+from dungeon.speaker_notation import LITERARY
 from core.ai import describe_ai_error
 from core.logic import apply_size_unlock_updates, compute_casualty
 
@@ -133,6 +134,10 @@ class DungeonStoryEngine:
 
                             partial_text = extract_stream_text(full_response_buffer)
                             if partial_text is not None:
+                                # 记法强制：literary 方案的流式过程也不许把
+                                # @说话人@ 带上屏；归一在进入分句器前完成
+                                # （同一段的定稿归一下方 _parse_final_json 之后）。
+                                partial_text = self._normalize_ai_text(partial_text)
                                 # 内置分句器：首句进游标限速上屏，完整即定格；
                                 # 后续完成句排队待点击
                                 self._update_stream_units(current_item, partial_text)
@@ -142,6 +147,7 @@ class DungeonStoryEngine:
                                 # 流式同构，不把原文整段直写上屏
                                 cleaned_buf = full_response_buffer.replace("```json", "").replace("```", "").strip()
                                 if not cleaned_buf.startswith("{"):
+                                    cleaned_buf = self._normalize_ai_text(cleaned_buf)
                                     self._update_stream_units(current_item, cleaned_buf)
 
                             self._schedule_text_update()
@@ -161,6 +167,9 @@ class DungeonStoryEngine:
                     return
 
                 ai_text, direction, custom_directions = self._parse_final_json(full_response_buffer)
+                # 记法强制：literary 方案下模型偶尔串味写出的 @说话人@ 在这里
+                # 剥掉，落盘 / 历史 / 回放 / 定稿切分一律用归一后的正文。
+                ai_text = self._normalize_ai_text(ai_text)
 
                 # 最终切分：整段正文按内置分句器定格，首句已由游标展示（或由此起
                 # 始），其余排队。说话人（@X@）与高亮（==）标记在切分时解析进显示
@@ -185,7 +194,7 @@ class DungeonStoryEngine:
                         self._reveal_align(current_item, first_text)
                     else:
                         self._reveal_start(current_item, first_text)
-                # 首句定稿：带说话人（Solea/Bulla 对话分支）就该念出来
+                # 首句定稿：带结构化说话人的台词才交给语音导演
                 self._speak_item(current_item)
 
                 # user 回合只存稳定上下文（章节 / 地点 / 叙事指令）；
@@ -621,13 +630,24 @@ class DungeonStoryEngine:
         self._pregen = None
         return pregen
 
+    def _normalize_ai_text(self, text: str) -> str:
+        """按方案记法归一 AI 正文：literary 下不允许出现 ``@说话人@``。
+
+        提示词已声明强制写法，但模型偶尔串味；这里做运行时兜底，保证
+        「方案内不许混用」不依赖模型自觉。高亮 ``==`` 与记法无关，保留。
+        """
+        if getattr(self, "speaker_notation", None) == LITERARY:
+            return strip_speaker_markers(text)
+        return text
+
     def _update_stream_units(self, current_item, partial_text):
         """流式中用内置分句器更新显示：首句（未完句尾）流式展示，完整即定格。
 
         后续已完成的句不直接上屏，排队到 ``_pending_units``，等用户点击后
         由 ``_try_advance_paragraph`` 逐句揭示。同一文本整体重算，天然幂等。
         显示单元携带说话人（``@说话人@``）与高亮（``==``）标记的解析结果
-        （见 dungeon/splitter.py）。
+        （见 dungeon/splitter.py）。记法归一由调用方在进入本方法前完成，
+        本方法只做显示投影。
 
         **上屏速度与 chunk 到达解耦**：这里只起游标（``_reveal_start``）或延长
         游标目标（``_reveal_extend``），实际出字由帧时钟按 30 字/秒推进，因此

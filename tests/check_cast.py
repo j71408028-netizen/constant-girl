@@ -51,6 +51,8 @@ from dungeon.details import (ASPECTS, DetailQuery, build_detail_query_prompt,  #
 from dungeon.models import DungeonState, DungeonTextType  # noqa: E402
 from dungeon.audio.chapters import normalize_chapter  # noqa: E402
 from dungeon.prompts import DungeonPromptBuilder  # noqa: E402
+from dungeon.speaker_notation import (  # noqa: E402
+    TAGGED_SPEAKER_RULE, notation_declaration)
 from dungeon.validate import validate_scenario_config  # noqa: E402
 from dungeon.window.base import DungeonWindowBase  # noqa: E402
 
@@ -410,20 +412,45 @@ check("build_user_prompt 兼容旧调用方：构建即提交",
       "li" in (_wrapped.introduced_cast or set()))
 
 # ---------------- 9. 称呼稳定性规则 ----------------
-# 规则只挂在对话分支的说话人规则之后（solea / bulla 档才有 speaker_rule）
+# 规则挂在 tagged 记法的对话分支之后（与耦合等级无关）
 _stab = make_session(cast_members=[_li],
                      chapters=[{"name": "城里", "cast": ["李队长"]}])
-_stab.coupling_level = "solea"
+_stab.speaker_notation = "tagged"
 check("有角色时追加称呼稳定性规则",
       "同一角色在不同段落使用同一个称呼标记"
       in DungeonPromptBuilder(_stab).build_turn(DungeonTextType.DIALOG).text)
 _stab_empty = make_session()
-_stab_empty.coupling_level = "solea"
+_stab_empty.speaker_notation = "tagged"
 check("空配置不注入称呼稳定性规则",
       "同一角色在不同段落使用同一个称呼标记"
       not in DungeonPromptBuilder(_stab_empty).build_turn(DungeonTextType.DIALOG).text)
+_lit = make_session(cast_members=[_li],
+                    chapters=[{"name": "城里", "cast": ["李队长"]}])
+_lit.speaker_notation = "literary"
+check("literary 记法不注入称呼稳定性规则",
+      "同一角色在不同段落使用同一个称呼标记"
+      not in DungeonPromptBuilder(_lit).build_turn(DungeonTextType.DIALOG).text)
+check("literary 记法系统提示声明自由写法",
+      "自由文学写法" in DungeonPromptBuilder(_lit).build_system_prompt())
 check("空配置不注入称呼稳定性规则",
       "同一角色在不同段落使用同一个称呼标记" not in user_prompt(_legacy))
+
+# 标记语义防退化：模型曾把 @ 当成包裹台词的成对符号（写成「她说：「@你好。@」」），
+# 因此 tagged 提示词必须讲清 @ 之间只放人名、给正例、点名禁止这种反例。断言只锁
+# 语义结构，不锁逐字文案；润色文案时保留这些要点即可。
+_decl_tagged = notation_declaration("tagged")
+_rule_tagged = TAGGED_SPEAKER_RULE.format(
+    name="她", nick="小她", protagonist="主角")
+check("tagged 声明讲清 @ 之间只放人名、不放对话内容",
+      "名字或称呼" in _decl_tagged and "绝不写对话内容" in _decl_tagged)
+check("tagged 声明同时给正例与反例",
+      "正确" in _decl_tagged and "错误" in _decl_tagged
+      and "她说：" in _decl_tagged)
+check("tagged 声明写进系统提示（全段生效）",
+      _decl_tagged in DungeonPromptBuilder(_stab).build_system_prompt())
+check("对话段规则点明 @ 只包人名、与 == 高亮区分",
+      "只包人名" in _rule_tagged and "==" in _rule_tagged)
+check("对话段规则也带反例", "错误" in _rule_tagged and "她说：" in _rule_tagged)
 
 # ---------------- 10. intro_as：临时称呼出场 ----------------
 _mystery = cast.normalize_member({

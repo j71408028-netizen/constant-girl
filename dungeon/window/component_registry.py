@@ -11,8 +11,8 @@
   根对象（ctx）即会话窗口实例，只读窗口现有状态（dungeon_state / story_history 等）。
 - 文本组件的数据源是 ``ctx.story_history``：条目为
   ``{"type_str": 类型前缀, "text": 正文, "highlight": 高亮, "speaker": 说话人|None}``。
-  ``speaker`` 由 Solea/Bulla 对话分支的 ``@说话人@`` 标记解析而来（见
-  dungeon/splitter.py），None 表示叙述句；galgame 式组件可用它渲染名牌，
+  ``speaker`` 由 ``tagged`` 记法方案的 ``@说话人@`` 标记解析而来（见
+  dungeon/splitter.py），None 表示叙述句或 ``literary`` 方案；galgame 式组件可用它渲染名牌，
   并回退到 ``type_str``。
  """
 

@@ -12,6 +12,9 @@ from dungeon.coupling import (COUPLING_LEVELS, DEFAULT_COUPLING_LEVEL,
 from dungeon.rules import EvolutionRules
 from dungeon.cast import normalize_cast
 from dungeon.schema import DEFAULT_TEXT_COMPONENT, normalize_text_component
+from dungeon.speaker_notation import (
+    DEFAULT_SPEAKER_NOTATION, SPEAKER_NOTATIONS, SPEAKER_NOTATION_LABELS,
+    normalize_speaker_notation)
 from dungeon.audio.speech import normalize_voice
 from ui.ctk.widgets import (CTkScrollableDropdownFrame, CTkSegmentedControl,
                                OptionButton)
@@ -52,10 +55,11 @@ class ScenarioEditor(ctk.CTkFrame):
         self.initial_prompt = ""
         self.section_prompts = {}
         self.coupling_level = DEFAULT_COUPLING_LEVEL
+        self.speaker_notation = DEFAULT_SPEAKER_NOTATION  # 说话人写法：方案级二选一
         self.protagonist_title = ""
         self.protagonist_background = ""  # 主角身份背景（故事开始时的样子）
         self.cast = []  # 人物表：重要角色（key）与群像（extra）
-        # 对话语音（Solea/Bulla 台词朗读）：未配置时按默认值走
+        # 对话语音（带结构化说话人的台词朗读）：未配置时按默认值走
         self.voice = normalize_voice(None)
         self.text_component = DEFAULT_TEXT_COMPONENT  # 文本主组件三选一
         self.evolution_attrs = []  # 统一演化量列表
@@ -350,6 +354,31 @@ class ScenarioEditor(ctk.CTkFrame):
         self.entry_cost_entry.pack(side='right')
         ctk.CTkLabel(head_row, text="AP 消耗量", font=ui_fonts.ui_font(_F_BIG),
                      text_color=_TITLE).pack(side='right', padx=(12, 6))
+
+        # 说话人写法：方案级内容契约，二选一且与耦合等级 / 文本组件正交。
+        # 值写回方案配置，运行时只读该字段，不由文本组件推导。
+        notation_row = ctk.CTkFrame(left_inner, fg_color="transparent")
+        notation_row.pack(fill='x', padx=(0, 20), pady=(6, 0))
+        ctk.CTkLabel(notation_row, text="说话人写法",
+                     font=ui_fonts.ui_font(_F_BIG), text_color=_TITLE).pack(side='left')
+        self._notation_label_to_key = {
+            label: key for key, label in SPEAKER_NOTATION_LABELS.items()}
+        self.speaker_notation_option = OptionButton(
+            notation_row,
+            values=[SPEAKER_NOTATION_LABELS[k] for k in SPEAKER_NOTATIONS],
+            command=self._on_speaker_notation_option,
+            width=170, height=26, corner_radius=8, border_width=1,
+            font=ui_fonts.ui_font(_F_BIG, "bold"),
+            fg_color="transparent", border_color=SC_BORDER_STRONG,
+            hover_color=SC_HOVER, text_color=SC_LINK)
+        self.speaker_notation_option.set(
+            SPEAKER_NOTATION_LABELS[self.speaker_notation])
+        self.speaker_notation_option.pack(side='left', padx=8)
+        ctk.CTkLabel(notation_row,
+                     text="选定后全方案强制、不许混用；与耦合等级、文本组件无关。",
+                     font=ui_fonts.ui_font(_F_SMALL), text_color=_MUTED,
+                     anchor='w').pack(side='left', padx=(8, 0))
+
         ctk.CTkLabel(left_inner,
                      text="主角称呼与对话语音已移到「角色」页；进入准入见下。",
                      font=ui_fonts.ui_font(_F_SMALL), text_color=_MUTED,
@@ -609,6 +638,7 @@ class ScenarioEditor(ctk.CTkFrame):
         self.initial_prompt_text.delete("1.0", "end")
         self.initial_prompt_text.insert("1.0", self.initial_prompt)
         self._refresh_coupling_widgets()
+        self._refresh_speaker_notation_widgets()
         self.entry_cost_var.set(str(int(self.entry_action_cost)))
         self.entry_address_var.set(self.entry_address)
         self.entry_distance_var.set(_format_optional_number(
@@ -616,7 +646,6 @@ class ScenarioEditor(ctk.CTkFrame):
         self.entry_height_min_var.set(_format_optional_number(self.entry_height_min))
         self.entry_height_max_var.set(_format_optional_number(self.entry_height_max))
         # 主角称呼与对话语音在「角色」页，由它自己回填
-        self.character_panel.on_coupling_changed(self.coupling_level)
         self.character_panel.refresh_from_config()
 
         for key, box in self.section_frames.items():
@@ -655,6 +684,8 @@ class ScenarioEditor(ctk.CTkFrame):
         self.entry_height_min = admission[FIELD_HEIGHT_MIN]
         self.entry_height_max = admission[FIELD_HEIGHT_MAX]
         self.text_component = normalize_text_component(config.get("text_component"))
+        self.speaker_notation = normalize_speaker_notation(
+            config.get("speaker_notation"))
         self.voice = normalize_voice(config.get("voice"))
         self.components = [c for c in config.get("components", [])
                            if c not in ("text", "text_card", "text_nvl")]
@@ -689,6 +720,7 @@ class ScenarioEditor(ctk.CTkFrame):
         return {
             "initial_prompt": self.initial_prompt_text.get("1.0", "end-1c").strip(),
             "coupling_level": self.coupling_level,
+            "speaker_notation": self.speaker_notation,
             "protagonist_title": self.character_panel.protagonist_title(),
             "section_prompts": {key: box.get("1.0", "end-1c").strip()
                                 for key, box in self.section_frames.items()},
@@ -750,6 +782,7 @@ class ScenarioEditor(ctk.CTkFrame):
         prompt_data = self._get_prompt_data_from_ui()
         config["initial_prompt"] = prompt_data["initial_prompt"]
         config["coupling_level"] = prompt_data["coupling_level"]
+        config["speaker_notation"] = prompt_data["speaker_notation"]
         # 主角称呼与语音在「角色」页，由角色页自己防抖保存；这里一并写回，
         # 保证「保存此页面」之后磁盘上的方案与界面完全一致
         config["protagonist_title"] = prompt_data["protagonist_title"]
@@ -858,6 +891,7 @@ class ScenarioEditor(ctk.CTkFrame):
         empty_config = {
             "initial_prompt": "",
             "coupling_level": DEFAULT_COUPLING_LEVEL,
+            "speaker_notation": DEFAULT_SPEAKER_NOTATION,
             "protagonist_title": "",
             "protagonist_background": "",
             "cast": [],
@@ -938,12 +972,26 @@ class ScenarioEditor(ctk.CTkFrame):
         self.coupling_level = normalize_coupling_level(value)
         self._refresh_coupling_widgets()
 
+    def _on_speaker_notation_option(self, value):
+        """OptionButton 回调：把显示名映射回记法键并同步角色页提示。"""
+        self.speaker_notation = self._notation_label_to_key.get(
+            value, normalize_speaker_notation(value))
+        self.character_panel.on_speaker_notation_changed(self.speaker_notation)
+
+    def _refresh_speaker_notation_widgets(self):
+        """把当前记法回显到左栏，并同步角色页的称呼 / 语音提示。"""
+        self.speaker_notation_option.set(
+            SPEAKER_NOTATION_LABELS[self.speaker_notation])
+        self.character_panel.on_speaker_notation_changed(self.speaker_notation)
+
     def _refresh_coupling_widgets(self):
-        """把当前耦合等级回显到左栏（轮换档位、说明、等级初始提示标签）。"""
+        """把当前耦合等级回显到左栏（轮换档位、说明、等级初始提示标签）。
+
+        说话人写法与耦合等级正交：角色页的置灰由
+        ``_refresh_speaker_notation_widgets`` 单独驱动，这里不再牵动它。
+        """
         self.coupling_option.set(coupling_label(self.coupling_level))
         self.coupling_prompt_label.configure(
             text=coupling_initial_prompt(self.coupling_level))
-        # 主角称呼与对话语音依赖说话人标记，只在 Solea/Bulla 有意义（角色页置灰）
-        self.character_panel.on_coupling_changed(self.coupling_level)
 
 

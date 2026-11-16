@@ -1,8 +1,9 @@
-"""Solea/Bulla 对话的合成语音（纯领域模块：不碰任何 UI 框架）。
+"""带结构化说话人的台词合成语音（纯领域模块：不碰任何 UI 框架）。
 
-**读什么**由窗口层决定：显示单元定稿时若带说话人（Solea/Bulla 对话分支的
-``@说话人@`` 标记，解析见 ``dungeon/splitter.py``）就把台词交给
-:meth:`SpeechDirector.speak`；叙述句没有说话人，不念。
+**读什么**由窗口层决定：显示单元定稿时若带结构化 ``speaker``
+（``speaker_notation="tagged"`` 方案的 ``@说话人@`` 标记，解析见
+``dungeon/splitter.py``）就把台词交给 :meth:`SpeechDirector.speak`；
+叙述句与 ``literary`` 方案没有说话人，不念。
 
 **谁来念**由 :class:`VoiceCaster` 决定：
 

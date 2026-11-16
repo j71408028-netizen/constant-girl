@@ -4,7 +4,7 @@
 
 - **她**：本局角色档案（名字 / 性格 / 体型）不在方案里，这里只配她的音色与
   归属她的演化量；
-- **主角**：称呼（Solea / Bulla 的对话行用它做说话人标注）与一段身份背景；
+- **主角**：称呼（tagged 记法下用于 @说话人@ 标注）与一段身份背景；
 - **人物表**：配角（重要角色 / 群像），设定只在首次出场时注入一次；
 - **其他角色**：不在人物表里的配角，用一把共享音色池按名字稳定分配；
 - **环境**：世界层面的量（总伤亡等）归在这里，不发声。
@@ -29,7 +29,7 @@ from dungeon.audio.speech import (DEFAULT_OTHER_VOICES, DEFAULT_RATE,
                                   voice_level)
 from dungeon.cast import (CAST_PRONOUNS, DEFAULT_CAST_ROLE,
                           normalize_cast, role_supports)
-from dungeon.coupling import VELUM
+from dungeon.speaker_notation import LITERARY, normalize_speaker_notation
 from dungeon.schema import EVOLUTION_OWNER_LABELS, owner_label
 from ui.ctk.dialogs import BaseDialog, DLG_BORDER_STRONG, DLG_PANEL_BG, DLG_TEXT, DLG_TEXT_SOFT
 from ui.ctk.theme import (SC_ACTION_BG, SC_ACTION_HOVER, SC_BG, SC_BORDER,
@@ -137,7 +137,7 @@ class CharacterPage(ctk.CTkFrame):
         self._repo = scenario_repo
         self._preview = None
         self._preview_log = []
-        self._coupling_level = None
+        self._speaker_notation = None
         self._summary_labels = {}
         self._save_job = None      # 主角称呼 / 背景 / 人物表 / 语音的防抖保存
         self._loading = False      # 回填期间抑制自动保存
@@ -378,7 +378,7 @@ class CharacterPage(ctk.CTkFrame):
     def _protagonist_card(self, parent):
         body = self._card(
             parent, "主角",
-            "称呼用于标注主角台词，音色仅在 Solea / Bulla 生效。")
+            "称呼用于 @说话人@ 标记写法标注主角台词；自由文学写法下正文无标记、不逐句朗读。")
         self.protagonist_var = ctk.StringVar()
         self.protagonist_entry = self._field_row(
             body, "称呼", self.protagonist_var, "主角", entry_width=180)
@@ -949,16 +949,20 @@ class CharacterPage(ctk.CTkFrame):
         except Exception:
             pass
 
-    def on_coupling_changed(self, level):
-        """耦合等级变化：Velum 没有说话人标记，把主角称呼与语音提示置灰。"""
-        self._coupling_level = level
+    def on_speaker_notation_changed(self, notation):
+        """说话人写法变化：文学写法不带标记，把主角称呼与语音提示置灰。"""
+        self._speaker_notation = normalize_speaker_notation(notation)
         self._apply_voice_state()
 
+    def _current_notation(self):
+        notation = getattr(self, "_speaker_notation", None)
+        if notation is None:
+            notation = normalize_speaker_notation(
+                getattr(self.scenario_editor, "speaker_notation", None))
+        return notation
+
     def _apply_voice_state(self):
-        level = getattr(self, "_coupling_level", None)
-        if level is None:
-            level = getattr(self.scenario_editor, "coupling_level", None)
-        state = "disabled" if level == VELUM else "normal"
+        state = "disabled" if self._current_notation() == LITERARY else "normal"
         entry = getattr(self, "protagonist_entry", None)
         if entry is not None:
             try:
@@ -968,17 +972,14 @@ class CharacterPage(ctk.CTkFrame):
         self._refresh_voice_hint()
 
     def _refresh_voice_hint(self):
-        """音色区提示：缺依赖 / 等级不适用 / 正常联网合成。"""
+        """音色区提示：缺依赖 / 记法不适用 / 正常联网合成。"""
         label = getattr(self, "voice_hint_label", None)
         if label is None:
             return
-        level = getattr(self, "_coupling_level", None)
-        if level is None:
-            level = getattr(self.scenario_editor, "coupling_level", None)
         if not edge_tts_available():
             text = "未安装 edge-tts，运行时不会出声"
-        elif level == VELUM:
-            text = "当前等级不朗读对话"
+        elif self._current_notation() == LITERARY:
+            text = "自由文学写法不带说话人标记，对话不逐句朗读"
         else:
             text = "需联网合成，首次约 1 秒"
         label.configure(text=text)

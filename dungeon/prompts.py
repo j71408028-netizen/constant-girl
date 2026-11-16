@@ -13,9 +13,12 @@ from dungeon import cast as cast_mod
 from . import process_log
 from .characters import CharacterLedger
 from .coupling import (COMMON_OUTPUT_RULE, DEFAULT_COUPLING_LEVEL,
-                       HIGHLIGHT_MARKER_RULE, SPEAKER_STABILITY_RULE,
-                       coupling_prompts, normalize_coupling_level,
-                       section_instruction)
+                       HIGHLIGHT_MARKER_RULE, coupling_prompts,
+                       normalize_coupling_level, section_instruction)
+from .speaker_notation import (DEFAULT_SPEAKER_NOTATION, SPEAKER_STABILITY_RULE,
+                              TAGGED, TAGGED_SPEAKER_RULE,
+                              normalize_speaker_notation,
+                              notation_declaration)
 from .details import detail_injection_line, resolve_detail_queries
 from .models import DungeonTextType
 from .response import canonical_user_entry
@@ -89,6 +92,8 @@ class DungeonPromptBuilder:
     提示词按副本的耦合等级（Velum / Solea / Bulla）取用 dungeon.coupling 里
     的硬编码文本：AI 的角色定位、收集职责、段落描写指令、插入衔接与选项走向
     都随等级变化，输出结构（text / direction / custom_directions）三档一致。
+    说话人写法不随等级取用：系统提示由 ``speaker_notation`` 声明全段写法
+    （见 dungeon/speaker_notation.py），仅 tagged 才在对话段落追加标记格式规则。
     """
 
     def __init__(self, context):
@@ -98,6 +103,15 @@ class DungeonPromptBuilder:
         """当前会话的耦合等级（缺省回退到 Velum）。"""
         return normalize_coupling_level(
             getattr(self.context, "coupling_level", None), DEFAULT_COUPLING_LEVEL)
+
+    def speaker_notation(self) -> str:
+        """当前方案的说话人写法（方案级字段，缺省回退 tagged）。
+
+        与耦合等级、文本组件正交：运行时只读这一个字段，不从别处推导。
+        """
+        return normalize_speaker_notation(
+            getattr(self.context, "speaker_notation", None),
+            DEFAULT_SPEAKER_NOTATION)
 
     def protagonist_title(self) -> str:
         """主角称呼（方案配置 protagonist_title，留空回退「主角」）。"""
@@ -204,6 +218,7 @@ class DungeonPromptBuilder:
             f"性格描述：{session.personality.description or '她有着独特的性格。'}\n{height_info}"
             f"{pack['brief']}\n"
             f"{COMMON_OUTPUT_RULE}\n"
+            f"{notation_declaration(self.speaker_notation())}\n"
             "direction 取值范围：-1（消极/挫败），0（中性），1（积极/满足）。\n"
             'direction 表示这一段对她是顺利（+1）还是受挫（-1），'
             "不表示事情更激烈还是更收敛；内容的深浅以“当前坐标”一行为准。\n"
@@ -343,12 +358,12 @@ class DungeonPromptBuilder:
                   f"{self._calibration_block()}{detail_block}"
                   f"{pack['narrate'].format(instruction=instruction)}\n"
                   f"请严格按系统提示的 JSON 格式输出，不要添加额外解释。{reference}")
-        # Solea/Bulla 的对话分支：要求 AI 用 @说话人@ 行内标记区分说话人与台词，
-        # 分句器解析后供 UI 组件渲染名牌（见 dungeon/splitter.py）
-        speaker_rule = pack.get("speaker_rule")
-        if (speaker_rule and not terminating
+        # 说话人写法由方案级 speaker_notation 决定，与耦合等级、文本组件无关。
+        # 系统提示里已声明记法（全段强制）；这里只在 tagged 的对话段补详细格式
+        # 规则与称呼稳定性规则，literary 段不注入任何标记要求。
+        if (self.speaker_notation() == TAGGED and not terminating
                 and type_value in ("dialog", "branch")):
-            result += "\n\n" + speaker_rule.format(
+            result += "\n\n" + TAGGED_SPEAKER_RULE.format(
                 name=session.name, nick=session.nick,
                 protagonist=self.protagonist_title())
             ledger = getattr(session, "characters", None)

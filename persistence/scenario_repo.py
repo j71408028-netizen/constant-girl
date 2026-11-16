@@ -18,10 +18,12 @@ import shutil
 
 from dungeon.audio.chapters import normalize_chapters
 from dungeon.cast import normalize_cast
-from dungeon.coupling import normalize_coupling_level
+from dungeon.coupling import (BULLA, SOLEA, normalize_coupling_level)
 from dungeon.admission import normalize_fields as normalize_admission_fields
 from dungeon.schema import (empty_scenario_config, normalize_ending_policy,
                             normalize_text_component, TEXT_COMPONENT_IDS)
+from dungeon.speaker_notation import (LITERARY, TAGGED,
+                                      normalize_speaker_notation)
 from dungeon.validate import format_diagnostics, validate_scenario_config
 from dungeon.terms import (DEFAULT_SCENARIO_ID, SCENARIO_CONFIG_NAME,
                            SCENARIO_RESOURCE_KEY, is_default_scenario)
@@ -223,6 +225,17 @@ class ScenarioRepo:
             new_config.get("text_component"))
         new_config["components"] = [c for c in components
                                     if c not in TEXT_COMPONENT_IDS]
+
+        # 说话人写法：旧方案没有这个字段，按当时的耦合等级一次性补默认值
+        # （Solea/Bulla 曾用 @说话人@，Velum 用自由文学），让旧方案正文行为
+        # 不变。迁移之后运行时只读 speaker_notation，不再由耦合等级推导。
+        if "speaker_notation" not in config:
+            level = normalize_coupling_level(config.get("coupling_level"))
+            new_config["speaker_notation"] = (
+                TAGGED if level in (SOLEA, BULLA) else LITERARY)
+        else:
+            new_config["speaker_notation"] = normalize_speaker_notation(
+                config.get("speaker_notation"))
 
         if "evolution_attrs" in config:
             new_config["evolution_attrs"] = config["evolution_attrs"]

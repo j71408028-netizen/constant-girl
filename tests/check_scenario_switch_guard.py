@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dungeon.audio.speech import normalize_voice  # noqa: E402
 from dungeon.coupling import DEFAULT_COUPLING_LEVEL  # noqa: E402
+from dungeon.speaker_notation import DEFAULT_SPEAKER_NOTATION  # noqa: E402
 from persistence.scenario_repo import ScenarioRepo  # noqa: E402
 import ui.ctk.dialogs  # noqa: E402
 import ui.scenario.sc_frame as sc_frame  # noqa: E402
@@ -93,7 +94,7 @@ class FakeCharacterPage:
     def collect_voice(self):
         return normalize_voice(None)
 
-    def on_coupling_changed(self, _level):
+    def on_speaker_notation_changed(self, _notation):
         pass
 
     def refresh_from_config(self):
@@ -135,6 +136,7 @@ class FakeEditor:
         self.section_frames = {}
         self.section_step_vars = {}
         self.coupling_level = DEFAULT_COUPLING_LEVEL
+        self.speaker_notation = DEFAULT_SPEAKER_NOTATION
         self.transition_matrix = None
         self.entry_address = ""
         self.entry_address_max_distance = None

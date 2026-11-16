@@ -337,7 +337,8 @@ class DungeonPersistence:
             scenario["assets"] = self._replay_asset_entries(directory)
         return replay.meta_record(
             scenario=scenario, app=APP_VERSION,
-            saved_at=datetime.datetime.now().isoformat(timespec="seconds"))
+            saved_at=datetime.datetime.now().isoformat(timespec="seconds"),
+            speaker_notation=getattr(self, "speaker_notation", ""))
 
     def _replay_asset_entries(self, directory) -> list:
         """记录里用到的方案素材：``[{"path", "size"}]``（读不到大小的跳过）。"""

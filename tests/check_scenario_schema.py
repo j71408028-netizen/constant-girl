@@ -51,7 +51,7 @@ from dungeon.validate import (  # noqa: E402
 # 多了才该红。默认值的行为由下面的 normalize / 校验器覆盖。
 _GOLDEN_EMPTY_KEYS = {
     "initial_prompt", "coupling_level", "protagonist_title", "protagonist_background",
-    "cast", "text_component",
+    "cast", "text_component", "speaker_notation",
     "entry_action_cost", "entry_address", "entry_address_max_distance_m",
     "entry_height_min_m", "entry_height_max_m",
     "ending_policy",
@@ -150,6 +150,7 @@ def _bad_config():
         "coupling_level": "nope",
         "protagonist_title": 123,
         "text_component": "nope",
+        "speaker_notation": "nope",
         "components": ["text"],
         "entry_action_cost": -5,
         "view_mode": "game",
@@ -214,6 +215,7 @@ _expect("warning", "initial_prompt", "initial_prompt 非字符串")
 _expect("warning", "coupling_level", "耦合等级无效")
 _expect("warning", "protagonist_title", "主角称呼非字符串")
 _expect("warning", "text_component", "文本组件无效")
+_expect("warning", "speaker_notation", "说话人写法无效")
 _expect("info", "components", "旧写法文本组件残留")
 _expect("warning", "entry_action_cost", "进入点数非法")
 _expect("warning", "view_mode", "废弃顶层字段")
@@ -231,6 +233,28 @@ check("有 1 个起始章节不报起始诊断",
       not [d for d in diags if "起始章节" in d.message])
 check("有结束章节不报「无结局路径」",
       not [d for d in diags if "结局路径" in d.message])
+
+# 说话人写法：literary 方案内不许混用 @说话人@ 标记
+_mix = schema.empty_scenario_config()
+_mix["speaker_notation"] = "literary"
+_mix["initial_prompt"] = "用 @说话人@ 标注每句对话"
+_mix["triggers"] = [{"name": "插入", "action_type": "insert",
+                     "action_data": {"text": "@李队长@先撤"}}]
+_mix_diags = validate_scenario_config(_mix)
+check("校验：literary 方案的 initial_prompt 混用标记 → error",
+      any(d.level == "error" and d.path == "initial_prompt"
+          and "不许混用" in d.message for d in _mix_diags),
+      format_diagnostics(_mix_diags))
+check("校验：literary 方案的插入文本混用标记 → error",
+      any(d.level == "error" and "action_data.text" in d.path
+          and "不许混用" in d.message for d in _mix_diags),
+      format_diagnostics(_mix_diags))
+_tagged = schema.empty_scenario_config()
+_tagged["speaker_notation"] = "tagged"
+_tagged["initial_prompt"] = "用 @说话人@ 标注每句对话"
+check("校验：tagged 方案带标记不报混用",
+      not any("不许混用" in d.message
+              for d in validate_scenario_config(_tagged)))
 
 # 干净配置：零误报（1 个起始 + 1 个结束章节；结束章节带图标路径但不提供 scenario_dir）
 clean = schema.empty_scenario_config()
@@ -610,6 +634,22 @@ check("迁移：列表里的 text_nvl 同样提升",
       _loaded_old.get("text_component") == "text_nvl"
       and _loaded_old.get("components") == ["attr_bar"],
       _loaded_old)
+
+# 旧方案没有 speaker_notation：按当时的耦合等级一次性补默认值，正文行为不变
+_legacy_solea = schema.empty_scenario_config()
+_legacy_solea.pop("speaker_notation")
+_legacy_solea["coupling_level"] = "solea"
+repo.save_config("default", _legacy_solea)
+check("迁移：旧 Solea 方案补 tagged 记法",
+      repo.load_config("default").get("speaker_notation") == "tagged",
+      repo.load_config("default").get("speaker_notation"))
+_legacy_velum = schema.empty_scenario_config()
+_legacy_velum.pop("speaker_notation")
+_legacy_velum["coupling_level"] = "velum"
+repo.save_config("default", _legacy_velum)
+check("迁移：旧 Velum 方案补 literary 记法",
+      repo.load_config("default").get("speaker_notation") == "literary",
+      repo.load_config("default").get("speaker_notation"))
 
 # ---------------- 5b. 动作键：action_type 是规范键，action 只读兼容 ----------------
 # 历史问题：运行时读 action_type、校验器与关系图读 action，两处一旦不同就是

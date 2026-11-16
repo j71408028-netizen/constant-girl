@@ -500,9 +500,9 @@ AI 生成**（`normalize_fixed_text` 把缺路径的配置归一成空 dict，�
 
 | 诊断级别 | 覆盖示例 |
 |---|---|
-| `error` | 悬空 goto / overflow_target、无起始章节、空选项列表、固定文本文件缺失 / 读不动 / 没有可用段落（需传 `scenario_dir`）、人物表的称呼 / 别称撞车或 `id` 重复（会让说话人与音色串台）、临时称呼与成员称呼 / 主角称呼撞车、配角缺少称呼 |
-| `warning` | 多起始章节、结束章节内的 option / goto、废弃动作与旧版字段、条件键 / 比较符 / 度量非法、演化量的展示状态 / 归属取值非法、转移矩阵行缺失与权重越界、背景图 / 结局图标缺失（需传 `scenario_dir`）、固定文本的指令行未识别记号 / 方向越界 / 指向未定义属性 / 半写（缺类型或缺方向）、`max_paragraphs` 小于逻辑段落数、固定文本章节内放 `insert`、人物表的 `role` / `pronoun` 取值非法、章节 `cast` 指向表里不存在的成员、描述字段超长 |
-| `info` | 无结局路径（`ending_policy: "open"` 时不再提示）、旧版顶层字段、未知顶层键、`voice` 未知子键、Velum 等级配了对话语音（不生效）、固定文本播完本章无去向、重要角色超过 6 个 |
+| `error` | 悬空 goto / overflow_target、无起始章节、空选项列表、固定文本文件缺失 / 读不动 / 没有可用段落（需传 `scenario_dir`）、人物表的称呼 / 别称撞车或 `id` 重复（会让说话人与音色串台）、临时称呼与成员称呼 / 主角称呼撞车、配角缺少称呼、`speaker_notation="literary"` 方案的作者正文（初始提示 / 背景 / 章节提示 / 插入文本）里出现 `@说话人@`（不许混用） |
+| `warning` | 多起始章节、结束章节内的 option / goto、废弃动作与旧版字段、条件键 / 比较符 / 度量非法、演化量的展示状态 / 归属取值非法、转移矩阵行缺失与权重越界、背景图 / 结局图标缺失（需传 `scenario_dir`）、固定文本的指令行未识别记号 / 方向越界 / 指向未定义属性 / 半写（缺类型或缺方向）、`max_paragraphs` 小于逻辑段落数、固定文本章节内放 `insert`、人物表的 `role` / `pronoun` 取值非法、章节 `cast` 指向表里不存在的成员、描述字段超长、`speaker_notation` 取值非法 |
+| `info` | 无结局路径（`ending_policy: "open"` 时不再提示）、旧版顶层字段、未知顶层键、`voice` 未知子键、固定文本播完本章无去向、重要角色超过 6 个 |
 
 **`ending_policy`**（顶层，`required` / `open`，默认 `required`）：作者对「本方案要不要结局」的显式声明。
 `required` 时没有结束章节、也没有「结局」触发器会给出 info；声明 `open`（开放式方案）即消除该提示。
@@ -553,12 +553,12 @@ Dungeon 关系图文档 `scenario_graph.md` §3。
 
 | 记录 | 说明 |
 |---|---|
-| 普通步进（无 `kind`） | `text` 一律是剥离显示层标记的净文本；`highlight` 记「本段有高亮」，回放按整段高亮复现（显示层的高亮单位是显示段落，回放只出整段）；`type_prefix` 是当时的显示前缀（空串 = 本段不显示前缀，固定文本里没声明类型的段落就是这样），缺失时回放按 `type` 现算、`ending_chapter` 为真时按「结局」；`display_text` 只在原文带 `@说话人@` / `==` 时才写（原文与净文本相同就不写这个键），回放靠它还原说话人与高亮——说话人决定这一句念不念、念谁的声音，净文本里没有 |
+| 普通步进（无 `kind`） | `text` 一律是剥离显示层标记的净文本；`highlight` 记「本段有高亮」，回放按整段高亮复现（显示层的高亮单位是显示段落，回放只出整段）；`type_prefix` 是当时的显示前缀（空串 = 本段不显示前缀，固定文本里没声明类型的段落就是这样），缺失时回放按 `type` 现算、`ending_chapter` 为真时按「结局」；`display_text` 只在原文带 `@说话人@` / `==` 时才写（原文与净文本相同就不写这个键），回放靠它还原说话人与高亮——说话人决定这一句念不念、念谁的声音，净文本里没有。方案声明 `speaker_notation="literary"` 时正文不会出现 `@说话人@`，该键只在高亮时写；记法版本另见 `kind:"meta"` 的 `speaker_notation` |
 | `kind: "chapter"` | 章节进入，带当时的 `background` / `bgm` / `voice_fx`，回放不依赖当前方案。**章节进入只有这一种写法**：起始章节、`goto` 触发器、超限跳转都写它，触发器记录只说「谁触发了跳转」 |
 | `kind: "trigger"` | 触发器触发，回放时走 `_replay_trigger`；分支动作额外带 `choice_index` / `choice_text` / `option_prompt`、`game_result` / `choice_value`、`ending_text` |
 | `kind: "characters"` | 文件头部的人物账本快照（`_init_replay` 整本还原成只读视图），不参与步进，也不进档案导出的正文 |
 | `kind: "ending"` | 结局正文 + `icon_path`：回放到此为止（再点一次关窗）。旧回放没有这条记录，末段即结束 |
-| `kind: "meta"` | 文件头部的**回放身份**：`scenario`（`id` / `content_hash` / `version_tag` / `assets`）+ `app` + `saved_at`，另有 `version` 标记录语法版本（`replay.META_VERSION`，当前读取侧不解释）。不参与步进，也不进档案导出 |
+| `kind: "meta"` | 文件头部的**回放身份**：`scenario`（`id` / `content_hash` / `version_tag` / `assets`）+ `app` + `saved_at`，另有 `version` 标记录语法版本（`replay.META_VERSION`，当前读取侧不解释）；`speaker_notation` 记方案当时的说话人写法（可选兼容键，旧回放没有 = 不知道），让回放自解释记法版本。不参与步进，也不进档案导出 |
 
 记录的语法在 `dungeon/replay.py`：`classify()` / `parse()` / `parse_all()` 产出 Record
 （`StepRecord` / `ChapterRecord` / `TriggerRecord` / `CharactersRecord` /
@@ -581,8 +581,9 @@ Dungeon 关系图文档 `scenario_graph.md` §3。
   `chapter_background` / `chapter_bgm` / `chapter_voice_fx` 三个平级键上，读入时
   展开成「`ChapterRecord` + `TriggerRecord`」两条，读取方只认章节记录这一种形态；
 - **显示层标记只落在 `display_text` 里**：`text` 是净文本，回放重播时不认识
-  `@说话人@`——少了 `display_text`，对话句一律不出声（`_speak_item` 拿不到
-  `speaker`）。写侧只在这一段确实带标记时才写它（`display_text_field`，三个写入点：
+  `@说话人@`（`tagged` 记法才有）——少了 `display_text`，对话句一律不出声
+  （`_speak_item` 拿不到 `speaker`）；`literary` 记法方案正文不带标记、本就不逐句
+  朗读。写侧只在这一段确实带标记时才写它（`display_text_field`，三个写入点：
   AI 段落 `step_info`、固定文本段落、插入段落），解析侧反过来只要「剥完标记正好
   等于 `text`」才采信，对不上按净文本播；旧记录没有这个字段，照旧逐句渐显、只是
   不念。

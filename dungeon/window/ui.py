@@ -88,7 +88,8 @@ from imgui_bundle import hello_imgui, imgui
 
 from dungeon import process_log
 from dungeon.models import DungeonTextType
-from dungeon.splitter import split_full_text
+from dungeon.splitter import split_full_text, strip_speaker_markers
+from dungeon.speaker_notation import LITERARY
 from dungeon.window import gl_util
 from dungeon.window import gpu_textures
 from dungeon.window import imgui_util as iu
@@ -1606,8 +1607,14 @@ class DungeonWindowUI:
         用净文本 ``text`` 切分（说话人为空，高亮只能靠 ``highlight`` 整段给）。
         ``highlight`` 为真时整段标亮，与正文里的标记取并集。返回切出的显示段落，
         调用方拿它做高亮汇总与角色观察（不重复切一遍）。
+
+        方案记法在这里强制执行：``literary`` 方案不允许任何路径把 ``@说话人@``
+        带上屏（含固定文本与插入段），标记一律剥掉；高亮 ``==`` 与记法无关，保留。
         """
-        units = split_full_text(display_text or text)
+        source = display_text or text
+        if getattr(self, "speaker_notation", None) == LITERARY:
+            source = strip_speaker_markers(source)
+        units = split_full_text(source)
         if highlight:
             units = [u._replace(highlight=True) for u in units]
         first = units[0] if units else None
@@ -1666,7 +1673,8 @@ class DungeonWindowUI:
     def _speak_item(self, item: dict):
         """带说话人的显示单元定稿：交给语音导演朗读。
 
-        只有 Solea/Bulla 对话分支里带 ``speaker`` 的台词会念（叙述句不念）；
+        只有带结构化 ``speaker`` 的台词会念（叙述句不念）：tagged 记法的对话
+        段由分句器解析出说话人，literary 记法正文不带标记、整段安静；
         合成与播放都在语音线程上，这里只入队，不占帧循环。
 
         念的是整句而不是眼下已上屏的那几个字：游标会把 ``item["text"]`` 改写成
