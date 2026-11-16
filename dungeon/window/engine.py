@@ -701,7 +701,12 @@ class DungeonStoryEngine:
         return is_terminating_chapter(chapter)
 
     def _record_story_summary(self, text_type, text):
-        """把本段写入剧情压缩器，并按块触发压缩。"""
+        """把本段写入剧情压缩器，并按块触发压缩。
+
+        实时路径把满块的 AI 压缩放到后台线程（切块在主线程、写回按序号
+        保序），避免每 20 段在主线程同步等 AI。回放 / 无 AI 客户端沿用
+        同步压缩（只走快速的内部算法，行为不变）。
+        """
         summarizer = getattr(self, "story_summary", None)
         if summarizer is None:
             return
@@ -709,12 +714,35 @@ class DungeonStoryEngine:
             type_value = text_type.value if hasattr(text_type, "value") else str(text_type)
         except Exception:
             type_value = str(text_type)
-        summarizer.record(type_value, text,
-                          chapter_name=getattr(self, "current_chapter", "") or "")
-        summarizer.maybe_compress(self.dungeon_state.total_steps,
-                                  chapter_name=getattr(self, "current_chapter", "") or "",
-                                  ai_client=getattr(self, "ai_client", None))
+        chapter = getattr(self, "current_chapter", "") or ""
+        summarizer.record(type_value, text, chapter_name=chapter)
+        ai_client = getattr(self, "ai_client", None)
+        if getattr(self, "is_replay", False) or ai_client is None:
+            summarizer.maybe_compress(self.dungeon_state.total_steps,
+                                      chapter_name=chapter, ai_client=ai_client)
+            self._apply_summary_character_updates(summarizer)
+            return
+        taken = summarizer.detach_chunk(chapter_name=chapter)
+        if taken is not None:
+            self._start_summary_compress(summarizer, taken, ai_client)
+        # 喂给账本的是已写回的搭车更新（异步写回后由后台再投递一次）
         self._apply_summary_character_updates(summarizer)
+
+    def _start_summary_compress(self, summarizer, taken, ai_client):
+        """后台压缩一块；写回后把搭车的角色更新投递回主线程喂账本。"""
+        seq, chunk, label = taken
+
+        def run():
+            try:
+                result = summarizer.compress_chunk(chunk, ai_client)
+            except Exception as e:
+                process_log.log(f"[Summary] 后台压缩异常，改用内部算法: {e}")
+                result = (summarizer._fallback_summary(
+                    [t for _t, t, _c in chunk if t]), [], [])
+            summarizer.apply_result(seq, label, result, chunk)
+            self._frame.call(self._apply_summary_character_updates, summarizer)
+
+        threading.Thread(target=run, name="dungeon-summary", daemon=True).start()
 
     def _apply_summary_character_updates(self, summarizer):
         """把摘要压缩搭车抽取的角色更新喂给运行期账本（主线程执行）。"""

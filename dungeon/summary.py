@@ -10,8 +10,15 @@
   （窗口大小见 ``story_recent_count`` 设置）已逐字携带最近剧情，
   重复注入只会推高 prefill 与首字延迟。
 
-压缩优先使用 AI 客户端生成概要并抽取事实卡；AI 不可用或失败时回退到
-内部算法（截取首末句与高频词拼接），保证提示词始终有概要可用。
+AI 压缩是三步流水线：``detach_chunk`` 在主线程切出一块（不调用 AI），
+``compress_chunk`` 在后台线程完成 AI 调用与解析（纯函数，不碰实例状态），
+``apply_result`` 在后台线程按块序号写回。这样 AI 等待不占主线程，AI 并发
+返回时概要仍按时间顺序排列。窗口层负责调度这三步（见
+``window/engine.py::_record_story_summary``）；纯逻辑测试可直接用同步的
+``maybe_compress`` / ``flush_chapter``。
+
+AI 不可用或失败时回退到内部算法（截取首末句与高频词拼接），保证提示词
+始终有概要可用。
 
 常驻记忆（不依赖 AI）：
 - ``record_key_event``：代码路径直接登记的确定性关键事件（章节进出、
@@ -22,6 +29,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from typing import Iterable
 
 from . import process_log
@@ -34,6 +43,7 @@ MAX_FACTS = 12           # 常驻提示词的关键事实（事实卡）上限
 KEY_EVENT_CHARS = 60
 FACT_CHARS = 60
 MAX_PENDING_UPDATES = 4  # 未取走的搭车角色更新批数上限
+WAIT_COMPRESS_TIMEOUT = 30.0  # flush 等在途压缩的最长时间（防 AI 卡死拖死换章）
 
 #: 耦合等级缺摘要提示时的兜底（提示词缺键不应让整次压缩退回内部算法）
 SUMMARY_SYSTEM_FALLBACK = (
@@ -52,7 +62,12 @@ def _clip(text: str, limit: int = MAX_SUMMARY_CHARS) -> str:
 
 
 class StorySummarizer:
-    """按块压缩剧情，并向提示词构建器提供“概要 + 最近段落”。"""
+    """按块压缩剧情，并向提示词构建器提供“概要 + 最近段落”。
+
+    概要、事实卡等状态可能被主线程（登记、注入提示词）与后台线程（异步
+    压缩写回）同时访问，统一用 ``_lock`` 保护；``_cond`` 供 flush 等待在途
+    压缩落地。锁是可重入的，内部方法可以互相调用。
+    """
 
     def __init__(self, block_size: int = DEFAULT_BLOCK_SIZE, coupling_level: str = None):
         self.block_size = max(1, int(block_size))
@@ -66,8 +81,15 @@ class StorySummarizer:
         self.key_events: list[str] = []
         # 搭车抽取的角色更新：[(块内正文, [更新...]), ...]，窗口层取走喂账本
         self.pending_character_updates: list[tuple[str, list]] = []
-        # 尚未压缩的缓冲：[(text_type_value, text, chapter_name), ...]
+        # 尚未压缩的缓冲：[(text_type_value, text, chapter_name), ...]（仅主线程）
         self._buffer: list[tuple[str, str, str]] = []
+        # 异步压缩保序：已分配序号 [0, _next_issue)，已写回 [0, _next_write)。
+        self._lock = threading.RLock()
+        self._cond = threading.Condition(self._lock)
+        self._next_issue = 0
+        self._next_write = 0
+        # seq -> None（压缩中）或 (label, result, chunk)（待写回）
+        self._pending: dict[int, tuple | None] = {}
 
     # ---------------- 写入 ----------------
     def record(self, text_type_value: str, text: str, chapter_name: str = ""):
@@ -75,21 +97,86 @@ class StorySummarizer:
         text = str(text or "").strip()
         if not text:
             return
-        self._buffer.append((text_type_value, text, chapter_name or ""))
+        with self._lock:
+            self._buffer.append((text_type_value, text, chapter_name or ""))
 
     def flush_chapter(self, chapter_name: str, ai_client=None):
-        """离开章节时强制压缩本章缓冲（不满一个块也压缩）。"""
+        """离开章节时强制压缩本章缓冲（不满一个块也压缩）。
+
+        先等在途的异步压缩全部写回，再压缩剩余缓冲——保证结局/换章拿到的
+        ``summary_only`` 是完整的，不会漏掉仍在后台的块。
+        """
+        self.wait_pending()
         self._compress(chapter_name=chapter_name, ai_client=ai_client,
                        allow_partial=True)
 
     def maybe_compress(self, total_steps: int, chapter_name: str = "",
                        ai_client=None):
-        """缓冲达到 block_size 时压缩一个块。"""
+        """同步压缩一个块（供回放与纯逻辑测试；实时路径走异步三段式）。"""
         if self.block_size <= 0:
             return
-        if len(self._buffer) >= self.block_size:
+        with self._lock:
+            ready = len(self._buffer) >= self.block_size
+        if ready:
             self._compress(chapter_name=chapter_name, ai_client=ai_client,
                            allow_partial=False)
+
+    def wait_pending(self, timeout: float = WAIT_COMPRESS_TIMEOUT):
+        """等待所有已切出、尚未写回的异步压缩块落地。
+
+        ``Condition.wait`` 会释放锁，因此即便在主线程（换章）调用，后台的
+        ``apply_result`` 仍可拿到锁写回并唤醒等待，不会互相卡死。
+        """
+        deadline = time.monotonic() + max(0.0, timeout)
+        with self._cond:
+            while self._next_write < self._next_issue:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    process_log.log("[Summary] 等待异步压缩超时，按现有概要继续")
+                    return
+                self._cond.wait(remaining)
+
+    # ---------------- 异步三段式 ----------------
+    def detach_chunk(self, chapter_name: str = "") -> tuple | None:
+        """主线程：切出一个满块并从缓冲移除，返回 ``(seq, chunk, label)``。
+
+        不满一块返回 ``None``。切出的块立刻从缓冲移除，避免并发重复压缩；
+        序号在此分配，供后台返回后按序写回。
+        """
+        with self._lock:
+            if self.block_size <= 0 or len(self._buffer) < self.block_size:
+                return None
+            chunk = self._buffer[:self.block_size]
+            del self._buffer[:self.block_size]
+            label = chapter_name or (chunk[0][2] if chunk else "")
+            seq = self._next_issue
+            self._next_issue += 1
+            self._pending[seq] = None  # 占位：仍在压缩中
+        return seq, chunk, label
+
+    def compress_chunk(self, chunk: list, ai_client=None) -> tuple:
+        """后台线程：压缩一个块，返回 ``(概要, 关键事实, 角色更新)``。
+
+        不触碰实例状态（``coupling_level`` 只读），可安全在后台线程调用。
+        """
+        return self._summarize_chunk(chunk, ai_client)
+
+    def apply_result(self, seq: int, label: str, result: tuple, chunk: list):
+        """后台线程：写回一个块的压缩结果，并按序号保序。
+
+        后台可能先返回后面的块；这里挂到 ``_pending[seq]``，只有从
+        ``_next_write`` 开始的连续块才落进概要，从而保证时间顺序。
+        """
+        with self._cond:
+            self._pending[seq] = (label, result, chunk)
+            self._cond.notify_all()
+            while self._next_write in self._pending \
+                    and self._pending[self._next_write] is not None:
+                item = self._pending.pop(self._next_write)
+                lbl, res, ch = item
+                self._apply_chunk(lbl, res, ch)
+                self._next_write += 1
+            self._cond.notify_all()
 
     # ---------------- 关键事件与事实卡 ----------------
     def record_key_event(self, text: str):
@@ -101,34 +188,49 @@ class StorySummarizer:
         text = _clip(text, KEY_EVENT_CHARS)
         if not text:
             return
-        if self.key_events and self.key_events[-1] == text:
-            return
-        self.key_events.append(text)
-        if len(self.key_events) > MAX_KEY_EVENTS:
-            del self.key_events[:len(self.key_events) - MAX_KEY_EVENTS]
+        with self._lock:
+            if self.key_events and self.key_events[-1] == text:
+                return
+            self.key_events.append(text)
+            if len(self.key_events) > MAX_KEY_EVENTS:
+                del self.key_events[:len(self.key_events) - MAX_KEY_EVENTS]
 
     def merge_facts(self, facts):
         """把压缩调用提取的关键事实合并进事实卡（去重、有界）。"""
+        with self._lock:
+            for fact in facts or []:
+                fact = _clip(str(fact or ""), FACT_CHARS)
+                if fact and fact not in self.facts:
+                    self.facts.append(fact)
+            if len(self.facts) > MAX_FACTS:
+                del self.facts[:len(self.facts) - MAX_FACTS]
+
+    # ---------------- 压缩 ----------------
+    def _compress(self, chapter_name: str = "", ai_client=None,
+                  allow_partial: bool = False):
+        """同步压缩：切块 → 压缩 → 写回，三步一气呵成。"""
+        with self._lock:
+            if not self._buffer:
+                return
+            if not allow_partial and len(self._buffer) < self.block_size:
+                return
+            chunk = self._buffer if allow_partial else self._buffer[:self.block_size]
+            self._buffer = [] if allow_partial else self._buffer[len(chunk):]
+            label = chapter_name or (chunk[0][2] if chunk else "")
+        result = self._summarize_chunk(chunk, ai_client)  # 慢调用，不持锁
+        with self._lock:
+            self._apply_chunk(label, result, chunk)
+
+    def _apply_chunk(self, label: str, result: tuple, chunk: list):
+        """把一块的压缩结果写进概要/事实卡/角色更新（调用方持锁）。"""
+        summary, facts, updates = result
+        self.summaries.append((label, summary))
         for fact in facts or []:
             fact = _clip(str(fact or ""), FACT_CHARS)
             if fact and fact not in self.facts:
                 self.facts.append(fact)
         if len(self.facts) > MAX_FACTS:
             del self.facts[:len(self.facts) - MAX_FACTS]
-
-    # ---------------- 压缩 ----------------
-    def _compress(self, chapter_name: str = "", ai_client=None,
-                  allow_partial: bool = False):
-        if not self._buffer:
-            return
-        if not allow_partial and len(self._buffer) < self.block_size:
-            return
-        chunk = self._buffer if allow_partial else self._buffer[:self.block_size]
-        self._buffer = [] if allow_partial else self._buffer[len(chunk):]
-        summary, facts, updates = self._summarize_chunk(chunk, ai_client)
-        label = chapter_name or (chunk[0][2] if chunk else "")
-        self.summaries.append((label, summary))
-        self.merge_facts(facts)
         if updates:
             # 搭车抽取的角色更新：连同块内正文一起存（正文是合并锚点），
             # 由窗口层取走喂给角色账本；这里不解析、不判断
@@ -166,9 +268,10 @@ class StorySummarizer:
 
     def drain_character_updates(self) -> list:
         """取走搭车抽取的角色更新 ``[(块内正文, [更新...]), ...]`` 并清空。"""
-        pending = self.pending_character_updates
-        self.pending_character_updates = []
-        return pending
+        with self._lock:
+            pending = self.pending_character_updates
+            self.pending_character_updates = []
+            return pending
 
     @staticmethod
     def _parse_summary_json(raw) -> tuple:
@@ -226,7 +329,7 @@ class StorySummarizer:
 
     # ---------------- 提示词 ----------------
     def _memory_lines(self) -> list:
-        """概要之外的常驻记忆：事实卡与关键事件（紧凑注入）。"""
+        """概要之外的常驻记忆：事实卡与关键事件（紧凑注入，调用方持锁）。"""
         lines = []
         if self.facts:
             lines.append("关键事实：" + "；".join(self.facts))
@@ -237,19 +340,21 @@ class StorySummarizer:
 
     def prompt_block(self) -> str:
         """注入提示词的剧情块：压缩概要 + 常驻记忆（近期原文由对话历史携带）。"""
-        lines = []
-        if self.summaries:
-            lines.append("剧情概要（按时间顺序）：")
-            for i, (chapter, summary) in enumerate(self.summaries, 1):
-                prefix = f"{i}. " + (f"【{chapter}】" if chapter else "")
-                lines.append(prefix + summary)
-        lines.extend(self._memory_lines())
-        return "\n".join(lines)
+        with self._lock:
+            lines = []
+            if self.summaries:
+                lines.append("剧情概要（按时间顺序）：")
+                for i, (chapter, summary) in enumerate(self.summaries, 1):
+                    prefix = f"{i}. " + (f"【{chapter}】" if chapter else "")
+                    lines.append(prefix + summary)
+            lines.extend(self._memory_lines())
+            return "\n".join(lines)
 
     def summary_only(self) -> str:
         """仅压缩概要与常驻记忆（结局生成等不需要原文的场景使用）。"""
-        lines = []
-        for i, (chapter, summary) in enumerate(self.summaries, 1):
-            lines.append(f"{i}. 【{chapter}】{summary}" if chapter else f"{i}. {summary}")
-        lines.extend(self._memory_lines())
-        return "\n".join(lines)
+        with self._lock:
+            lines = []
+            for i, (chapter, summary) in enumerate(self.summaries, 1):
+                lines.append(f"{i}. 【{chapter}】{summary}" if chapter else f"{i}. {summary}")
+            lines.extend(self._memory_lines())
+            return "\n".join(lines)
