@@ -118,6 +118,7 @@ class FakeEditor:
     _scenario_display = ScenarioEditor._scenario_display
     _get_prompt_data_from_ui = ScenarioEditor._get_prompt_data_from_ui
     _optional_number = ScenarioEditor._optional_number
+    _coord_number = ScenarioEditor._coord_number
     _update_prompt_snapshot = ScenarioEditor._update_prompt_snapshot
     _is_prompt_modified = ScenarioEditor._is_prompt_modified
     _confirm_unsaved_prompts = ScenarioEditor._confirm_unsaved_prompts
@@ -142,10 +143,14 @@ class FakeEditor:
         self.entry_address_max_distance = None
         self.entry_height_min = None
         self.entry_height_max = None
+        self.initial_intrusion = None
+        self.initial_destruction = None
         self.entry_cost_var = FakeVar("0")
         self.entry_distance_var = FakeVar("")
         self.entry_height_min_var = FakeVar("")
         self.entry_height_max_var = FakeVar("")
+        self.initial_intrusion_var = FakeVar("")
+        self.initial_destruction_var = FakeVar("")
         # 组件选择由组件面板维护，本守卫不涉及，给默认值即可
         self.text_component = "text_card"
         self.components = []

@@ -11,7 +11,8 @@ from dungeon.coupling import (COUPLING_LEVELS, DEFAULT_COUPLING_LEVEL,
                               coupling_label, normalize_coupling_level)
 from dungeon.rules import EvolutionRules
 from dungeon.cast import normalize_cast
-from dungeon.schema import DEFAULT_TEXT_COMPONENT, normalize_text_component
+from dungeon.schema import (DEFAULT_TEXT_COMPONENT, normalize_initial_coord,
+                            normalize_text_component)
 from dungeon.speaker_notation import (
     DEFAULT_SPEAKER_NOTATION, SPEAKER_NOTATIONS, SPEAKER_NOTATION_LABELS,
     normalize_speaker_notation)
@@ -82,6 +83,9 @@ class ScenarioEditor(ctk.CTkFrame):
         self.entry_address_max_distance = None
         self.entry_height_min = None
         self.entry_height_max = None
+        # 起始坐标（限制带入）：None = 低区间随机、不继承角色当前坐标
+        self.initial_intrusion = None
+        self.initial_destruction = None
 
         self._build_ui()
         self._refresh_scenario_list()
@@ -448,6 +452,28 @@ class ScenarioEditor(ctk.CTkFrame):
         ctk.CTkLabel(height_row, text="米", font=ui_fonts.ui_font(_F_SMALL),
                      text_color=_MUTED).pack(side='left')
 
+        coord_row = ctk.CTkFrame(admission_card, fg_color="transparent")
+        coord_row.pack(fill='x', padx=8, pady=(2, 6))
+        ctk.CTkLabel(coord_row, text="起始坐标", font=ui_fonts.ui_font(_F_SMALL),
+                     text_color=_TITLE, width=64, anchor='w').pack(side='left')
+        self.initial_intrusion_var = ctk.StringVar()
+        ctk.CTkEntry(coord_row, textvariable=self.initial_intrusion_var, width=56,
+                     height=26, font=ui_fonts.ui_font(_F_SMALL),
+                     text_color=_DARK, placeholder_text="随机",
+                     fg_color=SC_BG, border_color=SC_BORDER_STRONG).pack(
+            side='left', padx=(6, 3))
+        ctk.CTkLabel(coord_row, text="介入 /", font=ui_fonts.ui_font(_F_SMALL),
+                     text_color=_MUTED).pack(side='left')
+        self.initial_destruction_var = ctk.StringVar()
+        ctk.CTkEntry(coord_row, textvariable=self.initial_destruction_var, width=56,
+                     height=26, font=ui_fonts.ui_font(_F_SMALL),
+                     text_color=_DARK, placeholder_text="随机",
+                     fg_color=SC_BG, border_color=SC_BORDER_STRONG).pack(
+            side='left', padx=(3, 4))
+        ctk.CTkLabel(coord_row, text="破坏（0.5–4.5；留空不继承角色）",
+                     font=ui_fonts.ui_font(_F_SMALL), text_color=_MUTED).pack(
+            side='left')
+
         ctk.CTkLabel(left_inner, text="系统初始提示",
                      font=ui_fonts.ui_font(_F_SMALL, "bold"),
                      text_color=_MUTED, anchor='w').pack(fill='x', pady=(10, 0))
@@ -645,6 +671,9 @@ class ScenarioEditor(ctk.CTkFrame):
             self.entry_address_max_distance))
         self.entry_height_min_var.set(_format_optional_number(self.entry_height_min))
         self.entry_height_max_var.set(_format_optional_number(self.entry_height_max))
+        self.initial_intrusion_var.set(_format_optional_number(self.initial_intrusion))
+        self.initial_destruction_var.set(
+            _format_optional_number(self.initial_destruction))
         # 主角称呼与对话语音在「角色」页，由它自己回填
         self.character_panel.refresh_from_config()
 
@@ -683,6 +712,10 @@ class ScenarioEditor(ctk.CTkFrame):
         self.entry_address_max_distance = admission[FIELD_MAX_DISTANCE]
         self.entry_height_min = admission[FIELD_HEIGHT_MIN]
         self.entry_height_max = admission[FIELD_HEIGHT_MAX]
+        self.initial_intrusion = normalize_initial_coord(
+            config.get("initial_intrusion"))
+        self.initial_destruction = normalize_initial_coord(
+            config.get("initial_destruction"))
         self.text_component = normalize_text_component(config.get("text_component"))
         self.speaker_notation = normalize_speaker_notation(
             config.get("speaker_notation"))
@@ -734,6 +767,10 @@ class ScenarioEditor(ctk.CTkFrame):
                 self.entry_height_min_var, self.entry_height_min),
             "entry_height_max_m": self._optional_number(
                 self.entry_height_max_var, self.entry_height_max),
+            "initial_intrusion": self._coord_number(
+                self.initial_intrusion_var, self.initial_intrusion),
+            "initial_destruction": self._coord_number(
+                self.initial_destruction_var, self.initial_destruction),
             "voice": self.character_panel.collect_voice()
         }
 
@@ -757,6 +794,14 @@ class ScenarioEditor(ctk.CTkFrame):
         if not text:
             return None
         value = coerce_distance(text)
+        return fallback if value is None else value
+
+    def _coord_number(self, var, fallback):
+        """起始坐标输入：空白 = None（随机），越界夹取，非法保留上一次的值。"""
+        text = var.get().strip()
+        if not text:
+            return None
+        value = normalize_initial_coord(text)
         return fallback if value is None else value
 
     def destroy(self):
@@ -796,6 +841,10 @@ class ScenarioEditor(ctk.CTkFrame):
             "entry_address_max_distance_m"]
         config["entry_height_min_m"] = prompt_data["entry_height_min_m"]
         config["entry_height_max_m"] = prompt_data["entry_height_max_m"]
+        config["initial_intrusion"] = prompt_data["initial_intrusion"]
+        config["initial_destruction"] = prompt_data["initial_destruction"]
+        self.initial_intrusion = prompt_data["initial_intrusion"]
+        self.initial_destruction = prompt_data["initial_destruction"]
         self.entry_address_max_distance = prompt_data[
             "entry_address_max_distance_m"]
         self.entry_height_min = prompt_data["entry_height_min_m"]

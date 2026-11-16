@@ -192,7 +192,62 @@ check("仓库迁移：身高区间保留合法值",
       _loaded[admission.FIELD_HEIGHT_MIN] == 10.0
       and _loaded[admission.FIELD_HEIGHT_MAX] == 100.0)
 
-# ---------------- 6. 入口接线（AST/源码级） ----------------
+# ---------------- 6. 起始坐标（限制带入） ----------------
+_FI = schema.FIELD_INITIAL_INTRUSION
+_FD = schema.FIELD_INITIAL_DESTRUCTION
+
+check("空模板含两个起始坐标字段（默认 None = 随机）",
+      _empty.get(_FI) is None and _empty.get(_FD) is None)
+check("起始坐标字段都在 schema 声明内",
+      {_FI, _FD} <= set(schema.known_scenario_keys()))
+
+# 归一化：缺省 / 非法 / 越界 / 合法
+check("起始坐标未配置 / 空串 / 非数字 / NaN 视为未配置",
+      all(schema.normalize_initial_coord(v) is None
+          for v in (None, "", "  ", "坏值", True, float("nan"))))
+check("起始坐标合法值原样保留（含数字字符串）",
+      schema.normalize_initial_coord(2.0) == 2.0
+      and schema.normalize_initial_coord("3.5") == 3.5)
+check("起始坐标越界夹取到 0.5–4.5",
+      schema.normalize_initial_coord(9) == 4.5
+      and schema.normalize_initial_coord(-3) == 0.5)
+
+# 纯函数入口：锚点优先、未配置随机低区间、不读角色状态、可注入 rng
+_fixed_rng = lambda lo, hi: 99.0  # noqa: E731 —— 注入值落在随机区间外，便于识别回退
+
+check("方案锚点优先（两轴各自独立）",
+      schema.initial_coordinates({_FI: 2.0, _FD: 1.5}, rng=_fixed_rng) == (2.0, 1.5))
+check("未配置锚点回退 rng 的低区间，不是角色坐标",
+      schema.initial_coordinates({}, rng=_fixed_rng) == (99.0, 99.0))
+check("只配一轴：另一轴回退随机",
+      schema.initial_coordinates({_FI: 3.0}, rng=_fixed_rng) == (3.0, 99.0))
+check("锚点缺失时默认 rng 落在 [0.5, 2.5]",
+      all(0.5 <= v <= 2.5 for v in schema.initial_coordinates({})))
+
+# 校验器诊断：非法值 / 越界报 warning，留空与合法值不报
+_coord_diags = validate_scenario_config({_FI: "坏值", _FD: 9})
+check("起始坐标非数字报 warning",
+      any(d.level == "warning" and d.path == _FI for d in _coord_diags))
+check("起始坐标越界报 warning",
+      any(d.level == "warning" and d.path == _FD for d in _coord_diags))
+_check_clean = schema.empty_scenario_config()
+_check_clean["chapters"] = [{"name": "开场", "start": True},
+                            {"name": "终幕", "ending": True}]
+_check_clean[_FI] = 2.0
+_check_clean[_FD] = 1.5
+check("合法起始坐标没有 error/warning",
+      not [d for d in validate_scenario_config(_check_clean)
+           if d.level in ("error", "warning")])
+
+# 仓库迁移：越界夹取、非法归一为未配置（不写出键）
+_coord_repo = ScenarioRepo(data_dir=tempfile.mkdtemp(prefix="scenario_coord_repo_"))
+_coord_repo.save_config("default", {_FI: 9, _FD: "坏值"})
+_coord_loaded = _coord_repo.load_config("default")
+check("仓库迁移：起始坐标越界夹取为 4.5", _coord_loaded.get(_FI) == 4.5)
+check("仓库迁移：非法起始坐标归为未配置（不写键）",
+      _FD not in _coord_loaded or _coord_loaded.get(_FD) is None)
+
+# ---------------- 7. 入口接线（AST/源码级） ----------------
 def _source(rel_path):
     with open(os.path.join(_PROJECT_ROOT, rel_path), encoding="utf-8") as fh:
         return fh.read()

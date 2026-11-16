@@ -20,7 +20,8 @@ from dungeon.audio.chapters import normalize_chapters
 from dungeon.cast import normalize_cast
 from dungeon.coupling import (BULLA, SOLEA, normalize_coupling_level)
 from dungeon.admission import normalize_fields as normalize_admission_fields
-from dungeon.schema import (empty_scenario_config, normalize_ending_policy,
+from dungeon.schema import (empty_scenario_config, INITIAL_COORD_FIELDS,
+                            normalize_ending_policy, normalize_initial_coord,
                             normalize_text_component, TEXT_COMPONENT_IDS)
 from dungeon.speaker_notation import (LITERARY, TAGGED,
                                       normalize_speaker_notation)
@@ -188,6 +189,11 @@ class ScenarioRepo:
             "entry_action_cost": max(0, int(config.get("entry_action_cost", 0) or 0)),
             # 进入准入：地址距离与身高区间（缺失/非法值按「不限」归一化）
             **normalize_admission_fields(config),
+            # 起始坐标（限制带入）：只对作者显式写过的键归一化（越界夹取、
+            # 非法归为 None＝未配置）；老方案没有这两个键时不会被凭空补出，
+            # 缺省行为（低区间随机）由 initial_coordinates 决定
+            **{key: normalize_initial_coord(config.get(key))
+               for key in INITIAL_COORD_FIELDS if key in config},
             # 结局策略：作者对"本方案要不要结局"的显式声明（校验器据此决定是否提示）。
             # 缺省 required——老方案语义不变，仍然会提示"没有结局路径"。
             "ending_policy": normalize_ending_policy(config.get("ending_policy")),

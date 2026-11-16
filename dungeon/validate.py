@@ -278,6 +278,7 @@ def _validate_top_level(config: dict, add) -> None:
     if not _is_number(cost) or cost < 0:
         add("warning", "entry_action_cost", "进入所需行动点数必须是非负数字")
     _validate_admission(config, add)
+    _validate_initial_coords(config, add)
     if config.get("text_component", schema.DEFAULT_TEXT_COMPONENT) not in schema.TEXT_COMPONENT_IDS:
         add("warning", "text_component",
             f"文本组件「{config.get('text_component')}」无效"
@@ -476,6 +477,33 @@ def _validate_admission(config: dict, add) -> None:
     if minimum is not None and maximum is not None and minimum > maximum:
         add("warning", FIELD_HEIGHT_MIN,
             "身高下限大于上限：所有角色都会被拒之门外")
+
+
+def _validate_initial_coords(config, add) -> None:
+    """起始坐标（限制带入）：显式配置时的类型与越界诊断。
+
+    留空是合法的（回退低区间随机）；写错的类型/NaN 无法落地成坐标，必须报出来，
+    越界值运行时会夹取到 0.5–4.5，也提示作者，避免以为配置值会被原样使用。
+    """
+    for key, label in ((schema.FIELD_INITIAL_INTRUSION, "起始介入度"),
+                       (schema.FIELD_INITIAL_DESTRUCTION, "起始破坏性")):
+        raw = config.get(key)
+        if raw is None or raw == "":
+            continue
+        try:
+            number = float(raw)
+        except (TypeError, ValueError):
+            number = None
+        if isinstance(raw, bool) or number is None:
+            add("warning", key, f"{label}必须是 0.5–4.5 的数字；"
+                                f"留空表示低区间随机、不继承角色当前坐标")
+            continue
+        if number != number:
+            add("warning", key, f"{label}不是有效数字，按未配置处理")
+        elif number < schema.COORDINATE_MIN or number > schema.COORDINATE_MAX:
+            add("warning", key,
+                f"{label}为 {number:g}，超出 {schema.COORDINATE_MIN}–"
+                f"{schema.COORDINATE_MAX}，运行时会夹取到边界")
 
 
 def _validate_voice(voice_raw, coupling_level, add) -> None:

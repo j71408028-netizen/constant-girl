@@ -30,7 +30,6 @@
 """
 
 import os
-import random
 from collections import deque
 
 from core.ai import create_client
@@ -47,6 +46,7 @@ from dungeon.audio.chapters import find_chapter, normalize_chapters
 from dungeon.cast import normalize_cast
 from dungeon.characters import CharacterLedger
 from dungeon.coupling import normalize_coupling_level
+from dungeon.schema import initial_coordinates
 from dungeon.speaker_notation import normalize_speaker_notation
 from dungeon.scene import landmarks_for_chapter, place_label
 from dungeon.window.frame import FrameScheduler
@@ -690,9 +690,14 @@ class DungeonWindowBase:
                 init_custom[attr["name"]] = attr.get("init_value", 0.0)
         personality = self.personality
         character = self.character
+        # 起始坐标「限制带入」：方案锚点优先、否则低区间随机，不读角色世界坐标
+        # （定义见 dungeon.schema.initial_coordinates）。与结局写回的坐标夹取
+        # （限制带出）对称：副本是独立叙事空间。深度仍从角色带入——它只影响
+        # 演化速率，不进叙事校准。
+        init_intr, init_dest = initial_coordinates(scenario_config)
         self.dungeon_state = DungeonState(
-            intrusion=personality.init_intrusion if personality.init_intrusion != 0 else random.uniform(0.5, 2.5),
-            destruction=personality.init_destruction if personality.init_destruction != 0 else random.uniform(0.5, 2.5),
+            intrusion=init_intr,
+            destruction=init_dest,
             custom_attrs=init_custom,
             depth_intrusion=(character.current_depth_intrusion
                             if character is not None

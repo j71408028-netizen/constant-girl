@@ -54,6 +54,7 @@ _GOLDEN_EMPTY_KEYS = {
     "cast", "text_component", "speaker_notation",
     "entry_action_cost", "entry_address", "entry_address_max_distance_m",
     "entry_height_min_m", "entry_height_max_m",
+    "initial_intrusion", "initial_destruction",
     "ending_policy",
     "section_prompts", "evolution_attrs", "chapters", "triggers", "voice",
 }

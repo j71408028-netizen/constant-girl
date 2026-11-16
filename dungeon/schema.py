@@ -13,6 +13,7 @@ S1.5 之前，方案结构散落在三处：``scenario_repo._migrate`` / ``chapt
 一致性，防止再次漂移。
 """
 
+import random
 from dataclasses import dataclass
 from typing import Any
 
@@ -50,6 +51,59 @@ SCENE_LANDMARK_DIMENSIONS = ("vertical", "horizontal")
 SCENE_LANDMARK_HORIZONTAL_TYPES = ("length", "width")
 DEFAULT_SCENE_LANDMARK_DIMENSION = "vertical"
 DEFAULT_SCENE_LANDMARK_HORIZONTAL_TYPE = "length"
+
+# ---------------- 起始坐标（限制带入） ----------------
+# 方案锚点字段：进入副本时直接落到这两个坐标，不继承角色的世界坐标。
+# 与结局写回的坐标夹取（限制带出）对称——副本是独立叙事空间。深度不在这里，
+# 它仍从角色带入（只影响演化速率，不进叙事校准）。
+FIELD_INITIAL_INTRUSION = "initial_intrusion"
+FIELD_INITIAL_DESTRUCTION = "initial_destruction"
+INITIAL_COORD_FIELDS = (FIELD_INITIAL_INTRUSION, FIELD_INITIAL_DESTRUCTION)
+
+#: 坐标取值域，与 rules / state_service / 结局写回的夹取口径一致。
+COORDINATE_MIN = 0.5
+COORDINATE_MAX = 4.5
+#: 未配置锚点时的回退随机区间（低区间，避免不同角色全量带入造成开局漂移）。
+INITIAL_COORD_RANDOM_MIN = 0.5
+INITIAL_COORD_RANDOM_MAX = 2.5
+
+
+def normalize_initial_coord(value):
+    """把任意来源的起始坐标归一化为域内浮点数；未配置/非法返回 None。
+
+    显式配置的越界值夹取到 [0.5, 4.5]（与运行时、结局写回同口径）；
+    ``None``/空串/非数字/NaN 视为未配置，由 :func:`initial_coordinates` 回退随机。
+    保留"写错的值"不静默当作 0，避免开局被钉在边界。
+    """
+    if value is None or value == "" or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number:  # NaN
+        return None
+    return max(COORDINATE_MIN, min(COORDINATE_MAX, number))
+
+
+def initial_coordinates(config, rng=None):
+    """返回副本开场的 ``(intrusion, destruction)``。
+
+    方案显式锚点优先（经 :func:`normalize_initial_coord` 夹取），未配置时回退
+    ``[0.5, 2.5]`` 随机。只读方案配置，不读角色性格坐标——这是"限制带入"的
+    执行点。``rng`` 可注入以便确定性测试，缺省用 ``random.uniform``。
+    """
+    config = config if isinstance(config, dict) else {}
+    rng = rng or random.uniform
+    coords = tuple(
+        normalize_initial_coord(config.get(key))
+        for key in INITIAL_COORD_FIELDS
+    )
+    return tuple(
+        value if value is not None
+        else rng(INITIAL_COORD_RANDOM_MIN, INITIAL_COORD_RANDOM_MAX)
+        for value in coords
+    )
 
 
 def normalize_ending_policy(value, default: str = DEFAULT_ENDING_POLICY) -> str:
@@ -132,6 +186,12 @@ SCENARIO_FIELDS = (
               note="留空表示不设下限"),
     FieldSpec("entry_height_max_m", "float", "身高上限（米）", None,
               note="留空表示不设上限"),
+    FieldSpec(FIELD_INITIAL_INTRUSION, "float", "起始坐标·介入度", None,
+              note="进入副本时直接落到该坐标（0.5–4.5）；留空 = 低区间随机。"
+                   "不继承角色当前坐标，与结局写回的夹取对称"),
+    FieldSpec(FIELD_INITIAL_DESTRUCTION, "float", "起始坐标·破坏性", None,
+              note="进入副本时直接落到该坐标（0.5–4.5）；留空 = 低区间随机。"
+                   "不继承角色当前坐标，与结局写回的夹取对称"),
     FieldSpec("ending_policy", "enum", "结局策略", DEFAULT_ENDING_POLICY,
               choices=ENDING_POLICIES,
               note="required=方案应有结局（没有则校验提示）；"
@@ -361,6 +421,8 @@ def empty_scenario_config() -> dict:
         "entry_address_max_distance_m": None,
         "entry_height_min_m": None,
         "entry_height_max_m": None,
+        FIELD_INITIAL_INTRUSION: None,
+        FIELD_INITIAL_DESTRUCTION: None,
         "ending_policy": DEFAULT_ENDING_POLICY,
         "section_prompts": {key: "" for key in TEXT_TYPE_KEYS},
         "evolution_attrs": [
