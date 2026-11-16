@@ -9,6 +9,9 @@ macOS 的文件系统不区分大小写，``Path.exists()`` 对 ``docs/Releases/
 
 因此这里不直接用 ``exists()``，而是逐段比对**真实目录项的名字**（``os.listdir``），
 在 Windows 上也能复现 Linux 的判定。跨平台共享的路径一律用全小写。
+
+另一条守卫：正式文档不得提及本地 agent 区与导览（``.workbuddy/``、``AGENTS.md``）——
+其他用户与开发者看不到这些内容，写了等于指向空处；``AGENTS.md`` 自身豁免。
 """
 import os, re, sys, pathlib
 
@@ -22,6 +25,9 @@ LINK = re.compile(r'\]\(([^)\s]+?)(?:\s+"[^"]*")?\)')
 PATHISH = re.compile(r'docs/[\w/\-]+\.md')
 #: designs/ 组的边界：组内文档只许内部互链（见下方守卫逻辑）
 DESIGN_ROOT = ROOT / 'docs' / 'designs'
+#: 正式文档不得提及的本地内容。AGENTS.md 是本地导览本身，豁免。
+LOCAL_ONLY = re.compile(r'\.workbuddy(?:/|\b)|AGENTS\.md')
+LOCAL_GUIDE = ROOT / 'AGENTS.md'
 
 
 def _resolve_exact(start: pathlib.Path, target: str) -> str | None:
@@ -59,6 +65,10 @@ for p in ROOT.rglob('*.md'):
     if any(part.startswith(VIRTUALENV_PREFIXES) for part in p.parts):
         continue
     for i, line in enumerate(p.read_text('utf-8', 'replace').splitlines(), 1):
+        # 正式文档不提本地 agent 区/导览——其他用户和开发者看不到，写了等于指向空处
+        if p != LOCAL_GUIDE:
+            for m in LOCAL_ONLY.finditer(line):
+                bad.append(f'{p.relative_to(ROOT)}:{i} 提及本地内容 -> {m.group(0)}')
         for m in LINK.finditer(line):
             t = m.group(1)
             if t.startswith(('http', '#', 'mailto:')):

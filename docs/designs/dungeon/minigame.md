@@ -78,12 +78,11 @@ class MyGame(MiniGame):
   回放记录（`game_result` 字段，回放不进游戏直接复现）。
 - **离屏画布上传（单张 GL 纹理 + 脏矩形增量）**：`offscreen()` 出来的画布由宿主
   自持**一张 GL 纹理**（`glGenTextures` + `glTexImage2D`），每帧按绘制包围盒记脏，
-  用 `glTexSubImage2D` 只重传变化的那几块矩形（整张 1088×768 重传实测 0.294 ms，
-  见 `.workbuddy/p6_probe/probe_gltex.py`）。纹理经 `imgui.ImTextureRef(int(gl_name))`
+  用 `glTexSubImage2D` 只重传变化的那几块矩形（整张 1088×768 重传实测 0.294 ms）。
+  纹理经 `imgui.ImTextureRef(int(gl_name))`
   显示（OpenGL3 后端的 `ImTextureID` 就是 GLuint）；画布被整块换掉（换关）时旧纹理
   按弱引用自动回收。游戏侧无需任何改动，仍旧是「画布内容变化后下一次 `draw_image`
-  自动重传」的语义。见 `dungeon/window/gl_texture.py` 与
-  `.workbuddy/imgui-migration/52-analysis-gpu-texture-native.md` §6。
+  自动重传」的语义。见 `dungeon/window/gl_texture.py`。
 - **销毁**：随 `_destroy_overlays` 同批清理（此时帧时钟已停、GL 上下文已释放，
   因此删 GL 纹理按 `_frame.running` 跳过，只丢句柄；结果回传自然失效）。
 

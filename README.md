@@ -181,7 +181,7 @@ data/
 
 项目还在快速迭代阶段，欢迎任何形式的参与——写一套地标 / 描述风格、做一个副本方案、报一个 bug，都算。
 
-- 改代码前先读 [AGENTS.md](AGENTS.md) 与[架构说明](docs/dev/architecture.md)，分层与命名由离线守卫强制
+- 改代码前先读[架构说明](docs/dev/architecture.md)，分层与命名由离线守卫强制
 - 提交前跑 `python tests/run_checks.py`（离线，不需要显示器）；改动涉及窗口的再追加 `--smoke`
 - 提交信息用约定式提交：`<type>(<scope>): <subject>`，正文用中文
 
