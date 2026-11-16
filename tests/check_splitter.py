@@ -6,11 +6,13 @@
 覆盖：
 1. 无标记回归：正文无 ``@说话人@`` / ``==`` 时切分行为与引入标记前一致；
 2. 说话人标记：单元起点的完整 ``@X@`` 解析为 ``DisplayUnit.speaker`` 并从正文剥离；
-3. 引号闭合断点：一段对话保持为单个显示段落；
-4. 流式幂等：逐字累加重算 ``split_stream_units``，已完成单元集合单调一致；
+3. 台词块：``@说话人@`` + 引号内部按句末标点断句、每段继承说话人、首尾引号不上屏
+   （落盘净文本仍保留引号以区分台词），短台词独立成段；
+4. 标点断点：句中破折号 / 省略号与强调引号不再是断点；
+5. 流式幂等：逐字累加重算 ``split_stream_units``，已完成单元集合单调一致；
    未闭合的半截标记在尾部被抑制显示；
-5. 中间标记不解析（原样保留）；落盘净化 ``strip_speaker_markers``；
-6. 高亮标记：``==`` 按显示段落生效（沾一点就整段高亮）、标记不上屏、
+6. 中间标记不解析（原样保留）；落盘净化 ``strip_speaker_markers``；
+7. 高亮标记：``==`` 按显示段落生效（沾一点就整段高亮）、标记不上屏、
    未闭合的开标记作用到段落末尾、落盘净化 ``strip_display_markers``。
 """
 
@@ -51,21 +53,33 @@ check("无标记：分号归一为句号、破折号归一为省略号",
 # ---------------- 2. 说话人标记 ----------------
 text = "@李队长@“桥还没塌，先撤居民。”"
 units, tail = split_stream_units(text)
-check("标记：引号闭合切出对话单元",
-      units == [DisplayUnit(speaker="李队长", text="“桥还没塌，先撤居民。”")],
+check("台词：引号闭合切出单元、首尾引号不上屏",
+      units == [DisplayUnit(speaker="李队长", text="桥还没塌，先撤居民。")],
       str((units, tail)))
+check("台词：落盘净文本保留引号以区分台词",
+      strip_display_markers(text) == "“桥还没塌，先撤居民。”",
+      strip_display_markers(text))
 
 units = split_full_text("@李队长@“先撤居民。”人群骚动了起来。她低声笑了。")
-check("标记：对话与叙述混排",
-      units == [DisplayUnit(speaker="李队长", text="“先撤居民。”"),
+check("台词：与叙述混排",
+      units == [DisplayUnit(speaker="李队长", text="先撤居民。"),
                 DisplayUnit(speaker=None, text="人群骚动了起来。"),
                 DisplayUnit(speaker=None, text="她低声笑了。")],
       str(units))
 
 units = split_full_text("远处传来呼喊。\n@居民@“她来了！快跑！”")
-check("标记：换行断点后接对话",
+check("台词：换行断点后接对话、内部断句带说话人",
       units == [DisplayUnit(speaker=None, text="远处传来呼喊。"),
-                DisplayUnit(speaker="居民", text="“她来了！快跑！”")],
+                DisplayUnit(speaker="居民", text="她来了！"),
+                DisplayUnit(speaker="居民", text="快跑！")],
+      str(units))
+
+# 台词块内部可断，每段都带说话人
+units = split_full_text("@李队长@“先撤居民。”@居民@“桥还没塌。快跑！”")
+check("台词：内部按句末标点断、每段继承说话人",
+      units == [DisplayUnit(speaker="李队长", text="先撤居民。"),
+                DisplayUnit(speaker="居民", text="桥还没塌。"),
+                DisplayUnit(speaker="居民", text="快跑！")],
       str(units))
 
 # 末段无句末断点（落在尾部）时，起点的完整标记同样要解析出说话人
@@ -79,14 +93,37 @@ units, tail = split_stream_units("远处传来呼喊。\n@居民@今天")
 check("流式：尾部起点完整标记解析说话人",
       tail.speaker == "居民" and tail.text == "今天", str(tail))
 
-# ---------------- 3. 引号闭合断点 ----------------
-units = split_full_text("@李队长@“任务完成了，我们走吧。”随后的欢呼持续了很久。")
-check("标记：单段对话不被拆成两截",
-      len(units) == 2 and units[0].speaker == "李队长"
-      and units[0].text == "“任务完成了，我们走吧。”",
+# ---------------- 3. 台词块 ----------------
+units = split_full_text("@李队长@“能。”随后的欢呼持续了很久。")
+check("台词：短台词独立成段、不吞后文",
+      units == [DisplayUnit(speaker="李队长", text="能。"),
+                DisplayUnit(speaker=None, text="随后的欢呼持续了很久。")],
       str(units))
 
-# ---------------- 4. 流式幂等 ----------------
+# ---------------- 4. 标点断点 ----------------
+units = split_full_text("不是镜子——是坑壁的岩层。她翻了个身。")
+check("标点：句中破折号不断、保留原样",
+      units == [DisplayUnit(speaker=None, text="不是镜子——是坑壁的岩层。"),
+                DisplayUnit(speaker=None, text="她翻了个身。")],
+      str(units))
+
+units = split_full_text("她的意思更像是——你这么大一块东西，往这边移，会把晒着的东西弄乱。")
+check("标点：破折号段整段保留",
+      [u.text for u in units] == ["她的意思更像是——你这么大一块东西，往这边移，会把晒着的东西弄乱。"],
+      str(units))
+
+units = split_full_text("但我说的“矮一些”，是相对于我。")
+check("标点：强调引号不断、保留显示",
+      [u.text for u in units] == ["但我说的“矮一些”，是相对于我。"],
+      str(units))
+
+units = split_full_text("我只知道我离她大概有……我不知道。中间隔着好几个镇子。")
+check("标点：句中省略号不断句",
+      units == [DisplayUnit(speaker=None, text="我只知道我离她大概有……我不知道。"),
+                DisplayUnit(speaker=None, text="中间隔着好几个镇子。")],
+      str(units))
+
+# ---------------- 5. 流式幂等 ----------------
 full = "@李队长@“桥还没塌，先撤居民。”人群骚动了起来。"
 seen_units = []
 consistent = True
@@ -105,9 +142,10 @@ check("流式：最终定格与 split_full_text 一致",
 units, tail = split_stream_units("@李队长")
 check("流式：未闭合标记抑制显示", units == [] and tail.text == "", str((units, tail)))
 units, tail = split_stream_units("@李队长@“桥")
-check("流式：标记闭合后解析并显示正文", tail.text == "“桥", str((units, tail)))
+check("流式：标记闭合后解析并显示正文（引号不上屏）",
+      tail.text == "桥" and tail.speaker == "李队长", str((units, tail)))
 
-# ---------------- 5. 中间标记不解析 + 落盘净化 ----------------
+# ---------------- 6. 中间标记不解析 + 落盘净化 ----------------
 units = split_full_text("有人在弹幕里写着@某人@，没人当真。")
 check("中间标记不解析", units == [DisplayUnit(speaker=None,
                                                text="有人在弹幕里写着@某人@，没人当真。")],
@@ -120,7 +158,7 @@ check("净化：无标记原样返回",
       strip_speaker_markers("普通叙述。") == "普通叙述。")
 check("净化：空串安全", strip_speaker_markers("") == "")
 
-# ---------------- 6. 高亮标记（以显示段落为渲染单位） ----------------
+# ---------------- 7. 高亮标记（以显示段落为渲染单位） ----------------
 units = split_full_text("==她终于俯下身。==人群安静了下来。")
 check("高亮：成对标记整句高亮且标记不上屏",
       units == [DisplayUnit(speaker=None, text="她终于俯下身。", highlight=True),

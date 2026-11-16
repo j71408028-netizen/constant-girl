@@ -219,13 +219,13 @@ check("真流式起手：已上屏是 target 前缀",
       item2b["text"] == sentence1[:h2b._reveal["pos"]],
       f"text_len={len(item2b['text'])}")
 
-# 起点带说话人标记的首 chunk：尾部净化解析 speaker 并剥离标记
+# 起点带说话人标记的首 chunk：尾部净化解析 speaker、剥离标记与台词引号
 h2c = _CursorHost()
 item2c = {"type_str": "", "text": "", "speaker": None, "highlight": False}
 h2c.story_history.append(item2c)
 DungeonStoryEngine._update_stream_units(h2c, item2c, "@李队长@“桥还没塌，")
-check("真流式起手：起点完整标记解析出说话人",
-      item2c["speaker"] == "李队长" and h2c._reveal["target"] == "“桥还没塌，",
+check("真流式起手：解析说话人、首尾引号不上屏",
+      item2c["speaker"] == "李队长" and h2c._reveal["target"] == "桥还没塌，",
       f"speaker={item2c['speaker']} target={h2c._reveal['target']!r}")
 
 # ---------------- 3. 三态点击机 ----------------

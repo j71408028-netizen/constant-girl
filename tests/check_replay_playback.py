@@ -284,8 +284,8 @@ QUOTED = "“桥还没塌，先别过去。”"
 _sp = _PlaybackHost([{"type": "dialog", "text": QUOTED,
                       "display_text": f"@李队长@{QUOTED}"}])
 _sp._replay_next_step()
-check("带说话人的回放段落进语音导演（念整句，不是空串 / 不是前缀）",
-      _sp._speech.spoken == [("李队长", QUOTED)], _sp._speech.spoken)
+check("带说话人的回放段落进语音导演（念净台词、不带引号）",
+      _sp._speech.spoken == [("李队长", "桥还没塌，先别过去。")], _sp._speech.spoken)
 check("说话人也在显示层还原（上屏条目带 speaker）",
       _sp.story_history[-1].get("speaker") == "李队长", _sp.story_history[-1])
 
@@ -299,7 +299,7 @@ _sp2 = _PlaybackHost()
 _sp2._present_paragraph("桥还没塌，", prefix="【对话】",
                         display_text="@李队长@“桥还没塌，")
 check("同一段落的后续句走队列时也带说话人（_present_paragraph 直调）",
-      _sp2._speech.spoken == [("李队长", "“桥还没塌")], _sp2._speech.spoken)
+      _sp2._speech.spoken == [("李队长", "桥还没塌")], _sp2._speech.spoken)
 
 # ---------------- 7. 常量契约 ----------------
 check("回放复用 30 字/秒的上屏速率（未另造一套节奏）",

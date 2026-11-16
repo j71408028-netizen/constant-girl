@@ -1,11 +1,12 @@
 """内置分句器：把一次 AI 输出切成多个「显示段落」，并解析说话人标记。
 
 AI 自身的换行与句读不稳定，分句不依赖其分段习惯，而是按确定性规则切分：
-换行、对话引号闭合、句末标点、分号、破折号都视为断点，并对截断处标点做
-归一化（分号归一为句号、破折号归一为省略号、悬空顿逗清除）。
+换行、句末标点、分号是断点；句中破折号与省略号保留原样、不作断点，分号归一
+为句号、悬空顿逗清除。强调引号是正文的一部分，保留显示且不构成断点。
 
-引号内只认「闭合引号」这一个断点：一段对话保持为单个显示段落，避免把
-未闭合的对话拆成两截。
+``@说话人@`` 紧跟引号构成「台词块」：块内按句末标点切成多个显示段落，每段
+继承同一 speaker，首尾引号不进显示文本（原文保留引号，用于区分台词与叙述）；
+未闭合的台词留作尾部，收全后自然定格。
 
 说话人标记：方案声明 ``speaker_notation="tagged"`` 时，AI 会在对话句句首写
 「@说话人@」（规则见 ``dungeon/speaker_notation.py``）。本模块在显示段落
@@ -39,6 +40,8 @@ _SPEAKER_MARKER_ANY_RE = re.compile(r"@[^@\n]{1,12}@")
 
 _OPEN_QUOTES = "“『「《〈‘"
 _CLOSE_QUOTES = "”』」》〉’"
+#: 台词引号配对（开 -> 闭）；非台词引号按普通正文处理
+_QUOTE_PAIR = dict(zip(_OPEN_QUOTES, _CLOSE_QUOTES))
 _END_PUNCT = "。！？!?…"
 # 截断处不允许出现的悬空标点，归一化时清除
 _TRAILING_NOISE = "，、：:，"
@@ -60,8 +63,6 @@ def _normalize_unit_end(unit: str) -> str:
     unit = unit.strip()
     if not unit:
         return unit
-    if unit[-1] == "—":
-        return unit.rstrip("—") + "……"
     while unit and unit[-1] in _TRAILING_NOISE:
         unit = unit[:-1]
     if unit and unit[-1] in "；;":
@@ -143,89 +144,157 @@ def strip_display_markers(text: str) -> str:
     return strip_highlight_markers(strip_speaker_markers(text))
 
 
+def _project_display(text: str) -> tuple:
+    """把正文投影为显示字符流，返回 ``(显示文本, 源下标, 每字说话人, 台词收尾位置)``。
+
+    ``@说话人@`` 紧跟开引号构成台词块：标记与首尾引号不进显示，块内每个字符
+    都带上该说话人，供切分后每段继承；闭引号位置作为**显式断点**（不受最小
+    长度限制），短台词才不会被后文吞并。其余 ``@说话人@`` 原样保留，由段首
+    解析（正文中间的标记因此不会被误读）；强调引号按普通正文保留。
+    """
+    chars = []
+    src = []
+    speakers = []
+    ends = set()
+    i = 0
+    n = len(text)
+    while i < n:
+        if text[i] == "@":
+            match = _SPEAKER_MARKER_RE.match(text, i)
+            if match and match.end() < n and text[match.end()] in _OPEN_QUOTES:
+                speaker = match.group(1)
+                open_char = text[match.end()]
+                close_char = _QUOTE_PAIR.get(open_char, open_char)
+                j = match.end() + 1
+                nest = 1
+                closed = False
+                while j < n and nest:
+                    char = text[j]
+                    if char == close_char:
+                        nest -= 1
+                        if nest == 0:
+                            j += 1
+                            # 台词收尾：吞掉紧随的句末标点（引号内已有句读）
+                            while j < n and text[j] in _END_PUNCT:
+                                j += 1
+                            ends.add(len(chars))
+                            closed = True
+                            break
+                    elif char == open_char:
+                        nest += 1
+                    chars.append(char)
+                    src.append(j)
+                    speakers.append(speaker)
+                    j += 1
+                if closed:
+                    i = j
+                    continue
+                # 未闭合（流式半截）：整段作为台词尾部，speaker 已打在字符上
+                i = j
+                continue
+        chars.append(text[i])
+        src.append(i)
+        speakers.append(None)
+        i += 1
+    return "".join(chars), src, speakers, ends
+
+
 def split_stream_units(text: str):
     """把（部分）正文切成 ``(完整单元列表, 未完结尾部)``。
 
     单元与结尾部都是 :class:`DisplayUnit`；结尾部是未完结句，``speaker`` 取自
-    起点的完整标记（半截标记按显示提示被抑制）。纯函数：对同一文本重复调用
-    结果一致，流式过程中每收到新数据整体重算。
+    起点的完整标记或台词块（半截标记按显示提示被抑制）。纯函数：对同一文本
+    重复调用结果一致，流式过程中每收到新数据整体重算。
     """
     units = []
     clean_text, mask = scan_highlight_markers(text)
-    text = clean_text
+    display, src, unit_speakers, dialogue_ends = _project_display(clean_text)
+    n = len(display)
     seg_start = 0
-    depth = 0
-    i = 0
-    n = len(text)
 
     def highlighted(start: int, end: int) -> bool:
         """该段被高亮区盖住（显示段落是渲染单位，沾一点就整段高亮）。"""
-        return any(mask[start:end])
+        if end <= start:
+            return False
+        return any(mask[src[start]:src[end - 1] + 1])
+
+    def trim(a: int, b: int) -> tuple:
+        while a < b and display[a].isspace():
+            a += 1
+        while b > a and display[b - 1].isspace():
+            b -= 1
+        return a, b
 
     def try_flush(end: int, min_chars: int) -> bool:
         nonlocal seg_start
-        raw = text[seg_start:end].strip()
-        if not raw:
+        a, b = trim(seg_start, end)
+        if a >= b:
+            seg_start = end
             return False
-        speaker, display = _split_leading_marker(raw)
-        # 最小长度按剥离标记后的正文判断，避免标记本身凑够字数
-        if len(display) < min_chars:
+        raw = display[a:b]
+        speaker, body = _split_leading_marker(raw)
+        # 标记被剥离后正文起点右移，说话人从正文首字取（台词块继承）
+        body_pos = a + (len(raw) - len(body))
+        if speaker is None and body_pos < b:
+            speaker = unit_speakers[body_pos]
+        # 台词块内「内部可以断」，短句也独立成段；叙述仍按最小长度防碎片
+        in_dialogue = body_pos < b and unit_speakers[body_pos] is not None
+        limit = 1 if in_dialogue else min_chars
+        if len(body) < limit:
             return False
-        unit = _normalize_unit_end(display)
+        unit = _normalize_unit_end(body)
         if unit:
             units.append(DisplayUnit(speaker=speaker, text=unit,
-                                     highlight=highlighted(seg_start, end)))
+                                     highlight=highlighted(body_pos, b)))
         seg_start = end
         return True
 
+    i = 0
     while i < n:
-        ch = text[i]
+        if i in dialogue_ends:
+            # 台词闭合是作者显式边界，短台词也独立成段并保留说话人
+            try_flush(i, 1)
+            dialogue_ends.discard(i)
+            continue
+        ch = display[i]
         if ch == "\n":
-            # 换行是 AI 显式分段，不受最小长度限制
+            # 换行是作者/AI 显式分段，不受最小长度限制
             try_flush(i, 1)
             i += 1
             continue
-        if ch in _OPEN_QUOTES:
-            depth += 1
-            i += 1
-            continue
-        if ch in _CLOSE_QUOTES:
-            if depth > 0:
-                depth -= 1
-            # 对话闭合即断点；吞掉紧随的句末标点与多余闭合引号
+        if ch in _END_PUNCT:
             j = i + 1
-            while j < n and (text[j] in _END_PUNCT or text[j] in _CLOSE_QUOTES):
+            while j < n and display[j] in _END_PUNCT:
                 j += 1
+            # 句中省略号（后面紧接正文）不断句
+            if ch == "…" and j < n and not display[j].isspace() and display[j] != "\n":
+                i = j
+                continue
             if try_flush(j, _MIN_UNIT_CHARS):
-                depth = 0
                 i = j
                 continue
             i += 1
             continue
-        if depth == 0:
-            if ch in _END_PUNCT:
-                j = i + 1
-                while j < n and text[j] in _END_PUNCT:
-                    j += 1
-                if try_flush(j, _MIN_UNIT_CHARS):
-                    i = j
-                    continue
-            elif ch in "；;":
-                if try_flush(i + 1, _MIN_UNIT_CHARS):
-                    i += 1
-                    continue
-            elif ch == "—":
-                j = i
-                while j < n and text[j] == "—":
-                    j += 1
-                try_flush(j, _MIN_UNIT_CHARS)
-                i = j
+        if ch in "；;":
+            if try_flush(i + 1, _MIN_UNIT_CHARS):
+                i += 1
                 continue
+        # 破折号与引号都不再是断点：破折号留在正文，引号按强调引号保留显示
         i += 1
 
-    tail_speaker, tail_text = _resolve_stream_tail(text[seg_start:].strip())
+    a, b = trim(seg_start, n)
+    tail_speaker, tail_text = None, ""
+    if a < b:
+        raw = display[a:b]
+        lead_speaker, body = _resolve_stream_tail(raw)
+        body_pos = a + (len(raw) - len(body))
+        if lead_speaker is not None:
+            tail_speaker = lead_speaker
+        elif body_pos < b:
+            tail_speaker = unit_speakers[body_pos]
+        tail_text = body
     tail = DisplayUnit(speaker=tail_speaker, text=tail_text,
-                       highlight=bool(tail_text) and highlighted(seg_start, n))
+                       highlight=bool(tail_text) and highlighted(a, b))
     return units, tail
 
 
