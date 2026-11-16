@@ -9,14 +9,16 @@
 |---|---|---|
 | [platforms/linux.md](platforms/linux.md) | Linux（X11 / XWayland）使用者 | 现状 |
 | [platforms/linux-history.md](platforms/linux-history.md) | 需要溯源的人 | 历史归档（只读） |
-| platforms/macos.md | macOS 使用者 | 占位（未开始） |
+| [platforms/macos.md](platforms/macos.md) | macOS（Apple Silicon）使用者 | 现状（含 Intel 不支持说明） |
 
 ## 推荐阅读顺序
 
 1. 常规安装：先读根 [`../../README.md`](../../README.md) 的「快速开始」。
 2. **Linux 用户**：读 [platforms/linux.md](platforms/linux.md) §1–§2 确认支持范围与安装差异；
    遇到具体故障再查对应小节。
-3. `linux-history.md` **不需要读**，只在追究「某个平台问题当初是怎么解决的」时按需查。
+3. **macOS 用户**：读 [platforms/macos.md](platforms/macos.md) 确认支持范围（仅 Apple Silicon）
+   与首次打开的 Gatekeeper 提示。
+4. `linux-history.md` **不需要读**，只在追究「某个平台问题当初是怎么解决的」时按需查。
 
 ## 相关组
 

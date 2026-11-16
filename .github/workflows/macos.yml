@@ -1,0 +1,138 @@
+name: macos
+
+# Apple Silicon（arm64）专属：imgui-bundle==1.92.900 只有 macOS arm64 wheel，
+# 没有 Intel 版本。不要改成 macos-*-intel——pip 必然失败，CI 也救不了。
+#
+# 分档沿用 checks.yml / gui-smoke.yml：离线门禁进 PR；真窗口与打包走推 main / 每晚 / 手动。
+# macOS runner 有原生窗口服务，不需要 xvfb / llvmpipe（那是 Linux/X11 专属）。
+#
+# CI 能证明的：arm64 依赖可装、窗口/GL/字体链路能跑、官方脚本能打出 .app 且结构完整。
+# CI 不能证明的：用户下载后 Gatekeeper「首次打开」的隔离体验、人耳听音、人眼视觉；
+# 这些按发布审计的口径留待用户侧反馈再补，不在本工作流里伪装通过。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 20 * * *"      # UTC 20:00 = 次日 04:00（CST）
+  workflow_dispatch:
+
+env:
+  PYTHONUTF8: "1"
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline:
+    name: 离线自检 · macOS arm64 · Python 3.13
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 用 setup-python 的解释器：runner 自带 python3 版本过旧，可能没有对应 wheel。
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: 确认 arm64 runner
+        run: test "$(uname -m)" = "arm64"
+
+      - name: 安装依赖（整份 requirements.txt）
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: 导入自检（Tk / imgui-bundle / PIL / numpy）
+        run: python -c "import platform, tkinter, imgui_bundle, PIL, numpy; print(platform.machine(), 'imports ok')"
+
+      # 全部门禁在这里跑；若某条守卫因 macOS 路径差异失败，先修守卫或按记录 SKIP，
+      # 不要整条工作流关掉——Linux 支持期就是靠这套分档把平台差异收敛出来的。
+      - name: 离线守卫
+        run: python tests/run_checks.py
+
+      - name: 默认方案校验（0 error 才退 0）
+        run: python scripts/scenario_validate.py
+
+      - name: 小游戏无头模拟（escape_giantess）
+        run: python scripts/escape_sim.py
+
+  gui-smoke:
+    name: GUI 冒烟（原生窗口，无 xvfb）
+    if: github.event_name != 'pull_request'
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      TMPDIR: ${{ github.workspace }}/tmp
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      # text-components 在 Linux/X11 曾触发 DPG/GLFW 段错误，imgui 迁移后仍未在 CI
+      # 复测；这里沿用 gui-smoke.yml 的跳过口径，其覆盖由下面两条 smoke 兜底。
+      - name: 副本窗口自动驾驶（全部场景，逐场景子进程）
+        run: |
+          mkdir -p "$TMPDIR"
+          python scripts/dungeon_autopilot.py --scene all --skip text-components \
+            --isolate --timeout 150
+
+      - name: 挂件全链路冒烟
+        run: python tests/smoke_mini.py
+
+      - name: 界面热切换冒烟
+        run: python tests/smoke_switch.py
+
+      - name: 上传自动驾驶报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-autopilot-reports
+          path: tmp/dungeon_autopilot_*/
+          if-no-files-found: ignore
+
+  package:
+    name: macOS 打包 + .app 结构自检
+    if: github.event_name != 'pull_request'
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # 官方打包脚本自建 .venv-macos 并装 pyinstaller；把 setup-python 的解释器
+      # 传进去，保证 wheel 架构与 runner 一致。
+      - name: 官方脚本打包（onedir → .app）
+        run: |
+          PYTHON_BIN="$(python -c 'import sys; print(sys.executable)')" \
+            bash build/macos/build_macos.sh
+
+      - name: .app 结构与链接自检
+        run: |
+          NAME="$(python -c 'import paths; print(paths.APP_NAME)')"
+          APP="dist/${NAME}.app"
+          test -d "$APP/Contents/MacOS"
+          test -f "$APP/Contents/Info.plist"
+          test -x "$APP/Contents/MacOS/${NAME}"
+          # 记录原生库是否随包：imgui-bundle / GLFW 缺失时 F11 会静默降级。
+          echo "--- native libs bundled ---"
+          find "$APP" \( -name '*.dylib' -o -name '*.so' \) -print | sort
+
+      - name: 上传 .app 产物
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: constant-girl-macos-arm64
+          path: dist/*.app
+          if-no-files-found: ignore

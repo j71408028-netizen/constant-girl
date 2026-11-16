@@ -27,6 +27,7 @@
 | 玩家 | [`../README.md`](../README.md)「快速开始」 | [`designs/README.md`](designs/README.md) |
 | 写界面文案 / 提示词 | [`terminology.md`](terminology.md) | [`designs/README.md`](designs/README.md) |
 | 在 Linux 上跑 | [`users/platforms/linux.md`](users/platforms/linux.md) | [`users/platforms/linux-history.md`](users/platforms/linux-history.md) |
+| 在 macOS 上跑 | [`users/platforms/macos.md`](users/platforms/macos.md) | 根 [`../README.md`](../README.md)「平台支持」 |
 | 做资源包 / 世界包 / 小游戏 | [`designs/README.md`](designs/README.md) | [`designs/behaviors/dev-guide.md`](designs/behaviors/dev-guide.md) |
 | 写副本方案 / 改副本引擎 | [`Dungeon/README.md`](Dungeon/README.md)（子项目入口，按任务查表） | [`designs/dungeon/script.md`](designs/dungeon/script.md)、[`dev/architecture.md`](dev/architecture.md) |
 | 改代码 | [`dev/README.md`](dev/README.md) | [`dev/architecture.md`](dev/architecture.md) |
