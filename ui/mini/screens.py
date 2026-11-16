@@ -118,7 +118,7 @@ class SettingsScreen(Screen):
         avatar.pack(fill='x', pady=3)
 
         history = px.CycleRow(
-            body, "世界履历展示", ["开", "关"],
+            body, "展示世界履历", ["开", "关"],
             on_change=lambda v: self.app.set_world_history(v == "开"),
             tone="ok", button_width=110)
         history.set_value(
@@ -144,6 +144,11 @@ class SettingsScreen(Screen):
         px.PixelButton(buttons, "新建", self.app.new_ai_profile,
                        tone="text_dim", height=24).pack(
             side='left', fill='x', expand=True, padx=(2, 0))
+
+        # 网络代理 / 屏蔽词只在专业设置页提供编辑入口，挂件共享消费但不复制
+        # 控件；一行提示指向入口，免得玩家在精简界面里找不到而以为不支持。
+        px.label(body, "网络代理、屏蔽词请在专业界面的设置中调整",
+                 tone="text_off", size=10, anchor='w').pack(fill='x', pady=(8, 0))
 
         footer = px.transparent(body)
         footer.pack(side='bottom', fill='x')

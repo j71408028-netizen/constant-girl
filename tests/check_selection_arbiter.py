@@ -216,6 +216,43 @@ _plan4 = _arb4.arbitrate(
 check("旅行先验把锚定内容排到 portable 之前",
       [c["landmark"].name for c in _plan4["comparisons"]][0] == "锚定地标")
 
+# ---------------- 4b. 自然叙述顺序（贪心地址跳转链） ----------------
+from services.exploration.arbiter import SlotRuling, narrative_chain  # noqa: E402
+
+
+def _nr(name, addr, size=100):
+    lm = Landmark(name, size, "vertical", "unique", address=addr or None)
+    return SlotRuling(cand={"landmark": lm, "size": size, "ratio": 1.0},
+                      addr=addr)
+
+
+_POS = "1e5_1e3_1e2@W-A-B"
+_NEAR = _nr("近址", "1e5_1e3_1e2@W-A-B-1")
+_MID = _nr("中区", "1e5_1e3_1e2@W-A-C")
+_FAR = _nr("远区", "1e5_1e3_1e2@W-Z-C")
+_CROSS = _nr("跨维度", "1e5_1e3_1e2@X-A")
+_PORTABLE = _nr("无地址", "")
+_chain = narrative_chain([_FAR, _CROSS, _MID, _NEAR, _PORTABLE], _POS)
+_chain_names = [r.cand["landmark"].name for r in _chain]
+check("叙述序从当前位置按跳转距离由近及远串接",
+      _chain_names[:3] == ["近址", "中区", "远区"], str(_chain_names))
+check("跨维度与无地址落到链尾",
+      _chain_names[3:] == ["跨维度", "无地址"], str(_chain_names))
+_chain_nopos = narrative_chain([_MID, _NEAR, _FAR], "")
+check("无起点时退化为尺寸/原序兜底、不崩溃",
+      len(_chain_nopos) == 3 and all(r in (_MID, _NEAR, _FAR)
+                                     for r in _chain_nopos))
+
+# arbitrate 走 comparison_order=narrative 时确实调用叙述序（_order 分派）
+_catalog_nar, _sn, _cn = _scene("narrative")
+_plan_nar = _arbiter(_catalog_nar).arbitrate(
+    [_cand(_sn, 1.0, 200), _cand(_cn, 1.25, 100)],
+    "1e5_1e3_1e2@W-A-B", height=1000.0, durability={},
+    skip_base_prob=0.0, coords=_COORDS, size_cat=_SIZE_CAT)
+check("narrative 模式仲裁不报错且产出槽位",
+      len(_plan_nar["chosen"]) == 2 and bool(_plan_nar["order"]),
+      str([c["landmark"].name for c in _plan_nar["comparisons"]]))
+
 # ---------------- 5. report 组钩子覆盖生效 ----------------
 from core.behavior_runtime import get_runtime  # noqa: E402
 

@@ -141,6 +141,41 @@ def joint_score(ruling: SlotRuling, position: str, reach: float,
     return score
 
 
+def narrative_chain(usable: List[SlotRuling], position: str) -> List[SlotRuling]:
+    """自然叙述序：从当前位置出发，沿可达地址做贪心最近邻串接。
+
+    每一步取与当前落点距离（``relate`` 的区间上界）最小、且私有名约束满足
+    的槽位，选中后把落点前移到该槽位地址，直到没有可达槽位。跨维度不可达、
+    私有名冲突与无地址的槽位不进链，按尺寸升序稳定排在末尾。无起点时同样
+    退化为尺寸升序，首个落点交给阶段 D 的锚定逻辑。
+
+    这是建议序：可达硬闸与落点演化仍由阶段 D 裁定，本函数只决定条目出现
+    的先后，让报告读起来像在空间中一步步移动。
+    """
+    pos = (position or "").strip()
+    remaining = list(usable)
+    chain = []
+    while pos and remaining:
+        best_i, best_key = None, None
+        for i, ruling in enumerate(remaining):
+            if not ruling.addr:
+                continue
+            rel = relate(pos, ruling.addr)
+            if rel.interval is None or not rel.chunk_ok:
+                continue
+            lo, hi = rel.interval
+            key = (hi, lo, float(ruling.cand.get("size") or 0.0))
+            if best_key is None or key < best_key:
+                best_key, best_i = key, i
+        if best_i is None:
+            break
+        ruling = remaining.pop(best_i)
+        chain.append(ruling)
+        pos = ruling.addr or pos
+    tail = sorted(remaining, key=lambda r: float(r.cand.get("size") or 0.0))
+    return chain + tail
+
+
 @behavior_hook("report", "promotions", layer="module", contract="strategy")
 def apply_near_match_promotions(order: List[SlotRuling],
                                 cap: int) -> Tuple[list, list]:
@@ -444,10 +479,14 @@ class SelectionArbiter:
         """建议序。match 模式：联合分稳定排序（仲裁主场）；显式尺寸序
         （size_asc/desc）是玩家可感知的呈现选择，保持原序，仅保留活动
         区域稳定前移（原 _prefer_activity_regions 语义，经档案判定）。
+        narrative 模式：从当前位置贪心串起地址跳转链（见 narrative_chain）。
         """
-        if self.catalog.settings.get("comparison_order", "match") == "match":
+        mode = self.catalog.settings.get("comparison_order", "match")
+        if mode == "match":
             return sorted(usable, key=lambda r: -self._joint_score(
                 r, position, reach, profile))
+        if mode == "narrative":
+            return narrative_chain(usable, position)
 
         def rank(r: SlotRuling) -> int:
             return 0 if (r.addr and profile.in_activity_region(r.addr)) else 1

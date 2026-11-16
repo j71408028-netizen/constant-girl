@@ -431,7 +431,9 @@ class ResourceHubPanel(ctk.CTkFrame):
         action = ("编辑条目", lambda: self.gui_ref.show_page("text_mgmt")) \
             if can_nav else None
         body, _ = self._add_section(
-            "风格组", note="启用中的风格组决定生成时使用的素材",
+            "风格组",
+            note=("启用中的风格组决定生成时使用的素材。"
+                  "地标风格全部取消后自动回退到默认风格；描述风格允许留空。"),
             action=action)
         body.columnconfigure(0, weight=1, uniform="hub_style")
         body.columnconfigure(1, weight=1, uniform="hub_style")

@@ -38,6 +38,9 @@ FOLLOW_DEFAULT_PALETTE = "跟随默认值"
 # 信息更新覆写概率四档：显示名 → 覆写概率
 INFO_UPDATE_OPTIONS = {"保守": 0.25, "中等": 0.5, "高效": 0.75, "激进": 1.0}
 
+# 对比排序：显示名 → 值。narrative 从当前位置贪心串起地址跳转链。
+ORDER_OPTIONS = {"匹配度": "match", "尺寸升序": "size_asc",
+                 "尺寸降序": "size_desc", "自然叙述顺序": "narrative"}
 
 
 class SettingsPanel(ctk.CTkScrollableFrame):
@@ -56,8 +59,8 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self.settings_repo = settings_repo
         # 副本独占设置独立成 data/user/dungeon_settings.json，见
         # persistence/dungeon_settings_repo.py。本页只放「下次进副本生效」的
-        # 启动项（记忆窗口 / 段落字体）；音量 / 帧率 / 回放 / 停靠侧这类能在
-        # 副本窗口内即时生效的，只在副本设置面板里调。
+        # 启动项（段落字体）；音量 / 帧率 / 回放 / 停靠侧这类能在副本窗口内
+        # 即时生效的，只在副本设置面板里调。记忆窗口由副本引擎独占，不在此页。
         self.dungeon_settings_repo = DungeonSettingsRepo()
         self.dungeon_settings = self.dungeon_settings_repo.load()
         self.settings = initial_settings
@@ -292,6 +295,23 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         )
         self.seed_random_btn.pack(side='left', padx=(8,0))
 
+        # 信息更新速率决定世界向玩家反馈信息的更新程度：既影响部位描述被
+        # 新文案覆写的概率，也影响加载时新闻取索引条目还是异常条目。
+        self._section_label(self.world_body, row, "信息")
+        row += 1
+
+        _, ctrl = self._make_row(self.world_body, row, "信息更新速率")
+        row += 1
+        self.info_update_var = tk.StringVar(value="中等")
+        for display, value in INFO_UPDATE_OPTIONS.items():
+            if abs(value - self.info_update_rate) < 1e-9:
+                self.info_update_var.set(display)
+                break
+        self.info_update_button = self._make_option_button(
+            ctrl, list(INFO_UPDATE_OPTIONS.keys()),
+            self._on_info_update_changed, self.info_update_var
+        )
+
         self._set_world_controls_locked()
 
     # ───────────────── 世界包联动（规则段） ─────────────────
@@ -338,13 +358,12 @@ class SettingsPanel(ctk.CTkScrollableFrame):
 
         _, ctrl = self._make_row(self.gen_body, row, "排序方式")
         row += 1
-        order_options = {"匹配度": "match", "尺寸升序": "size_asc", "尺寸降序": "size_desc"}
         self.order_var = tk.StringVar(value=self.comparison_order)
         self.order_button = self._make_option_button(
-            ctrl, list(order_options.keys()),
+            ctrl, list(ORDER_OPTIONS.keys()),
             self._on_order_option_changed, self.order_var
         )
-        for display, value in order_options.items():
+        for display, value in ORDER_OPTIONS.items():
             if value == self.comparison_order:
                 self.order_button.set(display)
                 break
@@ -391,21 +410,6 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self.use_preview_avatar_var = tk.BooleanVar(value=self.settings.get("use_preview_image_as_avatar", False))
         self.use_preview_avatar_switch = self._make_switch(ctrl, self.use_preview_avatar_var)
 
-        _, ctrl = self._make_row(self.gen_body, row, "展示世界履历")
-        row += 1
-        self.world_history_var = tk.BooleanVar(value=self.settings.get("world_history_enabled", True))
-        self.world_history_switch = self._make_switch(ctrl, self.world_history_var)
-
-        self._section_label(self.gen_body, row, "副本引擎")
-        row += 1
-
-        _, ctrl = self._make_row(self.gen_body, row, "记忆窗口大小")
-        row += 1
-        self.story_recent_var = tk.StringVar(
-            value=str(self.dungeon_settings.get("story_recent_count", 20)))
-        self.story_recent_entry = self._make_entry(ctrl, self.story_recent_var, width=64)
-        self.story_recent_entry.pack(side='left')
-
         self._section_label(self.gen_body, row, "部位设置")
         row += 1
         self._build_parts_selection(self.gen_body, row)
@@ -451,11 +455,6 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._section_label(self.disp_body, row, "界面选项")
         row += 1
 
-        _, ctrl = self._make_row(self.disp_body, row, "显示伤亡统计")
-        row += 1
-        self.show_casualties_var = tk.BooleanVar(value=self.settings.get("show_casualties", True))
-        self.show_casualties_switch = self._make_switch(ctrl, self.show_casualties_var)
-
         # 启动界面模式：只决定**下次启动**用哪套界面，点这里不重建窗口。
         # 「退出时模式」跟随上次退出时所在的界面
         # （见 services.ui_mode.resolve_startup_mode）。
@@ -488,18 +487,27 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self.dungeon_font_entry = self._make_entry(ctrl, self.dungeon_font_var, width=150)
         self.dungeon_font_entry.pack(side='left')
 
+        # 帧率 / 音量 / 停靠侧是副本窗口内的即时运行项，本页不提供入口。
+        # 玩家若在设置页找这些项，给出明确去向，免得以为不支持（见发布指南 Q1）。
+        ctk.CTkLabel(
+            self.disp_body,
+            text="帧率、音量、停靠侧在副本窗口的设置面板中即时调整",
+            font=ui_fonts.ui_font(11), text_color=SETTINGS_TEXT_SOFT,
+            anchor='w'
+        ).grid(row=row, column=0, columnspan=2, sticky='w',
+               padx=18, pady=(0, 8))
+        row += 1
+
     def _sync_dungeon_settings(self):
         """进入设置页时回读副本独占设置并刷新相关控件。
 
         设置页常驻，而副本窗口本身也会改这份设置（``dungeon_settings.json``），
         所以进页时从仓库重读一次，避免显示陈旧值。副本窗口只即时改运行期参数
-        （音量 / 帧率 / 停靠侧），不会动本页这三个项。
+        （音量 / 帧率 / 停靠侧），不会动本页这两个项。
         """
         self.dungeon_settings = self.dungeon_settings_repo.load()
         self.dungeon_font_var.set(self.dungeon_settings.get("dungeon_font")
                                   or ui_fonts.dungeon_font_default())
-        self.story_recent_var.set(
-            str(self.dungeon_settings.get("story_recent_count", 20)))
         self.auto_save_replay_var.set(
             bool(self.dungeon_settings.get("auto_save_replay", False)))
 
@@ -520,21 +528,13 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self.settings[ui_mode.STARTUP_MODE_KEY] = pref
         ui_mode.save_startup_mode(pref)
 
-    def _story_recent_count_value(self) -> int:
-        """剧情概要保留的最近段落数（2~200，非法输入回退到原值/20）。
-
-        下限与副本运行时一致（``dungeon/window/base.py`` 夹到 2）：历史窗口
-        至少要留最近两段，1 是假选项。
-        """
-        try:
-            value = int(float(self.story_recent_var.get().strip()))
-        except (ValueError, AttributeError):
-            return int(self.dungeon_settings.get("story_recent_count", 20) or 20)
-        return max(2, min(200, value))
-
     def _build_archive_block(self):
         self._setup_body_grid(self.archive_body, "archive")
         row = 0
+
+        # ── 保存 ──
+        self._section_label(self.archive_body, row, "保存")
+        row += 1
 
         _, ctrl = self._make_row(self.archive_body, row, "自动保存报告")
         row += 1
@@ -556,17 +556,21 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self.save_low_resolution_var = tk.BooleanVar(value=self.settings.get("save_low_resolution_image", False))
         self.save_low_resolution_switch = self._make_switch(ctrl, self.save_low_resolution_var)
 
-        _, ctrl = self._make_row(self.archive_body, row, "尺寸信息更新速率")
+        # ── 展示与导出 ──
+        self._section_label(self.archive_body, row, "展示与导出")
         row += 1
-        self.info_update_var = tk.StringVar(value="中等")
-        for display, value in INFO_UPDATE_OPTIONS.items():
-            if abs(value - self.info_update_rate) < 1e-9:
-                self.info_update_var.set(display)
-                break
-        self.info_update_button = self._make_option_button(
-            ctrl, list(INFO_UPDATE_OPTIONS.keys()),
-            self._on_info_update_changed, self.info_update_var
-        )
+
+        # 报告与档案导出里呈现哪些记录，归档案块；只裁剪展示，不改伤亡计算，
+        # 也不改世界履历的写入（两处始终记录）。
+        _, ctrl = self._make_row(self.archive_body, row, "展示世界履历")
+        row += 1
+        self.world_history_var = tk.BooleanVar(value=self.settings.get("world_history_enabled", True))
+        self.world_history_switch = self._make_switch(ctrl, self.world_history_var)
+
+        _, ctrl = self._make_row(self.archive_body, row, "展示伤亡统计")
+        row += 1
+        self.show_casualties_var = tk.BooleanVar(value=self.settings.get("show_casualties", True))
+        self.show_casualties_switch = self._make_switch(ctrl, self.show_casualties_var)
 
     def _build_parts_selection(self, parent, row):
         parts_frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -575,6 +579,14 @@ class SettingsPanel(ctk.CTkScrollableFrame):
 
         grid_frame = ctk.CTkFrame(parts_frame, fg_color="transparent")
         grid_frame.pack(fill='x', expand=True)
+
+        # 空选在保存时按全部部位处理（见 _save_and_return），这里显式说明，
+        # 不让玩家以为"一个都不选 = 报告不列尺寸"却得到相反结果。
+        ctk.CTkLabel(
+            parts_frame, text="全部取消勾选时按全部部位处理",
+            font=ui_fonts.ui_font(11), text_color=SETTINGS_TEXT_SOFT,
+            anchor='w'
+        ).pack(fill='x', padx=2, pady=(2, 0))
 
         cols = 5
         selected = self.settings.get("selected_parts", ALL_PART_NAMES)
@@ -624,14 +636,16 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         row += 1
 
         # 网络代理（可留空）：语音合成与 AI 文本生成**共用**同一份联网代理，见
-        # core/netproxy.py。留空 = 直连（或跟随环境变量 HTTPS_PROXY）；填了就立即
-        # 对后续请求生效。VPN 的「系统代理」Python 看不见，那种情况必须填在这里。
+        # core/netproxy.py。留空并非固定直连，而是按「显式设置 > 环境变量 >
+        # 直连」解析：先看 DUNGEON_NET_PROXY / HTTPS_PROXY / HTTP_PROXY，都没有
+        # 才直连。填了就立即对后续请求生效。VPN 的「系统代理」(WinINET) Python
+        # 看不见，那种情况必须填在这里。
         _, proxy_control = self._make_row(parent, row, "网络代理")
         self.net_proxy_var = tk.StringVar(
             value=self.settings.get("net_proxy", "") or "")
         self.net_proxy_entry = self._make_entry(
             proxy_control, self.net_proxy_var, width=190,
-            placeholder_text="直连")
+            placeholder_text="留空：环境变量或直连")
         self.net_proxy_entry.pack(side='left')
 
     def _load_ai_configs(self):
@@ -687,8 +701,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             self.on_world_setting_changed(self.world_setting)
 
     def _on_order_option_changed(self, choice):
-        order_options = {"匹配度": "match", "尺寸升序": "size_asc", "尺寸降序": "size_desc"}
-        self.comparison_order = order_options.get(choice, "match")
+        self.comparison_order = ORDER_OPTIONS.get(choice, "match")
 
     def _on_info_update_changed(self, choice):
         self.info_update_rate = INFO_UPDATE_OPTIONS.get(choice, 0.5)
@@ -725,7 +738,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._sync_dungeon_settings()
 
     def _on_order_changed(self):
-        self.comparison_order = self.order_var.get()
+        self.comparison_order = ORDER_OPTIONS.get(self.order_var.get(), "match")
 
     def _randomize_seed(self):
         new_seed = random.randint(1, 2 ** 31 - 1)
@@ -781,10 +794,9 @@ class SettingsPanel(ctk.CTkScrollableFrame):
 
         # 从 OptionMenu 获取实际值
         world_options = {"出现": "appear", "绝对巨大化": "abs_giant", "相对巨大化": "rel_giant"}
-        order_options = {"匹配度": "match", "尺寸升序": "size_asc", "尺寸降序": "size_desc"}
 
         world_setting = world_options.get(self.world_setting_var.get(), "appear")
-        comparison_order = order_options.get(self.order_var.get(), "match")
+        comparison_order = ORDER_OPTIONS.get(self.order_var.get(), "match")
 
         self.settings.update({
             "theme_palette": self.theme_palette or DEFAULT_PALETTE,
@@ -819,10 +831,10 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         # 副本独占设置落自己的文件（data/user/dungeon_settings.json）。本页写
         # 下次进副本才生效的启动项，外加「自动保存副本回放」——它是按档案生效
         # 的开关，不属于副本面板的运行期参数；音量 / 帧率 / 停靠侧仍由副本面板
-        # 即时改，两边不争夺同一控件。
+        # 即时改，两边不争夺同一控件。记忆窗口（story_recent_count）由副本引擎
+        # 独占，压缩阈值与提示词提供段数都读它，不在此页暴露入口以免调坏。
         self.dungeon_settings = self.dungeon_settings_repo.update({
             "dungeon_font": dungeon_font,
-            "story_recent_count": self._story_recent_count_value(),
             "auto_save_replay": bool(self.auto_save_replay_var.get()),
         })
 

@@ -144,7 +144,7 @@ class NavigationBar(ctk.CTkFrame):
             if has_behavior_pack:
                 if behavior_report is not None and behavior_report.errors:
                     suffix = (f"（⚠ 行为包诊断异常 {len(behavior_report.errors)} 项，"
-                              f"接管 {len(behavior_report.overridden)} 项）")
+                              f"行为已更改 {len(behavior_report.overridden)} 项）")
                 elif (behavior_report is not None and behavior_report.overridden):
                     suffix = f"（行为已更改 {len(behavior_report.overridden)} 项）"
                 else:
