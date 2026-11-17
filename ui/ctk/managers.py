@@ -6,7 +6,7 @@ from typing import List, Any, Optional
 import customtkinter as ctk
 
 from ui.ctk.dialogs import ResourceNameDialog
-from ui.ctk.widgets import ClickableCard, CTkSegmentedControl
+from ui.ctk.widgets import ClickableCard, CTkToggleButtons
 from ui.ctk.theme import (
     MGR_BG, MGR_HEADER_BG, MGR_BORDER, MGR_BORDER_STRONG,
     MGR_HOVER, MGR_TEXT, MGR_TEXT_SOFT, MGR_OK,
@@ -492,11 +492,11 @@ class CardManager(ctk.CTkFrame):
         self.top_row = ctk.CTkFrame(self, fg_color=MGR_BG)
         self.top_row.pack(fill='x', padx=10, pady=6)
 
-        self.switch_btn = CTkSegmentedControl(
+        self.switch_btn = CTkToggleButtons(
             self.top_row,
             values=["地标管理", "描述管理"],
             command=self._on_module_switch,
-            width=180,
+            button_width=90, height=30,
             font=ui_fonts.ui_font(12)
         )
         self.switch_btn.pack(side='left', padx=5, pady=(3, 1))

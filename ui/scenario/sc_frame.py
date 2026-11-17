@@ -17,7 +17,7 @@ from dungeon.speaker_notation import (
     DEFAULT_SPEAKER_NOTATION, SPEAKER_NOTATIONS, SPEAKER_NOTATION_LABELS,
     normalize_speaker_notation)
 from dungeon.audio.speech import normalize_voice
-from ui.ctk.widgets import (CTkScrollableDropdownFrame, CTkSegmentedControl,
+from ui.ctk.widgets import (CTkScrollableDropdownFrame, CTkToggleButtons,
                                OptionButton)
 from ui.ctk.address_dlg import AddressTextDialog
 from ui.ctk.dialogs import BaseDialog, ResourceNameDialog
@@ -94,15 +94,15 @@ class ScenarioEditor(ctk.CTkFrame):
     def _build_ui(self):
         toolbar = ctk.CTkFrame(self, fg_color=SC_BG)
         toolbar.pack(fill='x', padx=10, pady=6)
-        self.dungeon_switch_btn = CTkSegmentedControl(
+        self.dungeon_switch_btn = CTkToggleButtons(
             toolbar,
-            values=[" 通用 ", " 角色 ", " 动态 ", " 组件 "],
+            values=["通用", "角色", "动态", "组件"],
             command=self._on_scenario_tab_switch,
-            width=360, font=ui_fonts.ui_font(13)
+            button_width=84, height=30, font=ui_fonts.ui_font(13)
         )
         self.dungeon_switch_btn.pack(side='left', padx=5, pady=(3, 1))
         # 初始化即选中“通用”
-        self.dungeon_switch_btn.set(" 通用 ")
+        self.dungeon_switch_btn.set("通用")
         right_frame = ctk.CTkFrame(toolbar, fg_color="transparent")
         right_frame.pack(side='right', padx=5)
         ctk.CTkLabel(right_frame, text="副本方案:",
@@ -265,7 +265,6 @@ class ScenarioEditor(ctk.CTkFrame):
             "成功", f"已从挑战包加载剧本「{self._scenario_repo.display_name(scenario_id)}」")
 
     def _on_scenario_tab_switch(self, value):
-        # 分段值可能带装饰空格（如 " 动态 "），统一去掉后再比较
         tab = value.strip()
         # 角色页有防抖保存：换页前先落盘，动态页的章节多选要用最新人物表
         self.character_panel.flush_pending()

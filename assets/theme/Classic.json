@@ -240,6 +240,13 @@
     "SEG_UNSELECTED_TEXT": {
       "$role": "text-muted"
     },
+    "//toggle": "互斥切换按钮组 · ui/ctk/widgets.py",
+    "TOGGLE_SELECTED_BG": {
+      "$role": "bg-input"
+    },
+    "TOGGLE_SELECTED_TEXT": {
+      "$role": "text-label"
+    },
     "//dialog": "通用对话框外壳 · ui/common/dialogs.py",
     "DLG_BG": {
       "$pair": "warm-gray.200"

@@ -11,6 +11,7 @@ from ui.ctk.theme import (
     WIDGET_TEXT_SOFT, WIDGET_TEXT_MUTED, WIDGET_TITLE, WIDGET_CARD_HOVER_BORDER,
     SEG_SELECTED_BG, SEG_SELECTED_HOVER, SEG_SELECTED_TEXT, SEG_TRACK_BG,
     SEG_TRACK_BORDER, SEG_UNSELECTED_TEXT,
+    TOGGLE_SELECTED_BG, TOGGLE_SELECTED_TEXT,
 )
 
 
@@ -106,11 +107,12 @@ class CTkSegmentedControl(customtkinter.CTkFrame):
 
 
 class CTkToggleButtons(customtkinter.CTkFrame):
-    """互斥的切换按钮组（选中实底、未选描边）。
+    """互斥的切换按钮组（选中铺底、未选透明）。
 
     与 ``CTkSegmentedControl`` 接口一致（values / command / set / get），
-    但每个按钮独立成块、不共享轨道，用于页面主视图切换这类需要更清晰
-    点按边界的场景。
+    但每个按钮独立成块、不共享轨道：平铺的文字按钮靠间距隔开，选中项用
+    输入底色配标签文字色区分，用于页面主视图切换这类需要更清晰点按边界
+    的场景。
     """
 
     def __init__(self, master, values=None, command=None, *,
@@ -125,7 +127,7 @@ class CTkToggleButtons(customtkinter.CTkFrame):
         for index, value in enumerate(self._values):
             btn = customtkinter.CTkButton(
                 self, text=value, width=button_width, height=height,
-                corner_radius=corner_radius, font=self._font,
+                anchor='center', corner_radius=corner_radius, font=self._font,
                 command=lambda v=value: self._select(v))
             btn.grid(row=0, column=index, sticky='nsew',
                      padx=(0 if index == 0 else spacing, 0))
@@ -141,12 +143,9 @@ class CTkToggleButtons(customtkinter.CTkFrame):
         for val, btn in self._buttons.items():
             active = val == value
             btn.configure(
-                fg_color=SEG_SELECTED_BG if active else "transparent",
-                text_color=SEG_SELECTED_TEXT if active else WIDGET_TEXT_SOFT,
-                hover_color=SEG_SELECTED_HOVER if active else WIDGET_HOVER,
-                border_width=0 if active else 1,
-                border_color=SEG_TRACK_BORDER,
-            )
+                fg_color=TOGGLE_SELECTED_BG if active else "transparent",
+                text_color=TOGGLE_SELECTED_TEXT if active else WIDGET_TEXT_SOFT,
+                hover_color=WIDGET_HOVER)
 
     def _select(self, value):
         self.set(value)

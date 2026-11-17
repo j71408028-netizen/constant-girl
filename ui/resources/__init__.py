@@ -39,7 +39,7 @@ from dungeon.terms import is_default_scenario
 from services.challenges import ChallengeService
 from services.news import NewsService
 from ui.resources.dialogs import WorldPackCreateDialog
-from ui.ctk.widgets import StyleListBox, OptionButton
+from ui.ctk.widgets import StyleListBox, OptionButton, CTkToggleButtons
 from ui.ctk.ctk_image import pil_to_ctk
 from ui.ctk import fonts as ui_fonts
 from ui.ctk.theme import (
@@ -187,16 +187,14 @@ class ResourceHubPanel(ctk.CTkFrame):
     def _create_widgets(self):
         self._view_bar = ctk.CTkFrame(self, fg_color="transparent")
         self._view_bar.pack(fill='x', padx=10, pady=(4, 2))
-        self._view_buttons = {}
-        for key, label in self._VIEWS:
-            btn = ctk.CTkButton(
-                self._view_bar, text=label, width=96, height=30,
-                anchor='center', fg_color="transparent",
-                text_color=SETTINGS_TEXT_SOFT, hover_color=SETTINGS_HOVER,
-                corner_radius=8, font=ui_fonts.ui_font(13),
-                command=lambda k=key: self._show_view(k))
-            btn.pack(side='left', padx=(0, 6))
-            self._view_buttons[key] = btn
+        # 导航按钮的显示文本 ↔ 视图键双向映射（按钮值即显示文本）
+        self._view_labels = dict(self._VIEWS)
+        self._view_keys = {label: key for key, label in self._VIEWS}
+        self._view_switch = CTkToggleButtons(
+            self._view_bar, values=list(self._view_labels.values()),
+            command=self._on_view_switch, button_width=96, height=30,
+            font=ui_fonts.ui_font(13))
+        self._view_switch.pack(side='left')
 
         self._view_area = ctk.CTkFrame(self, fg_color="transparent")
         self._view_area.pack(fill='both', expand=True)
@@ -213,6 +211,10 @@ class ResourceHubPanel(ctk.CTkFrame):
 
         self._show_view("online")
 
+    def _on_view_switch(self, label):
+        """导航按钮回调：显示文本 → 视图键。"""
+        self._show_view(self._view_keys[label])
+
     def _show_view(self, key):
         """切换主区视图并同步导航高亮。"""
         views = {"online": self.online_view, "community": self.community_view,
@@ -222,11 +224,7 @@ class ResourceHubPanel(ctk.CTkFrame):
                 view.pack(fill='both', expand=True)
             else:
                 view.pack_forget()
-        for k, btn in self._view_buttons.items():
-            selected = k == key
-            btn.configure(
-                fg_color=SETTINGS_INPUT_BG if selected else "transparent",
-                text_color=SETTINGS_LABEL if selected else SETTINGS_TEXT_SOFT)
+        self._view_switch.set(self._view_labels[key])
 
     def _build_placeholder(self, view, icon, title, text):
         view.columnconfigure(0, weight=1)
