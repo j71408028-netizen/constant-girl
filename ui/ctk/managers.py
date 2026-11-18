@@ -1,4 +1,5 @@
 from tkinter import ttk
+import tkinter as tk
 
 import ui.ctk.dialogs
 from typing import List, Any, Optional
@@ -6,12 +7,15 @@ from typing import List, Any, Optional
 import customtkinter as ctk
 
 from ui.ctk.dialogs import ResourceNameDialog
-from ui.ctk.widgets import ClickableCard, CTkToggleButtons
+from ui.ctk.widgets import CTkToggleButtons
 from ui.ctk.theme import (
     MGR_BG, MGR_HEADER_BG, MGR_BORDER, MGR_BORDER_STRONG,
     MGR_HOVER, MGR_TEXT, MGR_TEXT_SOFT, MGR_OK,
     MGR_OK_HOVER, MGR_ERR, MGR_ERR_HOVER, MGR_ROW_STRIPE,
-    MGR_ROW_SELECTED_BG, MGR_ROW_SELECTED_TEXT, MGR_ROW_DISABLED_TEXT, MGR_HEADER_TEXT,
+    MGR_ROW_SELECTED_BG, MGR_ROW_SELECTED_TEXT, MGR_ROW_DISABLED_TEXT,
+    MGR_HEADER_TEXT, MGR_TEXT_MUTED, MGR_PLACEHOLDER, MGR_RAIL_BG,
+    MGR_INPUT_BG, MGR_ROW_HOVER, MGR_ROW_OPEN, MGR_PRIMARY_BG,
+    MGR_PRIMARY_HOVER, MGR_PRIMARY_TEXT, MGR_PANEL_BG, MGR_PAGE_BG,
 )
 from ui.ctk import fonts as ui_fonts
 
@@ -311,116 +315,583 @@ class TreeviewManager(ctk.CTkFrame):
 
 
 class CardManager(ctk.CTkFrame):
-    """重构后的卡片式管理基类 - 分离视图，流畅点击
+    """两栏式资源管理页：左侧分组选择，右侧当前分组与条目。
 
-    子类用 ``RESOURCE_TYPE`` 声明自己维护的资源类型（``landmarks`` / ``quips``）：
-    新建时按名称自动派生带类型前缀的 id，界面只认名称；id 作为「高级」项可手填，
-    改名只写显示名（信封 ``title``）。
+    基类负责作用域（风格 / 观测等级）、选择栏骨架、搜索、条目展开与锁定遮罩；
+    数据、选择器外观与分组说明由子类通过下列 hooks 提供：
+
+    - ``load_items()`` / ``get_category(item)`` / ``sort_items(items)``
+    - ``category_keys()``（含空分组）/ ``category_label(key)``
+    - ``build_selector(parent)`` / ``render_rail_extra(parent)``
+    - ``render_group_head(parent, key, items)``（可选，右侧标题下的补充说明）
+    - ``row_title`` / ``row_preview`` / ``row_meta`` / ``build_row_detail``
+    - ``pane_subtitle`` / ``selector_note`` / ``selector_hint`` / ``search_text``
+    - ``create_style_widgets(parent)``
+
+    子类用 ``RESOURCE_TYPE`` 声明资源类型（``landmarks`` / ``quips``）；
+    ``SUPPORTS_SIZE`` 决定作用域行是否带观测等级。
     """
 
     #: 本管理器维护的资源类型 id（子类必须声明）
     RESOURCE_TYPE = ""
+    #: 是否显示观测等级作用域（描述页为 True）
+    SUPPORTS_SIZE = False
+    #: 左栏选择器标题
+    RAIL_HEAD = "分组"
+    #: 条目量词（描述用「条」，地标用「个」）
+    ITEM_UNIT = "条"
+
+    #: 选择器底色梯度：向强调色混合的比例（由浅到深）
+    _HEAT_RATIOS = (0.07, 0.13, 0.20, 0.28)
 
     def __init__(self, parent, gui_ref, item_name="条目"):
-        super().__init__(parent, fg_color="transparent", corner_radius=0)
+        super().__init__(parent, fg_color=MGR_PAGE_BG, corner_radius=0)
         self.gui = gui_ref
         self.item_name = item_name
 
-        self.current_view = "first"
         self.current_category = None
-        self.all_items = []
+        self.search_var = tk.StringVar()
+        self._groups = {}
         self._world_locked = False
-        self._masked_pack = []
         self._lock_overlay = None
+        self._suppress_search = False
 
         self._setup_ui()
+        self.search_var.trace_add("write", self._on_search_var)
 
-    # ---------- 抽象方法（子类实现） ----------
-    def _get_style_list(self) -> List[str]:
+    # ---------- 布局 ----------
+    def _setup_ui(self):
+        # 卡片外只有一行：模块切换 + 作用域（风格 › 观测等级）+ 右侧动作
+        self.top_row = ctk.CTkFrame(self, fg_color="transparent")
+        self.top_row.pack(fill='x', padx=12, pady=(10, 0))
+
+        self.switch_btn = CTkToggleButtons(
+            self.top_row,
+            values=["地标管理", "描述管理"],
+            command=self._on_module_switch,
+            button_width=96, height=32,
+            font=ui_fonts.ui_font(13)
+        )
+        self.switch_btn.pack(side='left')
+        self.switch_btn.set(
+            "地标管理" if "Landmark" in self.__class__.__name__ else "描述管理")
+
+        self.scope_box = ctk.CTkFrame(self.top_row, fg_color="transparent")
+        self.scope_box.pack(side='left', padx=(16, 0))
+
+        ctk.CTkLabel(self.scope_box, text="风格", font=ui_fonts.ui_font(13),
+                     text_color=MGR_TEXT_SOFT).pack(side='left')
+        self.style_host = ctk.CTkFrame(self.scope_box, fg_color="transparent")
+        self.style_host.pack(side='left', padx=(8, 0))
+        self.style_menu_btn = ctk.CTkButton(
+            self.scope_box, text="⋯", width=30, height=30, corner_radius=7,
+            fg_color="transparent", hover_color=MGR_HOVER,
+            text_color=MGR_TEXT_SOFT, font=ui_fonts.ui_font(16),
+            command=self._show_style_menu
+        )
+        self.style_menu_btn.pack(side='left', padx=(2, 0))
+
+        if self.SUPPORTS_SIZE:
+            ctk.CTkLabel(self.scope_box, text="›", font=ui_fonts.ui_font(13),
+                         text_color=MGR_TEXT_MUTED).pack(side='left',
+                                                         padx=(10, 4))
+            ctk.CTkLabel(self.scope_box, text="观测等级",
+                         font=ui_fonts.ui_font(13),
+                         text_color=MGR_TEXT_SOFT).pack(side='left')
+            self.size_host = ctk.CTkFrame(self.scope_box, fg_color="transparent")
+            self.size_host.pack(side='left', padx=(8, 0))
+
+        self.head_right = ctk.CTkFrame(self.top_row, fg_color="transparent",
+                                      width=0, height=0)
+        self.head_right.pack(side='right')
+
+        # ---- 工作区：左栏与右栏并列成两块卡片，互不嵌套 ----
+        # 左栏：分组选择器（4×4 矩阵 / 12 档网格），下方留白
+        self.rail = ctk.CTkFrame(self, fg_color=MGR_RAIL_BG,
+                                 corner_radius=12, width=260)
+        self.rail.pack_propagate(False)
+
+        self.rail_head = ctk.CTkFrame(self.rail, fg_color="transparent")
+        self.rail_head.pack(fill='x', padx=12, pady=(12, 8))
+        self.rail_head_label = ctk.CTkLabel(
+            self.rail_head, text=self.RAIL_HEAD, font=ui_fonts.ui_font(12),
+            text_color=MGR_TEXT_MUTED)
+        self.rail_head_label.pack(side='left')
+        self.rail_note_label = ctk.CTkLabel(
+            self.rail_head, text="", font=ui_fonts.ui_font(12),
+            text_color=MGR_TEXT_MUTED)
+        self.rail_note_label.pack(side='right')
+
+        self.selector_host = ctk.CTkFrame(self.rail, fg_color="transparent")
+        self.selector_host.pack(fill='x', padx=10)
+
+        # 描述页在这里补当前分组的两条轴定义；地标页暂不显示说明
+        self.rail_extra = ctk.CTkFrame(self.rail, fg_color="transparent",
+                                       height=0)
+        self.rail_extra.pack(fill='x', padx=12, pady=(10, 0))
+
+        self.legend = ctk.CTkFrame(self.rail, fg_color="transparent")
+        self.legend.pack(fill='x', padx=12, pady=(10, 10))
+        self._legend_swatches = []
+        for ratio in self._HEAT_RATIOS:
+            swatch = ctk.CTkFrame(self.legend, width=9, height=9,
+                                  corner_radius=2, fg_color=self._heat(ratio))
+            swatch.pack(side='left', padx=(0, 2))
+            swatch.pack_propagate(False)
+            self._legend_swatches.append(swatch)
+        ctk.CTkLabel(self.legend, text="底色 = 条目数",
+                     font=ui_fonts.ui_font(11),
+                     text_color=MGR_TEXT_MUTED).pack(side='left', padx=(5, 0))
+
+        # 右栏：当前分组名称 + 搜索 → 条目
+        self.pane = ctk.CTkFrame(self, fg_color=MGR_PANEL_BG,
+                                 corner_radius=12)
+
+        self.group_head = ctk.CTkFrame(self.pane, fg_color="transparent")
+        self.group_head.pack(fill='x', padx=16, pady=(14, 8))
+
+        title_row = ctk.CTkFrame(self.group_head, fg_color="transparent")
+        title_row.pack(fill='x')
+        self.title_row = title_row
+        self.group_title = ctk.CTkLabel(
+            title_row, text="", font=ui_fonts.ui_font(17, "bold"),
+            text_color=MGR_TEXT, anchor='w')
+        self.group_title.pack(side='left')
+        count_box = ctk.CTkFrame(title_row, fg_color=MGR_INPUT_BG,
+                                 corner_radius=8)
+        count_box.pack(side='left', padx=(8, 0))
+        self.group_count = ctk.CTkLabel(
+            count_box, text="", font=ui_fonts.ui_font(11),
+            text_color=MGR_TEXT_SOFT)
+        self.group_count.pack(padx=8, pady=1)
+
+        self.group_defs = ctk.CTkFrame(self.group_head, fg_color="transparent")
+
+        self.add_btn = ctk.CTkButton(
+            self.title_row, text=f"＋ 添加{self.item_name}", width=112,
+            height=30, corner_radius=8, fg_color=MGR_PRIMARY_BG,
+            hover_color=MGR_PRIMARY_HOVER, text_color=MGR_PRIMARY_TEXT,
+            font=ui_fonts.ui_font(13, "bold"), command=self.on_add_click
+        )
+        self.add_btn.pack(side='right')
+
+        self.search_entry = ctk.CTkEntry(
+            self.title_row, textvariable=self.search_var,
+            placeholder_text="搜索本组…", height=30, width=230,
+            corner_radius=7, border_width=0, fg_color=MGR_INPUT_BG,
+            text_color=MGR_TEXT, placeholder_text_color=MGR_PLACEHOLDER,
+            font=ui_fonts.ui_font(13)
+        )
+        self.search_entry.pack(side='right', padx=10)
+
+        # 底部条：放校验结论等，停在右栏右下角；无内容时整条收起
+        self.pane_footer = ctk.CTkFrame(self.pane, fg_color="transparent")
+
+        self.rows = ctk.CTkScrollableFrame(
+            self.pane, fg_color=MGR_PANEL_BG, corner_radius=0, border_width=0,
+            scrollbar_button_color=MGR_HOVER,
+            scrollbar_button_hover_color=MGR_BORDER
+        )
+        self.rows.pack(fill='both', expand=True, padx=6, pady=(0, 6))
+
+        self._show_workspace()
+
+    # ---------- 工作区显隐 ----------
+    def _show_workspace(self):
+        """左栏与右栏并排铺满工具栏以下的空间（左栏先进，保持在左）。"""
+        self.rail.pack(side='left', fill='y', padx=(12, 0),
+                       pady=(10, 12))
+        self.pane.pack(side='left', fill='both', expand=True,
+                       padx=(8, 12), pady=(10, 12))
+
+    def _hide_workspace(self):
+        self.rail.pack_forget()
+        self.pane.pack_forget()
+
+    # ---------- 子类 hooks ----------
+    def create_style_widgets(self, parent):
+        """在作用域行的风格位置创建风格下拉。"""
+
+    def get_category(self, item):
         raise NotImplementedError
 
-    def _get_current_style(self) -> str:
+    def load_items(self):
         raise NotImplementedError
 
-    def _set_current_style(self, style: str):
+    def save_items(self, items):
         raise NotImplementedError
 
-    def _get_default_style(self) -> str:
+    def add_item_in_category(self):
         raise NotImplementedError
 
-    def _create_style_impl(self, style_id: str, title: str):
+    def edit_item(self, item):
         raise NotImplementedError
 
-    def _set_style_title_impl(self, style_id: str, title: str):
-        """写显示名。改名不换 id，因此不涉及任何按 id 记录的引用。"""
+    def delete_item(self, item):
         raise NotImplementedError
 
-    def _delete_style_impl(self, name: str):
-        raise NotImplementedError
+    def sort_items(self, items):
+        return items
 
-    def _style_display_name(self, style_id: str) -> str:
-        """风格 id → 界面显示名；子类用各自仓库实现（含世界包接管）。"""
-        return str(style_id or "")
+    def category_keys(self):
+        """选择器要显示的完整键序列；默认只列已有数据的键。"""
+        return list(self._groups.keys())
 
-    def _notify_style_list_changed(self):
-        """风格新建/重命名/删除后，通知刷新各处 StyleListBox。"""
-        callback = getattr(self.gui, 'refresh_style_listboxes', None)
-        if callback is not None:
-            callback()
+    def category_label(self, key):
+        return str(key)
 
-    # ---------- 世界包锁定 ----------
-    def set_world_locked(self, locked: bool):
-        """世界包锁定该资源管理时，屏蔽除左上角切换控件外的整个视图。"""
-        if locked == self._world_locked:
+    def category_count(self, key):
+        return len(self._groups.get(key, ()))
+
+    def selector_title(self):
+        return self.RAIL_HEAD
+
+    def selector_note(self):
+        keys = self.category_keys()
+        filled = sum(1 for key in keys if self.category_count(key))
+        return f"{filled} / {len(keys)} 组"
+
+    def build_selector(self, parent):
+        """在左栏选择器容器里创建控件；默认是纵向列表。"""
+        for key in self.category_keys():
+            selected = key == self.current_category
+            ctk.CTkButton(
+                parent,
+                text=f"{self.category_label(key)}   "
+                     f"{self.category_count(key)}",
+                anchor='w', height=30, corner_radius=8,
+                fg_color=MGR_PANEL_BG if selected else "transparent",
+                hover_color=MGR_HOVER, border_width=1,
+                border_color=MGR_BORDER_STRONG if selected else MGR_BORDER,
+                text_color=MGR_TEXT, font=ui_fonts.ui_font(13),
+                command=lambda k=key: self._select_category(k)
+            ).pack(fill='x', pady=1)
+
+    def render_group_head(self, parent, key, items):
+        """在右栏标题下创建分组说明；子类实现。"""
+
+    def render_rail_extra(self, parent):
+        """在选择器下方补充当前分组的说明（如两条轴定义）；子类实现。"""
+
+    def empty_hint(self, key):
+        return f"点击右上角「添加{self.item_name}」开始"
+
+    def search_text(self, item):
+        try:
+            return " ".join(str(v) for v in self.get_card_display(item).values())
+        except Exception:
+            return str(item)
+
+    def row_title(self, item):
+        return str(item)
+
+    def row_preview(self, item):
+        return ""
+
+    def row_meta(self, item):
+        return ""
+
+    def build_row_detail(self, parent, item):
+        """在展开区域里创建详情内容（卡片自行 pack）。"""
+        ctk.CTkLabel(parent, text="暂无详情",
+                     font=ui_fonts.ui_font(12),
+                     text_color=MGR_TEXT_SOFT).pack(anchor='w')
+
+    def pane_subtitle(self, items):
+        return f"{len(items)} {self.ITEM_UNIT}{self.item_name}"
+
+    def update_lint_summary(self):
+        """描述页在数据刷新后更新校验摘要；地标页不显示。"""
+
+    def _after_refresh(self):
+        """数据刷新后的附加刷新（如类型视图）。"""
+
+    # ---------- 选择器底色 ----------
+    @staticmethod
+    def _pick_color(token):
+        """主题 token 可能是单色，也可能是 ``[亮, 暗]`` 双槽。"""
+        if isinstance(token, (list, tuple)):
+            return token[1] if ctk.get_appearance_mode() == "Dark" else token[0]
+        return token
+
+    @classmethod
+    def _mix(cls, fg, bg, ratio):
+        """把强调色按比例混进底色，返回 ``#RRGGBB``。"""
+        fg = cls._pick_color(fg)
+        bg = cls._pick_color(bg)
+        try:
+            fr, fgn, fb = (int(fg[i:i + 2], 16) for i in (1, 3, 5))
+            br, bgn, bb = (int(bg[i:i + 2], 16) for i in (1, 3, 5))
+        except (TypeError, ValueError):
+            return bg if isinstance(bg, str) else "transparent"
+        ratio = max(0.0, min(1.0, ratio))
+        return "#%02X%02X%02X" % (
+            round(fr * ratio + br * (1 - ratio)),
+            round(fgn * ratio + bgn * (1 - ratio)),
+            round(fb * ratio + bb * (1 - ratio)),
+        )
+
+    def _heat(self, ratio):
+        return self._mix(MGR_PRIMARY_BG, MGR_RAIL_BG, ratio)
+
+    def heat_color(self, count, max_count):
+        """条目数 → 选择器底色；0 条返回 ``transparent``。"""
+        if not count:
+            return "transparent"
+        low, high = self._HEAT_RATIOS[0], self._HEAT_RATIOS[-1]
+        ratio = low + (high - low) * min(1.0, count / max(1, max_count))
+        return self._heat(ratio)
+
+    # ---------- 数据 / 分组 ----------
+    def _grouped_items(self):
+        groups = {}
+        for item in self.all_items:
+            groups.setdefault(self.get_category(item), []).append(item)
+        return groups
+
+    def _clip(self, text, limit):
+        text = " ".join(str(text or "").split())
+        if len(text) <= limit:
+            return text
+        return text[:limit] + "…"
+
+    def _reset_scroll(self, frame):
+        canvas = getattr(frame, "_parent_canvas", None)
+        if canvas is not None:
+            try:
+                canvas.yview_moveto(0.0)
+            except Exception:
+                pass
+
+    def _ensure_category(self, keys):
+        keys = list(keys)
+        if self.current_category in keys:
             return
-        self._world_locked = locked
-        if locked:
-            self._mask_world_locked()
+        if not keys:
+            self.current_category = None
+            return
+        # 默认落到条目最多的分组；全空时取第一个
+        self.current_category = max(
+            keys, key=lambda key: len(self._groups.get(key, ())))
+
+    def refresh_ui(self):
+        """重读数据并重建选择器、分组说明与条目区。"""
+        self.load_items()
+        self._groups = self._grouped_items()
+        self._ensure_category(self.category_keys())
+        self._render_selector()
+        self._render_group_head()
+        self._render_pane()
+        self.update_lint_summary()
+        self._after_refresh()
+
+    # ---------- 左栏渲染 ----------
+    def _render_selector(self):
+        self.rail_head_label.configure(text=self.selector_title())
+        self.rail_note_label.configure(text=self.selector_note())
+        for widget in self.selector_host.winfo_children():
+            widget.destroy()
+        self.build_selector(self.selector_host)
+        for widget in self.rail_extra.winfo_children():
+            widget.destroy()
+        self.render_rail_extra(self.rail_extra)
+        for swatch, ratio in zip(self._legend_swatches, self._HEAT_RATIOS):
+            swatch.configure(fg_color=self._heat(ratio))
+
+    def _render_group_head(self):
+        key = self.current_category
+        items = self._groups.get(key, ()) if key else ()
+        self.group_title.configure(
+            text=self.category_label(key) if key else f"暂无{self.item_name}")
+        self.group_count.configure(text=f"{len(items)} {self.ITEM_UNIT}")
+        for widget in self.group_defs.winfo_children():
+            widget.destroy()
+        if key:
+            self.render_group_head(self.group_defs, key, items)
+        if self.group_defs.winfo_children():
+            self.group_defs.pack(fill='x', pady=(7, 0))
         else:
-            self._unmask_world_locked()
+            self.group_defs.pack_forget()
 
-    def _mask_world_locked(self):
-        """隐藏全部内容视图（保留切换控件），并显示锁定遮罩。"""
-        self._masked_pack = []
-        # 按当前 pack 顺序收集（pack_info 不保留 before/after，需用 pack_slaves 保持布局顺序）
-        for widget in [w for w in self.pack_slaves() if w is not self.top_row]:
-            if widget.winfo_manager() == "pack":
-                self._masked_pack.append((widget, widget.pack_info()))
-                widget.pack_forget()
-        for child in self.top_row.winfo_children():
-            if child is not self.switch_btn and child.winfo_manager() == "pack":
-                self._masked_pack.append((child, child.pack_info()))
-                child.pack_forget()
-        self._lock_overlay = ctk.CTkFrame(
-            self, fg_color=MGR_BG, corner_radius=12)
-        ctk.CTkLabel(
-            self._lock_overlay,
-            text=f"世界包已锁定{self.item_name}资源管理，暂不可查看",
-            font=ui_fonts.ui_font(14),
-            text_color=MGR_TEXT_SOFT,
-        ).pack(expand=True)
-        self._lock_overlay.pack(fill='both', expand=True, padx=10, pady=5)
+    def _select_category(self, key):
+        if key == self.current_category:
+            return
+        self.current_category = key
+        self._clear_search()
+        self._render_selector()
+        self._render_group_head()
+        self._render_pane()
+        self._reset_scroll(self.rows)
 
-    def _unmask_world_locked(self):
-        """恢复被隐藏的视图并移除锁定遮罩。"""
-        if self._lock_overlay is not None:
-            self._lock_overlay.pack_forget()
-            self._lock_overlay.destroy()
-            self._lock_overlay = None
-        for widget, info in getattr(self, "_masked_pack", []):
-            widget.pack(**info)
-        self._masked_pack = []
+    def _clear_search(self):
+        if not self.search_var.get():
+            return
+        self._suppress_search = True
+        self.search_var.set("")
+        self._suppress_search = False
 
-    # ---------- 通用风格管理方法 ----------
+    def _on_search_var(self, *_args):
+        if self._suppress_search:
+            return
+        self._render_pane()
+        self._reset_scroll(self.rows)
+
+    # ---------- 右栏渲染 ----------
+    def _render_pane(self, groups=None):
+        for widget in self.rows.winfo_children():
+            widget.destroy()
+
+        groups = self._groups if groups is None else groups
+        key = self.current_category
+        if not key:
+            self._render_empty(
+                f"还没有可显示的{self.item_name}",
+                f"点击右上角「添加{self.item_name}」开始")
+            return
+
+        all_items = list(groups.get(key, ()))
+        query = self.search_var.get().strip()
+        items = all_items
+        if query:
+            needle = query.lower()
+            items = [it for it in all_items
+                     if needle in self.search_text(it).lower()]
+
+        if not items:
+            self._render_empty(
+                "没有匹配的条目" if query else
+                f"这个分组还没有{self.item_name}",
+                "换个关键词试试" if query else self.empty_hint(key))
+            return
+
+        for item in self.sort_items(items):
+            self._build_row(item)
+
+    def _render_empty(self, title, hint):
+        box = ctk.CTkFrame(self.rows, fg_color="transparent")
+        box.pack(fill='x', pady=44)
+        ctk.CTkLabel(box, text=title, font=ui_fonts.ui_font(14, "bold"),
+                     text_color=MGR_TEXT_SOFT).pack()
+        ctk.CTkLabel(box, text=hint, font=ui_fonts.ui_font(12),
+                     text_color=MGR_TEXT_MUTED).pack(pady=(4, 0))
+
+    def _build_row(self, item):
+        row = ctk.CTkFrame(self.rows, fg_color="transparent", corner_radius=8)
+        row.pack(fill='x', padx=2, pady=1)
+
+        head = ctk.CTkFrame(row, fg_color="transparent")
+        head.pack(fill='x', padx=10, pady=(8, 0))
+
+        title = ctk.CTkLabel(
+            head, text=self.row_title(item), font=ui_fonts.ui_font(14, "bold"),
+            text_color=MGR_TEXT, anchor='w')
+        title.pack(side='left', fill='x', expand=True)
+
+        arrow = ctk.CTkLabel(
+            head, text="▾", font=ui_fonts.ui_font(11),
+            text_color=MGR_TEXT_MUTED, width=14)
+        arrow.pack(side='right')
+
+        meta = None
+        meta_text = self.row_meta(item)
+        if meta_text:
+            meta = ctk.CTkLabel(
+                head, text=meta_text, font=ui_fonts.ui_font(12),
+                text_color=MGR_TEXT_MUTED)
+            meta.pack(side='right', padx=(8, 0))
+
+        preview = ctk.CTkLabel(
+            row, text=self.row_preview(item),
+            font=ui_fonts.ui_font(13), text_color=MGR_TEXT_SOFT,
+            anchor='w')
+        preview.pack(fill='x', padx=10, pady=(2, 8))
+
+        detail_host = ctk.CTkFrame(row, fg_color="transparent")
+        state = {"open": False, "hover": False, "built": False}
+
+        def set_bg():
+            if state["open"]:
+                color = MGR_ROW_OPEN
+            elif state["hover"]:
+                color = MGR_ROW_HOVER
+            else:
+                color = "transparent"
+            row.configure(fg_color=color)
+
+        def toggle(_event=None):
+            if not state["built"]:
+                self.build_row_detail(detail_host, item)
+                state["built"] = True
+            state["open"] = not state["open"]
+            if state["open"]:
+                preview.pack_forget()
+                detail_host.pack(fill='x', padx=10, pady=(0, 10))
+                arrow.configure(text="▴")
+            else:
+                detail_host.pack_forget()
+                preview.pack(fill='x', padx=10, pady=(2, 8), after=head)
+                arrow.configure(text="▾")
+            set_bg()
+
+        def on_enter(_event=None):
+            state["hover"] = True
+            set_bg()
+
+        def on_leave(_event=None):
+            state["hover"] = False
+            set_bg()
+
+        targets = [row, head, title, preview, arrow]
+        if meta is not None:
+            targets.append(meta)
+        for widget in targets:
+            widget.configure(cursor="hand2")
+            widget.bind("<Button-1>", toggle, add="+")
+            widget.bind("<Enter>", on_enter, add="+")
+            widget.bind("<Leave>", on_leave, add="+")
+
+    # ---------- 风格管理 ----------
     def refresh_styles(self):
         styles = self._get_style_list()
         self.style_combo.configure(
-            values=[self._style_display_name(style) for style in styles])
+            values=[self._style_display_name(s) for s in styles])
         current = self._get_current_style()
         if current not in styles:
             current = styles[0] if styles else self._get_default_style()
             self._set_current_style(current)
         self.style_var.set(self._style_display_name(current))
+
+    def _style_menu_colors(self):
+        dark = ctk.get_appearance_mode() == "Dark"
+
+        def pick(token):
+            if isinstance(token, (list, tuple)):
+                return token[1] if dark else token[0]
+            return token
+
+        return pick
+
+    def _show_style_menu(self):
+        pick = self._style_menu_colors()
+        menu = tk.Menu(
+            self, tearoff=0, bg=pick(MGR_PANEL_BG), fg=pick(MGR_TEXT),
+            activebackground=pick(MGR_HOVER), activeforeground=pick(MGR_TEXT),
+            bd=0, relief='flat', font=ui_fonts.ui_font(12))
+        menu.add_command(label="新建风格…", command=self.create_style)
+        menu.add_command(label="重命名风格…", command=self.rename_style)
+        if hasattr(self, "_edit_style_address"):
+            menu.add_command(label="注册地址…", command=self._edit_style_address)
+        menu.add_separator()
+        menu.add_command(label="删除风格", command=self.delete_style,
+                         foreground=pick(MGR_ERR))
+        self._style_menu = menu
+        try:
+            menu.tk_popup(
+                self.style_menu_btn.winfo_rootx(),
+                self.style_menu_btn.winfo_rooty()
+                + self.style_menu_btn.winfo_height())
+        finally:
+            menu.grab_release()
 
     def create_style(self):
         """新建风格：只问名称，id 自动分配（高级里可手填）。"""
@@ -433,8 +904,9 @@ class CardManager(ctk.CTkFrame):
             self._create_style_impl(dlg.result["id"], dlg.result["title"])
             self._set_current_style(dlg.result["id"])
             self.refresh_styles()
-            self.load_items()
-            self.show_first_view()
+            self._clear_search()
+            self.refresh_ui()
+            self._reset_scroll(self.rows)
         except ValueError as e:
             ui.ctk.dialogs.showerror("错误", str(e))
         self._notify_style_list_changed()
@@ -454,8 +926,8 @@ class CardManager(ctk.CTkFrame):
         try:
             self._set_style_title_impl(old, dlg.result["title"])
             self.refresh_styles()
-            self.load_items()
-            self.show_first_view()
+            self.refresh_ui()
+            self._reset_scroll(self.rows)
         except ValueError as e:
             ui.ctk.dialogs.showerror("错误", str(e))
         self._notify_style_list_changed()
@@ -471,229 +943,73 @@ class CardManager(ctk.CTkFrame):
         try:
             self._delete_style_impl(name)
             self.refresh_styles()
-            self.load_items()
-            self.show_first_view()
+            self._clear_search()
+            self.refresh_ui()
+            self._reset_scroll(self.rows)
         except ValueError as e:
             ui.ctk.dialogs.showerror("错误", str(e))
         self._notify_style_list_changed()
 
-    # ---------- 添加按钮行为修改 ----------
     def on_add_click(self):
         self.add_item_in_category()
 
-    def _show_category_title(self, text):
-        self.category_title_label.configure(text=f"\U0001F4C1 {text}")
-        self.category_title_label.pack(side='left', padx=(10, 5), before=self.back_btn)
+    def _notify_style_list_changed(self):
+        callback = getattr(self.gui, 'refresh_style_listboxes', None)
+        if callback is not None:
+            callback()
 
-    def _hide_category_title(self):
-        self.category_title_label.pack_forget()
+    def _style_display_name(self, style_id):
+        return str(style_id or "")
 
-    def _setup_ui(self):
-        self.top_row = ctk.CTkFrame(self, fg_color=MGR_BG)
-        self.top_row.pack(fill='x', padx=10, pady=6)
-
-        self.switch_btn = CTkToggleButtons(
-            self.top_row,
-            values=["地标管理", "描述管理"],
-            command=self._on_module_switch,
-            button_width=90, height=30,
-            font=ui_fonts.ui_font(12)
-        )
-        self.switch_btn.pack(side='left', padx=5, pady=(3, 1))
-        self.switch_btn.set("地标管理" if "Landmark" in self.__class__.__name__ else "描述管理")
-
-        self.style_frame = ctk.CTkFrame(self.top_row, fg_color="transparent")
-        self.style_frame.pack(side='right', padx=5)
-
-        self.view_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.view_container.pack(fill='both', expand=True, padx=10, pady=5)
-
-        self.first_view = ctk.CTkScrollableFrame(
-            self.view_container,
-            fg_color=MGR_BG,
-            corner_radius=12
-        )
-        self.second_view = ctk.CTkScrollableFrame(
-            self.view_container,
-            fg_color=MGR_BG,
-            corner_radius=12
-        )
-
-        self.first_view.pack(fill='both', expand=True)
-
-        self.bottom_row = ctk.CTkFrame(self, fg_color="transparent")
-        self.bottom_row.pack(fill='x', padx=10, pady=(5, 10))
-
-        self.left_action_area = ctk.CTkFrame(self.bottom_row, fg_color="transparent")
-        self.left_action_area.pack(side='left', fill='y')
-
-        self.sort_frame = ctk.CTkFrame(self.left_action_area, fg_color="transparent")
-        self.sort_frame.pack(anchor='w')
-        ctk.CTkLabel(self.sort_frame, text="排序:",
-                     font=ui_fonts.ui_font(13),
-                     text_color=MGR_TEXT_SOFT).pack(side='left', padx=5)
-        self.create_sort_widgets(self.sort_frame)
-
-        self.category_title_label = ctk.CTkLabel(
-            self.left_action_area, text="",
-            font=ui_fonts.ui_font(14, "bold"),
-            text_color=MGR_TEXT
-        )
-        self.category_title_label.pack_forget()
-
-        self.back_btn = ctk.CTkButton(
-            self.left_action_area, text="\u21A9 返回分类",
-            fg_color="transparent", width=100, height=28,
-            text_color=MGR_TEXT_SOFT,
-            hover_color=MGR_HOVER,
-            border_width=1, border_color=MGR_BORDER_STRONG,
-            corner_radius=8,
-            command=self.show_first_view
-        )
-
-        self.add_btn = ctk.CTkButton(
-            self.bottom_row, text=f"\uFF0B 添加{self.item_name}",
-            width=120, font=ui_fonts.ui_font(14, "bold"),
-            fg_color="transparent",
-            text_color=MGR_OK,
-            hover_color=MGR_OK_HOVER,
-            border_width=2, border_color=MGR_OK,
-            corner_radius=10,
-            command=self.on_add_click
-        )
-        self.add_btn.pack(side='right', pady=5)
-
-    # ---------- 视图切换 ----------
-    def show_first_view(self):
-        self.current_view = "first"
-        self.second_view.pack_forget()
-        self.first_view.pack(fill='both', expand=True)
-        self.back_btn.pack_forget()
-        self._populate_categories()
-
-    def show_second_view(self, category_key):
-        self.current_view = "second"
-        self.current_category = category_key
-        self.first_view.pack_forget()
-        self.second_view.pack(fill='both', expand=True)
-        self.back_btn.pack(anchor='w', pady=(5, 0))
-        self._populate_items(category_key)
-
-    def refresh_ui(self):
-        if self.current_view == "first":
-            self._populate_categories()
+    # ---------- 世界包锁定 ----------
+    def set_world_locked(self, locked: bool):
+        """世界包锁定该资源管理时，屏蔽除左上角切换控件外的整个视图。"""
+        if locked == self._world_locked:
+            return
+        self._world_locked = locked
+        if locked:
+            self._mask_world_locked()
         else:
-            self._populate_items(self.current_category)
+            self._unmask_world_locked()
+
+    def _mask_world_locked(self):
+        self.scope_box.pack_forget()
+        self._hide_workspace()
+        if getattr(self, 'type_view', None) is not None:
+            self.type_view.pack_forget()
+        self.head_right.pack_forget()
+
+        self._lock_overlay = ctk.CTkFrame(
+            self, fg_color=MGR_PAGE_BG, corner_radius=12)
+        ctk.CTkLabel(
+            self._lock_overlay,
+            text=f"世界包已锁定{self.item_name}资源管理，暂不可查看",
+            font=ui_fonts.ui_font(14),
+            text_color=MGR_TEXT_SOFT,
+        ).pack(expand=True)
+        self._lock_overlay.pack(fill='both', expand=True, padx=12,
+                                pady=(10, 12))
+
+    def _unmask_world_locked(self):
+        if self._lock_overlay is not None:
+            self._lock_overlay.pack_forget()
+            self._lock_overlay.destroy()
+            self._lock_overlay = None
+
+        self.scope_box.pack(side='left', padx=(16, 0), after=self.switch_btn)
+        if getattr(self, 'type_view_active', False):
+            self.type_view.pack(fill='both', expand=True, padx=12,
+                                pady=(10, 12))
+        else:
+            self._show_workspace()
+        self.head_right.pack(side='right')
 
     def update_theme(self, theme_mode: str):
-        # CTk 控件会自行响应外观变化；这里只刷新原生 ttk Treeview 样式，
-        # 不销毁并重建卡片，避免主题切换后切换页面出现旧色闪烁。
-        return
-
-    # ---------- 分类视图渲染 ----------
-    def _populate_categories(self):
-        for w in self.first_view.winfo_children():
-            w.destroy()
-
-        self.load_items()
-        cat_counts = {}
-        for item in self.all_items:
-            cat = self.get_category(item)
-            cat_counts[cat] = cat_counts.get(cat, 0) + 1
-
-        sorted_cats = sorted(cat_counts.keys())
-        if not sorted_cats:
-            ctk.CTkLabel(self.first_view, text="暂无条目，请先添加",
-                         font=ui_fonts.ui_font(14),
-                         text_color=MGR_TEXT_SOFT).pack(pady=20)
+        # CTk 控件自行响应外观变化；选择器底色与分组说明是算出来的，需要重绘。
+        try:
+            if not self.winfo_exists():
+                return
+            self._render_selector()
+            self._render_group_head()
+        except tk.TclError:
             return
-
-        for cat in sorted_cats:
-            card = ClickableCard(
-                self.first_view,
-                title=f"\U0001F4C2 {cat}",
-                on_click=lambda c=cat: self.show_second_view(c)
-            )
-            card.pack(fill='x', padx=10, pady=4)
-
-    # ---------- 条目视图渲染 ----------
-    def _populate_items(self, category_key):
-        for w in self.second_view.winfo_children():
-            w.destroy()
-
-        title_label = ctk.CTkLabel(self.second_view, text=category_key,
-                                   font=ui_fonts.ui_font(15, "bold"),
-                                   text_color=MGR_TEXT)
-        title_label.pack(anchor='w', padx=5, pady=(5, 10))
-
-        items = [item for item in self.all_items if self.get_category(item) == category_key]
-        items = self.sort_items(items)
-
-        for item in items:
-            disp = self.get_card_display(item)
-            info_parts = [f"{k}: {v}" for k, v in disp.items()]
-            info = " | ".join(info_parts)
-
-            buttons = [{
-                "text": "删除",
-                "command": lambda i=item: self.delete_item(i),
-                "fg_color": "transparent",
-                "text_color": MGR_ERR,
-                "hover_color": MGR_ERR_HOVER,
-                "border_color": MGR_ERR,
-                "corner_radius": 6,
-                "width": 50
-            }]
-
-            if hasattr(self, 'extra_buttons'):
-                for btn_text, btn_cmd in self.extra_buttons:
-                    buttons.append({
-                        "text": btn_text,
-                        "command": lambda i=item, bc=btn_cmd: bc(i),
-                        "fg_color": "transparent",
-                        "text_color": MGR_TEXT_SOFT,
-                        "hover_color": MGR_HOVER,
-                        "border_width": 1,
-                        "border_color": MGR_BORDER_STRONG,
-                        "corner_radius": 6,
-                        "width": 50
-                    })
-
-            card = ClickableCard(
-                self.second_view,
-                title=info,
-                title_font=ui_fonts.ui_font(12),
-                on_click=lambda i=item: self.edit_item(i),
-                buttons=buttons
-            )
-            card.pack(fill='x', padx=5, pady=3)
-
-    def create_style_widgets(self, parent):
-        pass
-
-    def create_sort_widgets(self, parent):
-        pass
-
-    def load_items(self):
-        raise NotImplementedError
-
-    def get_category(self, item):
-        raise NotImplementedError
-
-    def get_card_display(self, item):
-        raise NotImplementedError
-
-    def sort_items(self, items):
-        return items
-
-    def add_item_in_category(self):
-        raise NotImplementedError
-
-    def edit_item(self, item):
-        raise NotImplementedError
-
-    def delete_item(self, item):
-        raise NotImplementedError
-
-    def _on_module_switch(self, value):
-        pass

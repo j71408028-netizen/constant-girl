@@ -315,6 +315,12 @@
     "MGR_BG": {
       "$role": "bg-app"
     },
+    "MGR_PANEL_BG": {
+      "$role": "bg-panel"
+    },
+    "MGR_PAGE_BG": {
+      "$role": "bg-app"
+    },
     "MGR_HEADER_BG": {
       "$pair": "brown.200"
     },
@@ -356,6 +362,33 @@
     },
     "MGR_ROW_DISABLED_TEXT": {
       "$prim": "warm-gray.600"
+    },
+    "MGR_TEXT_MUTED": {
+      "$role": "text-muted"
+    },
+    "MGR_PLACEHOLDER": {
+      "$role": "text-placeholder"
+    },
+    "MGR_RAIL_BG": {
+      "$role": "bg-strong"
+    },
+    "MGR_INPUT_BG": {
+      "$role": "bg-hover"
+    },
+    "MGR_ROW_HOVER": {
+      "$role": "bg-hover"
+    },
+    "MGR_ROW_OPEN": {
+      "$role": "bg-hover"
+    },
+    "MGR_PRIMARY_BG": {
+      "$role": "text-strong"
+    },
+    "MGR_PRIMARY_HOVER": {
+      "$role": "text-body"
+    },
+    "MGR_PRIMARY_TEXT": {
+      "$role": "bg-app"
     },
     "MGR_HEADER_TEXT": {
       "$role": "text-strong"

@@ -264,8 +264,8 @@ data/static/behaviors/imperial_units/imperial_units.py:45
 
 描述语料的静态校验只有一套判据：`services/exploration/quip_lint.py::lint_style`
 （meta 声明 / 标记格式 / 替换池 / 接缝语法 / 单条文本排版）。命令行体检
-（`developer_tools/quip_report.py`）与描述管理页的「校验」按钮都调用它，两者只
-呈现方式不同（stdout / 诊断对话框），不各写一份规则；组合级结论的定位用
+（`developer_tools/quip_report.py`）与描述管理页的校验摘要（点击进诊断对话框）
+都调用它，两者只呈现方式不同（stdout / 摘要 + 对话框），不各写一份规则；组合级结论的定位用
 `(尺寸档, 坐标, 条目下标, 偏移)` 溯源，界面据此直接回到那条描述。回归在
 `tests/check_quip_lint.py`。**一次只查一个风格的一个尺寸档**是两处共守的口径：
 池按档分裂，全量结论读不动。

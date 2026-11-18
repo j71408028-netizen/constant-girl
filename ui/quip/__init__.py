@@ -1,5 +1,7 @@
+import math
 import os
 import tkinter as tk
+from collections import Counter
 
 import ui.ctk.dialogs
 
@@ -7,6 +9,7 @@ import customtkinter as ctk
 import re
 
 from core.logic import SIZE_CATEGORIES, size_level_text
+from core.scale_reference import DESTRUCTION_LEVELS, INTRUSION_LEVELS
 from persistence import QuipRepo
 from persistence.quip_repo import DEFAULT_QUIP_STYLE
 from services.challenges import (
@@ -14,7 +17,7 @@ from services.challenges import (
     unique_display,
 )
 from ui.ctk.managers import TreeviewManager, CardManager
-from ui.ctk.widgets import ClickableCard, CTkScrollableDropdownFrame
+from ui.ctk.widgets import OptionButton, CTkScrollableDropdownFrame
 from ui.ctk.dialogs import BaseDialog
 from ui.ctk.address_dlg import AddressTextDialog
 from ui.quip.dialogs import QuipDialog, _TargetSelectDialog
@@ -22,39 +25,40 @@ from ui.quip.lint_dialog import QuipLintDialog
 from services.exploration.quip_lint import lint_style
 from core.address_model import format_addr_verbose
 from ui.ctk.theme import (
-    QUIP_BG, QUIP_PANEL_BG, QUIP_BORDER_STRONG, QUIP_HOVER,
-    QUIP_MENU_HOVER, QUIP_CARD_HOVER, QUIP_TEXT, QUIP_TEXT_SOFT,
-    QUIP_PLACEHOLDER, QUIP_LINK, QUIP_OK, QUIP_OK_HOVER,
-    QUIP_ERR, QUIP_ERR_HOVER, QUIP_TYPEVIEW, QUIP_TYPEVIEW_HOVER,
-    QUIP_TYPE_COLORS,
+    QUIP_BORDER_STRONG, QUIP_HOVER, QUIP_TEXT_SOFT,
+    QUIP_PLACEHOLDER, QUIP_LINK, QUIP_ERR, QUIP_ERR_HOVER,
+    QUIP_TYPEVIEW, QUIP_TYPEVIEW_HOVER, QUIP_TYPE_COLORS,
+    MGR_BORDER, MGR_BORDER_STRONG, MGR_ERR, MGR_ERR_HOVER, MGR_HOVER,
+    MGR_PANEL_BG, MGR_TEXT, MGR_TEXT_SOFT, MGR_TEXT_MUTED,
 )
 from ui.ctk import fonts as ui_fonts
 
 
 class QuipCardManager(CardManager):
     RESOURCE_TYPE = "quips"
+    SUPPORTS_SIZE = True
 
     SIZE_CATEGORIES = SIZE_CATEGORIES
     SUMMARY_RE = re.compile(r'\s*\[summary:(.*?)\]$')
+    TAG_RE = re.compile(r'\[([a-e]):(\d+):([^\]]+)\]')
 
     def __init__(self, parent, quip_repo: QuipRepo, settings_repo, gui_ref):
         self.quip_repo = quip_repo
         self._settings_repo = settings_repo
         self.style_var = tk.StringVar()
         self.size_var = tk.StringVar(value="small")
-        self.sort_var = tk.StringVar(value="intrusion_asc")
-        self.current_intrusion = 1
-        self.current_destruction = 1
         super().__init__(parent, gui_ref, item_name="描述")
-        self.size_row = ctk.CTkFrame(self, fg_color="transparent")
-        self.size_row.pack(fill='x', padx=10, pady=(5, 2), before=self.view_container)
+
         self._create_size_widgets()
-        self.create_style_widgets(self.style_frame)
+        self._create_type_view_button()
+        self.create_style_widgets(self.style_host)
         self.refresh_styles()
-        self.show_first_view()
+
         self.type_view_active = False
         self.type_view = QuipTypeViewManager(self, self)
         self.type_view.pack_forget()
+        self._create_lint_widget()
+        self.refresh_ui()
 
     # ----- 实现基类抽象方法 -----
     def _get_style_list(self):
@@ -83,39 +87,20 @@ class QuipCardManager(CardManager):
 
     # ----- 风格控件 -----
     def create_style_widgets(self, parent):
-        ctk.CTkLabel(parent, text="当前风格:",
-                     text_color=QUIP_TEXT_SOFT).pack(side='left', padx=5)
         self.style_combo = ctk.CTkComboBox(
             parent, variable=self.style_var, state="readonly",
-            width=150,
-            fg_color=QUIP_PANEL_BG,
-            border_color=QUIP_BORDER_STRONG,
-            button_color=QUIP_BORDER_STRONG,
-            button_hover_color=QUIP_MENU_HOVER,
-            dropdown_fg_color=QUIP_PANEL_BG,
-            dropdown_hover_color=QUIP_HOVER
+            width=160, height=32, corner_radius=7,
+            fg_color=MGR_PANEL_BG,
+            border_width=1, border_color=MGR_BORDER,
+            button_color=MGR_PANEL_BG,
+            button_hover_color=MGR_HOVER,
+            dropdown_fg_color=MGR_PANEL_BG,
+            dropdown_hover_color=MGR_HOVER,
+            text_color=MGR_TEXT,
+            font=ui_fonts.ui_font(13)
         )
-        self.style_combo.pack(side='left', padx=7)
+        self.style_combo.pack(side='left')
         self._rebuild_dropdown()
-        _btn_spec = {"fg_color": "transparent", "border_width": 1, "corner_radius": 8}
-        _btn_muted = {"text_color": QUIP_TEXT_SOFT,
-                      "hover_color": QUIP_HOVER,
-                      "border_color": QUIP_BORDER_STRONG}
-        ctk.CTkButton(parent, text="新建", width=80, command=self.create_style,
-                       text_color=QUIP_OK,
-                       hover_color=QUIP_OK_HOVER,
-                       border_color=QUIP_OK,
-                       **_btn_spec).pack(side='left', padx=2)
-        ctk.CTkButton(parent, text="重命名", width=80, command=self.rename_style,
-                       **_btn_spec, **_btn_muted).pack(side='left', padx=2)
-        _del_spec = {"text_color": QUIP_ERR,
-                     "hover_color": QUIP_ERR_HOVER,
-                     "border_color": QUIP_ERR}
-        ctk.CTkButton(parent, text="删除", width=80, command=self.delete_style,
-                       **_btn_spec, **_del_spec).pack(side='left', padx=2)
-        # 描述风格注册地址：维度 + 该风格注册的若干上级级
-        ctk.CTkButton(parent, text="📍地址", width=62, command=self._edit_style_address,
-                       **_btn_spec, **_btn_muted).pack(side='left', padx=2)
 
     def _edit_style_address(self):
         style = self._get_current_style()
@@ -180,14 +165,14 @@ class QuipCardManager(CardManager):
                 values=items,
                 text_colors=text_colors,
                 command=self._on_dropdown_select,
-                height=200, button_height=28,
-                fg_color=QUIP_BG,
-                hover_color=QUIP_CARD_HOVER,
-                scrollbar_button_color=QUIP_HOVER,
-                scrollbar_button_hover_color=QUIP_HOVER,
-                frame_border_color=QUIP_BORDER_STRONG,
-                text_color=QUIP_TEXT,
-                button_color=QUIP_BG,
+                height=210, button_height=30,
+                fg_color=MGR_PANEL_BG,
+                hover_color=MGR_HOVER,
+                scrollbar_button_color=MGR_HOVER,
+                scrollbar_button_hover_color=MGR_HOVER,
+                frame_border_color=MGR_BORDER,
+                text_color=MGR_TEXT,
+                button_color=MGR_PANEL_BG,
                 frame_border_width=1,
                 justify="left"
             )
@@ -202,16 +187,18 @@ class QuipCardManager(CardManager):
                 self._set_combo_to_current_style()
                 return
             self.refresh_styles()
-            self.load_items()
+            self._clear_search()
             self._refresh_active_view()
+            self._reset_scroll(self.rows)
             self.gui.load_combined_quips()
             ui.ctk.dialogs.showinfo("成功", f"已从挑战包导入 {imported} 条描述数据")
         else:
             style = getattr(self, "_style_display_map", {}).get(choice, choice)
             if style != self._get_current_style():
                 self._set_current_style(style)
-                self.load_items()
+                self._clear_search()
                 self._refresh_active_view()
+                self._reset_scroll(self.rows)
 
     # ---------- 工具方法 ----------
     @classmethod
@@ -235,20 +222,30 @@ class QuipCardManager(CardManager):
             return cls.SUMMARY_RE.sub('', text).strip(), summary
         return cls.extract_summary(text)
 
-    def _parse_quip_tags(self, text: str):
-        pattern = r'\[([a-e]):(\d+):([^\]]+)\]'
-        tags = []
-        mode = ctk.get_appearance_mode()
-        for m in re.finditer(pattern, text):
-            start, end = m.span()
-            letter = m.group(1)
-            colors = QUIP_TYPE_COLORS.get(letter)
-            if colors:
-                color = colors[1] if mode == "Dark" else colors[0]
-            else:
-                color = QUIP_PLACEHOLDER
-            tags.append((start, end, color))
-        return tags
+    def _type_color(self, letter):
+        colors = QUIP_TYPE_COLORS.get(letter)
+        if not colors:
+            return QUIP_PLACEHOLDER
+        if ctk.get_appearance_mode() == "Dark":
+            return colors[1] if len(colors) > 1 else colors[0]
+        return colors[0]
+
+    def _tagged_text(self, text):
+        """去掉 ``[类型:编号:内容]`` 外壳，返回 (可见文本, 着色片段)。"""
+        out = []
+        spans = []
+        pos = 0
+        cursor = 0
+        for m in self.TAG_RE.finditer(text):
+            out.append(text[cursor:m.start()])
+            pos += m.start() - cursor
+            inner = m.group(3)
+            out.append(inner)
+            spans.append((pos, pos + len(inner), self._type_color(m.group(1))))
+            pos += len(inner)
+            cursor = m.end()
+        out.append(text[cursor:])
+        return ''.join(out), spans
 
     # ---------- 风格控件 ----------
     def edit_custom_types(self, on_saved=None):
@@ -318,77 +315,59 @@ class QuipCardManager(CardManager):
 
     # ---------- 观测等级选择 ----------
     def _create_size_widgets(self):
-        ctk.CTkLabel(self.size_row, text="观测等级:",
-                     text_color=QUIP_TEXT_SOFT).pack(side='left', padx=5)
-        for cat in self.SIZE_CATEGORIES:
-            rb = ctk.CTkRadioButton(
-                self.size_row, text=size_level_text(cat),
-                variable=self.size_var, value=cat,
-                command=self.on_size_changed,
-                fg_color=(QUIP_HOVER[1], QUIP_TEXT[1]),
-                border_color=QUIP_BORDER_STRONG,
-                hover_color=QUIP_HOVER,
-                text_color=QUIP_TEXT
-            )
-            rb.pack(side='left', padx=5)
-        _purple_btn = {"fg_color": "transparent", "border_width": 1,
-                       "border_color": QUIP_TYPEVIEW,
-                       "text_color": QUIP_TYPEVIEW,
-                       "hover_color": QUIP_TYPEVIEW_HOVER,
-                       "corner_radius": 8}
-        self.type_view_btn = ctk.CTkButton(self.size_row, text="类型视图", width=80,
-                                           command=self.toggle_type_view, **_purple_btn)
-        self.type_view_btn.pack(side='right', padx=6)
-        # 校验：当前风格 + 当前观测等级，判据与 developer_tools/quip_report.py 同一套
-        ctk.CTkButton(self.size_row, text="校验", width=72,
-                      command=self.run_check,
-                      fg_color="transparent", border_width=1, corner_radius=8,
-                      text_color=QUIP_TEXT_SOFT, hover_color=QUIP_HOVER,
-                      border_color=QUIP_BORDER_STRONG).pack(side='right', padx=6)
+        values = [size_level_text(cat) for cat in self.SIZE_CATEGORIES]
+        self._size_key_by_label = {
+            label: cat for label, cat in zip(values, self.SIZE_CATEGORIES)
+        }
+        self.size_option = OptionButton(
+            self.size_host, values=values, command=self._on_size_option,
+            width=210, height=32, corner_radius=7, border_width=1,
+            border_color=MGR_BORDER, fg_color=MGR_PANEL_BG,
+            hover_color=MGR_HOVER, text_color=MGR_TEXT,
+            font=ui_fonts.ui_font(13), anchor='w',
+            popup_fg_color=MGR_PANEL_BG, popup_hover_color=MGR_HOVER,
+            popup_text_color=MGR_TEXT, popup_border_color=MGR_BORDER,
+            popup_height=220
+        )
+        self.size_option.pack(side='left')
+        self.size_option.set(size_level_text(self.size_var.get()))
 
-    # ---------- 排序控件 ----------
-    def create_sort_widgets(self, parent):
-        ctk.CTkRadioButton(parent, text="介入度\u2191", variable=self.sort_var,
-                           value="intrusion_asc", command=self._on_category_sort_changed,
-                           font=ui_fonts.ui_font(13),
-                           fg_color=(QUIP_HOVER[1], QUIP_TEXT[1]),
-                           border_color=QUIP_BORDER_STRONG,
-                           hover_color=QUIP_HOVER,
-                           text_color=QUIP_TEXT).pack(side='left', padx=5)
-        ctk.CTkRadioButton(parent, text="破坏性\u2191", variable=self.sort_var,
-                           value="destruction_asc", command=self._on_category_sort_changed,
-                           font=ui_fonts.ui_font(13),
-                           fg_color=(QUIP_HOVER[1], QUIP_TEXT[1]),
-                           border_color=QUIP_BORDER_STRONG,
-                           hover_color=QUIP_HOVER,
-                           text_color=QUIP_TEXT).pack(side='left', padx=5)
+    def _on_size_option(self, label):
+        key = self._size_key_by_label.get(label)
+        if not key or key == self.size_var.get():
+            return
+        self.size_var.set(key)
+        self.on_size_changed()
 
-    # ---------- 视图切换 ----------
-    def show_first_view(self):
-        self.current_view = "first"
-        self.second_view.pack_forget()
-        self.first_view.pack(fill='both', expand=True)
-        self.sort_frame.pack(anchor='w')
-        self.back_btn.pack_forget()
-        self._hide_category_title()
-        self._populate_categories()
+    def _create_type_view_button(self):
+        self.type_view_btn = ctk.CTkButton(
+            self.head_right, text="▦ 类型视图", width=104, height=32,
+            corner_radius=7, fg_color="transparent",
+            hover_color=QUIP_TYPEVIEW_HOVER, text_color=QUIP_TYPEVIEW,
+            font=ui_fonts.ui_font(13), command=self.toggle_type_view
+        )
+        self.type_view_btn.pack(side='right')
 
-    def show_second_view(self, category_key):
-        self.current_view = "second"
-        self.current_category = category_key
-        parts = category_key.split()
-        if len(parts) >= 2:
-            try:
-                self.current_intrusion = int(parts[0].replace("介入", ""))
-                self.current_destruction = int(parts[1].replace("破坏", ""))
-            except ValueError:
-                pass
-        self.first_view.pack_forget()
-        self.second_view.pack(fill='both', expand=True)
-        self.sort_frame.pack_forget()
-        self.back_btn.pack(side='left', padx=(5, 0))
-        self._show_category_title(category_key)
-        self._populate_items(category_key)
+    def _create_lint_widget(self):
+        """校验结论：卡片视图与类型视图都停在右下角。"""
+        self.lint_btn = self._make_lint_btn(self.pane_footer, side='right')
+        self.type_status_host = ctk.CTkFrame(
+            self.type_view, fg_color="transparent", width=0, height=0)
+        self.type_status_host.place(relx=1.0, rely=1.0, anchor='se',
+                                    x=-16, y=-5)
+        self.type_status_host.lift()
+        self.type_lint_btn = self._make_lint_btn(self.type_status_host)
+
+    def _make_lint_btn(self, parent, side='left', padx=0):
+        btn = ctk.CTkButton(
+            parent, text="", width=180, height=24, corner_radius=6,
+            border_width=0, fg_color=MGR_HOVER, hover_color=MGR_BORDER_STRONG,
+            text_color=QUIP_TEXT_SOFT, font=ui_fonts.ui_font(12),
+            command=self.run_check
+        )
+        btn.pack(side=side, padx=padx)
+        btn.pack_forget()
+        return btn
 
     # ---------- 类型视图切换 ----------
     def toggle_type_view(self):
@@ -399,27 +378,85 @@ class QuipCardManager(CardManager):
 
     def _show_type_view(self):
         self.type_view_active = True
-        self.view_container.pack_forget()
-        self.bottom_row.pack_forget()
-        self.type_view.pack(fill='both', expand=True, padx=10, pady=5)
-        self.type_view_btn.configure(text="返回描述")
+        self._hide_workspace()
+        self.type_view.pack(fill='both', expand=True, padx=12, pady=(10, 12))
+        self.type_view_btn.configure(text="↩ 返回描述")
         self.type_view.refresh_matches()
 
     def _hide_type_view(self):
         self.type_view_active = False
         self.type_view.pack_forget()
-        self.view_container.pack(fill='both', expand=True, padx=10, pady=5)
-        self.bottom_row.pack(fill='x', padx=10, pady=(5, 10))
-        self.type_view_btn.configure(text="类型视图")
+        self._show_workspace()
+        self.type_view_btn.configure(text="▦ 类型视图")
         self.refresh_ui()
 
     def _refresh_active_view(self):
+        self.refresh_ui()
+
+    def _after_refresh(self):
         if getattr(self, 'type_view_active', False):
             self.type_view.refresh_matches()
-        else:
-            self.show_first_view()
 
     # ---------- 校验 ----------
+    def _build_lint_report(self):
+        """按当前风格 + 当前观测等级构造检查报告；无数据时返回 None。"""
+        style = self._get_current_style()
+        size = self.size_var.get()
+        if not style:
+            return None
+        matrix = {}
+        for item in self.all_items:
+            matrix.setdefault((item['intrusion'], item['destruction']), []).append({
+                'text': item['text'],
+                'style': item.get('style', style),
+                'step': item.get('step', 1.0),
+                'summary': item.get('summary', ''),
+            })
+        if not matrix:
+            return None
+        data = {size: matrix, "_meta": self.quip_repo.load_meta(style)}
+        return lint_style(style, data, size_cat=size)
+
+    def _lint_color(self, letter):
+        return self._type_color(letter) or MGR_TEXT_SOFT
+
+    def update_lint_summary(self):
+        """把当前档位的校验结论压成一行，停在两种视图各自的右下角。"""
+        if not hasattr(self, "lint_btn"):
+            return
+        report = self._build_lint_report() if self.all_items else None
+        if report is None:
+            self.pane_footer.pack_forget()
+            self.type_lint_btn.pack_forget()
+            return
+
+        counts = Counter(f.level for f in report.sorted_findings())
+        errors = counts.get("error", 0)
+        warns = counts.get("warn", 0)
+        infos = counts.get("info", 0)
+        if errors:
+            text = f"校验 {errors} 错误"
+            if warns:
+                text += f" · {warns} 警告"
+            color = self._lint_color("a")
+        elif warns:
+            text = f"校验 {warns} 警告"
+            if infos:
+                text += f" · {infos} 提示"
+            color = self._lint_color("d")
+        elif infos:
+            text = f"校验 {infos} 提示"
+            color = self._lint_color("c")
+        else:
+            text = "校验通过"
+            color = self._lint_color("b")
+
+        self.lint_btn.configure(text=f"● {text} ›", text_color=color)
+        self.pane_footer.pack(side='bottom', fill='x', padx=16, pady=(0, 7))
+        self.lint_btn.pack(side='right')
+        self.type_lint_btn.configure(text=f"● {text} ›", text_color=color)
+        self.type_lint_btn.pack(side='left')
+
     def run_check(self):
         """校验当前风格 + 当前观测等级，结论交给 ``QuipLintDialog``。
 
@@ -434,20 +471,11 @@ class QuipCardManager(CardManager):
         if not style:
             return
         self.load_items()
-        matrix = {}
-        for item in self.all_items:
-            matrix.setdefault((item['intrusion'], item['destruction']), []).append({
-                'text': item['text'],
-                'style': item.get('style', style),
-                'step': item.get('step', 1.0),
-                'summary': item.get('summary', ''),
-            })
-        if not matrix:
+        report = self._build_lint_report()
+        if report is None:
             ui.ctk.dialogs.showinfo(
                 "无可校验内容", f"风格 {style} 在 {size} 档下还没有描述。")
             return
-        data = {size: matrix, "_meta": self.quip_repo.load_meta(style)}
-        report = lint_style(style, data, size_cat=size)
         QuipLintDialog(self, report, on_locate=self.locate_finding)
 
     def locate_finding(self, loc):
@@ -480,9 +508,14 @@ class QuipCardManager(CardManager):
         return same[idx]
 
     # ---------- 风格 / 体型变更 ----------
+    def _display_for_style(self, style):
+        for display, sid in getattr(self, "_style_display_map", {}).items():
+            if sid == style:
+                return display
+        return style
+
     def _set_combo_to_current_style(self):
-        current = self._get_current_style()
-        self.style_var.set(current)
+        self.style_var.set(self._display_for_style(self._get_current_style()))
 
     def refresh_styles(self):
         styles = self.quip_repo.get_styles()
@@ -491,20 +524,18 @@ class QuipCardManager(CardManager):
         if current not in styles:
             current = styles[0] if styles else DEFAULT_QUIP_STYLE
             self._set_current_style(current)
-        self.style_var.set(current)
+        self.style_var.set(self._display_for_style(current))
 
     def on_size_changed(self):
-        self.load_items()
-        self._refresh_active_view()
+        self._clear_search()
+        self.refresh_ui()
+        self._reset_scroll(self.rows)
 
     def update_theme(self, theme_mode: str):
         super().update_theme(theme_mode)
         if hasattr(self, 'type_view'):
             self.type_view.update_theme(theme_mode)
-
-    def _on_category_sort_changed(self):
-        if self.current_view == "first":
-            self._populate_categories()
+        self.update_lint_summary()
 
     # ---------- 数据加载与保存 ----------
     def load_items(self):
@@ -548,7 +579,7 @@ class QuipCardManager(CardManager):
         self.all_items = items
         self.refresh_ui()
 
-    # ---------- 分类与卡片显示 ----------
+    # ---------- 分类与行内容 ----------
     def get_category(self, item):
         return f"介入{item['intrusion']} 破坏{item['destruction']}"
 
@@ -560,121 +591,175 @@ class QuipCardManager(CardManager):
             "步进": f"{item.get('step', 1.0):.2f}"
         }
 
-    # ---------- 分类视图 ----------
-    def _populate_categories(self):
-        for w in self.first_view.winfo_children():
-            w.destroy()
+    @staticmethod
+    def _parse_category(key):
+        parts = str(key or "").split()
+        try:
+            return (int(parts[0].replace("介入", "")),
+                    int(parts[1].replace("破坏", "")))
+        except (IndexError, ValueError):
+            return (1, 1)
 
-        self.load_items()
-        cat_items = {}
-        for item in self.all_items:
-            cat = self.get_category(item)
-            cat_items.setdefault(cat, []).append(item)
+    def category_label(self, key):
+        i, d = self._parse_category(key)
+        return f"介入 {i} · 破坏 {d}"
 
-        if not cat_items:
-            ctk.CTkLabel(self.first_view, text="暂无描述，请先添加",
-                         font=ui_fonts.ui_font(14),
-                         text_color=QUIP_TEXT_SOFT).pack(pady=20)
-            return
+    def category_keys(self):
+        return [f"介入{i} 破坏{d}" for d in range(1, 5) for i in range(1, 5)]
 
-        sort_mode = self.sort_var.get()
-        def sort_key(cat):
-            parts = cat.split()
-            intr = int(parts[0].replace("介入", ""))
-            dest = int(parts[1].replace("破坏", ""))
-            return (dest, intr) if sort_mode == "destruction_asc" else (intr, dest)
+    def selector_note(self):
+        filled = sum(1 for key in self.category_keys()
+                     if self.category_count(key))
+        return f"{filled} / 16 格"
 
-        sorted_cats = sorted(cat_items.keys(), key=sort_key)
+    def empty_hint(self, key):
+        i, d = self._parse_category(key)
+        return f"点「添加描述」会把 介入 {i} / 破坏 {d} 预填进对话框"
 
-        for cat in sorted_cats:
-            items_in_cat = cat_items[cat]
-            summaries = [it['summary'] for it in items_in_cat[:5]]
-            preview = "\u3001".join(summaries)
-            if len(items_in_cat) > 5:
-                preview += f"  等{len(items_in_cat)}条"
-            else:
-                preview += f"  共{len(items_in_cat)}条"
+    def build_selector(self, parent):
+        groups = self._groups
+        keys = self.category_keys()
+        max_count = max((len(groups.get(k, ())) for k in keys), default=0)
+        grid = ctk.CTkFrame(parent, fg_color="transparent")
+        grid.pack(fill='x')
+        for col in range(1, 5):
+            grid.grid_columnconfigure(col, weight=1, uniform="qcell")
+        ctk.CTkLabel(
+            grid, text="条数", font=ui_fonts.ui_font(10),
+            text_color=MGR_TEXT_MUTED
+        ).grid(row=0, column=0, sticky='sw', padx=(2, 0), pady=(0, 3))
+        for i in range(1, 5):
+            ctk.CTkLabel(
+                grid, text=f"介入 {i}", font=ui_fonts.ui_font(10),
+                text_color=MGR_TEXT_MUTED
+            ).grid(row=0, column=i, sticky='s', pady=(0, 3))
+        for d in range(1, 5):
+            ctk.CTkLabel(
+                grid, text=f"破坏 {d}", font=ui_fonts.ui_font(10),
+                text_color=MGR_TEXT_MUTED, anchor='e'
+            ).grid(row=d, column=0, sticky='e', padx=(0, 3), pady=2)
+            for i in range(1, 5):
+                key = f"介入{i} 破坏{d}"
+                count = len(groups.get(key, ()))
+                selected = key == self.current_category
+                cell = ctk.CTkButton(
+                    grid, text=str(count), height=40, corner_radius=8,
+                    font=(ui_fonts.ui_font(14, "bold") if count
+                          else ui_fonts.ui_font(13)),
+                    fg_color=(MGR_PANEL_BG if selected
+                              else self.heat_color(count, max_count)),
+                    hover_color=MGR_HOVER,
+                    border_width=2 if selected else 1,
+                    border_color=(MGR_BORDER_STRONG if selected
+                                  else MGR_BORDER),
+                    text_color=MGR_TEXT if count else MGR_TEXT_MUTED,
+                    command=lambda k=key: self._select_category(k))
+                cell.grid(row=d, column=i, sticky='nsew', padx=2, pady=2)
 
-            card = ClickableCard(
-                self.first_view,
-                title=cat,
-                title_font=ui_fonts.ui_font(14, "bold"),
-                title_extra=[{
-                    "text": preview,
-                    "font": ui_fonts.ui_font(12),
-                    "text_color": QUIP_TEXT_SOFT
-                }],
-                on_click=lambda c=cat: self.show_second_view(c),
-                gold_hover=True
-            )
-            card.pack(fill='x', padx=10, pady=4)
+    def render_rail_extra(self, parent):
+        i, d = self._parse_category(self.current_category)
 
-    # ---------- 条目视图 ----------
-    def _populate_items(self, category_key):
-        for w in self.second_view.winfo_children():
-            w.destroy()
+        def block(eyebrow, pair):
+            title, _, body = pair.partition("：")
+            head = ctk.CTkFrame(parent, fg_color="transparent")
+            head.pack(fill='x')
+            ctk.CTkLabel(head, text=eyebrow, font=ui_fonts.ui_font(11),
+                         text_color=MGR_TEXT_MUTED).pack(side='left')
+            ctk.CTkLabel(head, text=title, font=ui_fonts.ui_font(13, "bold"),
+                         text_color=MGR_TEXT_SOFT).pack(side='left',
+                                                        padx=(6, 0))
+            ctk.CTkLabel(
+                parent, text=body, font=ui_fonts.ui_font(12),
+                text_color=MGR_TEXT_SOFT, justify='left', anchor='w',
+                wraplength=232).pack(fill='x', pady=(3, 0))
 
-        items = [item for item in self.all_items if self.get_category(item) == category_key]
-        items = self.sort_items(items)
+        block(f"介入度 {i}", INTRUSION_LEVELS[i])
+        ctk.CTkFrame(parent, height=1, fg_color=MGR_BORDER).pack(
+            fill='x', pady=9)
+        block(f"破坏性 {d}", DESTRUCTION_LEVELS[d])
 
-        for item in items:
-            clean_text = item['text']
-            display_len = len(clean_text) - len(self._parse_quip_tags(clean_text)) * 6
-            summary_text = item['summary'] if item['summary'] else "无简介"
-            step_val = item.get('step', 1.0)
+    def search_text(self, item):
+        return f"{item.get('summary', '')} {self._strip_tags(item.get('text', ''))}"
 
-            def apply_tags(tb):
-                for start, end, color in self._parse_quip_tags(clean_text):
-                    tag_name = f"tag_{start}_{end}"
-                    tb._textbox.tag_configure(tag_name, foreground=color)
-                    tb._textbox.tag_add(tag_name, f"1.0+{start}c", f"1.0+{end}c")
+    def row_title(self, item):
+        return item.get('summary') or "无简介"
 
-            card = ClickableCard(
-                self.second_view,
-                title=summary_text,
-                title_extra=[
-                    {"text": f"  ({display_len}字)",
-                     "font": ui_fonts.ui_font(13, "bold"),
-                     "text_color": QUIP_TEXT},
-                    {"text": f"步进: {step_val:.2f}",
-                     "font": ui_fonts.ui_font(13),
-                     "text_color": QUIP_TEXT_SOFT},
-                ],
-                detail=clean_text,
-                is_detail_textbox=True,
-                detail_cb=apply_tags,
-                on_click=lambda i=item: self.edit_item(i),
-                gold_hover=True,
-                cursor="xterm",
-                info_pad=(10, 6),
-                buttons=[
-                    {"text": "复制",
-                     "command": lambda i=item: self.copy_item(i),
-                     "fg_color": "transparent", "border_width": 1,
-                     "border_color": QUIP_BORDER_STRONG,
-                     "text_color": QUIP_TEXT_SOFT,
-                     "hover_color": QUIP_HOVER,
-                     "corner_radius": 6, "width": 50, "height": 25,
-                     "pack_kw": {"side": "top", "pady": 2}},
-                    {"text": "移动",
-                     "command": lambda i=item: self.move_item(i),
-                     "fg_color": "transparent", "border_width": 1,
-                     "border_color": QUIP_BORDER_STRONG,
-                     "text_color": QUIP_TEXT_SOFT,
-                     "hover_color": QUIP_HOVER,
-                     "corner_radius": 6, "width": 50, "height": 25,
-                     "pack_kw": {"side": "top", "pady": 2}},
-                    {"text": "删除",
-                     "fg_color": "transparent",
-"text_color": QUIP_ERR,
-            "hover_color": QUIP_ERR_HOVER,
-            "border_width": 1, "border_color": QUIP_ERR,
-                     "corner_radius": 6, "width": 50, "height": 25,
-                     "command": lambda i=item: self.delete_item(i),
-                     "pack_kw": {"side": "top", "pady": 2}},
-                ]
-            )
-            card.pack(fill='x', padx=5, pady=3)
+    def row_preview(self, item):
+        return self._clip(self._strip_tags(item.get('text', '')), 34)
+
+    def row_meta(self, item):
+        return (f"步进 {item.get('step', 1.0):.2f} · "
+                f"{self._display_len(item.get('text', ''))} 字")
+
+    def pane_subtitle(self, items):
+        if not items:
+            return "0 条描述"
+        steps = [float(it.get('step', 1.0)) for it in items]
+        return (f"{len(items)} 条 · 步进 "
+                f"{min(steps):.2f}–{max(steps):.2f}")
+
+    def _strip_tags(self, text):
+        return self.TAG_RE.sub(r'\3', text or '')
+
+    def _display_len(self, text):
+        return len(self._strip_tags(text))
+
+    def build_row_detail(self, parent, item):
+        card = ctk.CTkFrame(parent, fg_color=MGR_PANEL_BG, corner_radius=8)
+        card.pack(fill='x')
+
+        text = item.get('text', '')
+        display, spans = self._tagged_text(text)
+        try:
+            scaling = self._get_widget_scaling()
+            width = max(240, self.rows.winfo_width() / scaling - 60)
+        except Exception:
+            width = 420
+        per_line = max(16, int(width / 13))
+        lines = max(1, math.ceil(len(display) / per_line))
+        height = max(56, min(240, 12 + lines * 21))
+
+        textbox = ctk.CTkTextbox(
+            card, fg_color="transparent", border_width=0, height=height,
+            wrap="word", font=ui_fonts.ui_font(13),
+            text_color=MGR_TEXT,
+            scrollbar_button_color=MGR_HOVER,
+            scrollbar_button_hover_color=MGR_BORDER
+        )
+        textbox.pack(fill='x', padx=9, pady=(8, 0))
+        textbox.insert("0.0", display)
+        for start, end, color in spans:
+            tag_name = f"tag_{start}_{end}"
+            textbox._textbox.tag_configure(tag_name, foreground=color)
+            textbox._textbox.tag_add(
+                tag_name, f"1.0+{start}c", f"1.0+{end}c")
+        textbox.configure(state="disabled")
+
+        actions = ctk.CTkFrame(card, fg_color="transparent")
+        actions.pack(fill='x', padx=8, pady=(6, 7))
+
+        def add_action(text, command, width=54, danger=False):
+            ctk.CTkButton(
+                actions, text=text, command=command, width=width, height=26,
+                corner_radius=6, border_width=0, fg_color="transparent",
+                hover_color=MGR_ERR_HOVER if danger else MGR_HOVER,
+                text_color=MGR_ERR if danger else MGR_TEXT_SOFT,
+                font=ui_fonts.ui_font(12)
+            ).pack(side='left', padx=1)
+
+        add_action("编辑", lambda: self.edit_item(item), width=46)
+        add_action("复制到…", lambda: self.copy_item(item), width=68)
+        add_action("移动到…", lambda: self.move_item(item), width=68)
+        add_action("删除", lambda: self.delete_item(item), width=46,
+                   danger=True)
+
+        ctk.CTkLabel(
+            actions,
+            text=(f"介入 {item.get('intrusion')} · "
+                  f"破坏 {item.get('destruction')} · "
+                  f"步进 {item.get('step', 1.0):.2f}"),
+            font=ui_fonts.ui_font(12), text_color=MGR_TEXT_MUTED
+        ).pack(side='right')
 
     # ---------- 复制 / 移动 ----------
     def copy_item(self, item):
@@ -734,26 +819,15 @@ class QuipCardManager(CardManager):
                     del quips[src_size][src_key]
 
         self.quip_repo.save(style, quips)
-        self.load_items()
-        if self.current_view == "second":
-            remaining = [i for i in self.all_items if self.get_category(i) == self.current_category]
-            if not remaining:
-                self.show_first_view()
-            else:
-                self.show_second_view(self.current_category)
-        else:
-            self.show_first_view()
+        self.refresh_ui()
 
         action = "复制" if copy else "移动"
         ui.ctk.dialogs.showinfo("成功", f"已{action}描述至 {target_size} {target_intr}/{target_dest}")
 
     # ---------- 增删改 ----------
     def add_item_in_category(self):
-        default_intr, default_dest = 1, 1
-        if self.current_view == "second" and self.current_category:
-            parts = self.current_category.split()
-            default_intr = int(parts[0].replace("介入", ""))
-            default_dest = int(parts[1].replace("破坏", ""))
+        default_intr, default_dest = self._parse_category(
+            self.current_category)
 
         dlg = QuipDialog(
             self, "添加描述",
@@ -779,10 +853,6 @@ class QuipCardManager(CardManager):
             }
             self.all_items.append(new_item)
             self.save_items(self.all_items)
-            if self.current_view == "second" and self.current_category:
-                self.show_second_view(self.current_category)
-            else:
-                self.show_first_view()
 
     def edit_item(self, item):
         dlg = QuipDialog(
@@ -812,14 +882,6 @@ class QuipCardManager(CardManager):
         if ui.ctk.dialogs.askyesno("确认", "确定要删除这条描述吗？"):
             self.all_items.remove(item)
             self.save_items(self.all_items)
-            if self.current_view == "second":
-                remaining = [i for i in self.all_items if self.get_category(i) == self.current_category]
-                if not remaining:
-                    self.show_first_view()
-                else:
-                    self.show_second_view(self.current_category)
-            else:
-                self.show_first_view()
 
     # ---------- 模块切换 ----------
     def _on_module_switch(self, value):
@@ -828,12 +890,7 @@ class QuipCardManager(CardManager):
 
     # ---------- 排序 ----------
     def sort_items(self, items):
-        mode = self.sort_var.get()
-        if mode == "intrusion_asc":
-            return sorted(items, key=lambda x: (x['intrusion'], x['destruction']))
-        elif mode == "destruction_asc":
-            return sorted(items, key=lambda x: (x['destruction'], x['intrusion']))
-        return items
+        return sorted(items, key=lambda x: float(x.get('step', 1.0)))
 
 
 class QuipTypeViewManager(TreeviewManager):

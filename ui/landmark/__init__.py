@@ -8,6 +8,7 @@ import customtkinter as ctk
 import services.worlds.address_registry as address_registry
 import ui.ctk.dialogs
 from core.models import Landmark, is_valid_landmark_size
+from core.logic import format_size
 from persistence.landmark_repo import LandmarkRepo, DEFAULT_LANDMARK_STYLE
 from services.challenges import (
     challenge_pack_titles, get_challenge_packs, import_landmark_challenge_pack,
@@ -15,20 +16,21 @@ from services.challenges import (
 )
 from ui.ctk.dialogs import BaseDialog
 from ui.ctk.managers import CardManager
-from ui.ctk.widgets import ClickableCard, CTkScrollableDropdownFrame
+from ui.ctk.widgets import CTkScrollableDropdownFrame
 from ui.ctk.address_dlg import AddressTextDialog
 from core.address_model import format_addr_verbose
 from ui.ctk.theme import (
-    LM_BG, LM_PANEL_BG, LM_BORDER_STRONG, LM_HOVER,
-    LM_MENU_HOVER, LM_CARD_HOVER, LM_TEXT, LM_TEXT_SOFT,
-    LM_TEXT_MUTED, LM_LINK, LM_OK, LM_OK_HOVER,
-    LM_ERR, LM_ERR_HOVER,
+    LM_TEXT_SOFT, LM_TEXT_MUTED, LM_LINK,
+    MGR_BORDER, MGR_BORDER_STRONG, MGR_ERR, MGR_ERR_HOVER, MGR_HOVER,
+    MGR_PANEL_BG, MGR_TEXT, MGR_TEXT_SOFT, MGR_TEXT_MUTED,
 )
 from ui.ctk import fonts as ui_fonts
 
 
 class LandmarkCardManager(CardManager):
     RESOURCE_TYPE = "landmarks"
+    RAIL_HEAD = "尺寸档"
+    ITEM_UNIT = "个"
 
     SIZE_RANGES = [
         (0, 3, "0~3米"),
@@ -50,9 +52,9 @@ class LandmarkCardManager(CardManager):
         self._settings_repo = settings_repo
         self.style_var = tk.StringVar()
         super().__init__(parent, gui_ref, item_name="地标")
-        self.create_style_widgets(self.style_frame)
+        self.create_style_widgets(self.style_host)
         self.refresh_styles()
-        self.show_first_view()
+        self.refresh_ui()
 
     # ----- 实现基类抽象方法 -----
     def _get_style_list(self):
@@ -81,39 +83,20 @@ class LandmarkCardManager(CardManager):
 
     # ----- 风格控件 -----
     def create_style_widgets(self, parent):
-        ctk.CTkLabel(parent, text="当前风格:",
-                     text_color=LM_TEXT_SOFT).pack(side='left', padx=5)
         self.style_combo = ctk.CTkComboBox(
             parent, variable=self.style_var, state="readonly",
-            width=150,
-            fg_color=LM_PANEL_BG,
-            border_color=LM_BORDER_STRONG,
-            button_color=LM_BORDER_STRONG,
-            button_hover_color=LM_MENU_HOVER,
-            dropdown_fg_color=LM_PANEL_BG,
-            dropdown_hover_color=LM_HOVER
+            width=160, height=32, corner_radius=7,
+            fg_color=MGR_PANEL_BG,
+            border_width=1, border_color=MGR_BORDER,
+            button_color=MGR_PANEL_BG,
+            button_hover_color=MGR_HOVER,
+            dropdown_fg_color=MGR_PANEL_BG,
+            dropdown_hover_color=MGR_HOVER,
+            text_color=MGR_TEXT,
+            font=ui_fonts.ui_font(13)
         )
-        self.style_combo.pack(side='left', padx=7)
+        self.style_combo.pack(side='left')
         self._rebuild_dropdown()
-        _btn_spec = {"fg_color": "transparent", "border_width": 1, "corner_radius": 8}
-        _btn_muted = {"text_color": LM_TEXT_SOFT,
-                      "hover_color": LM_HOVER,
-                      "border_color": LM_BORDER_STRONG}
-        ctk.CTkButton(parent, text="新建", width=80, command=self.create_style,
-                       text_color=LM_OK,
-                       hover_color=LM_OK_HOVER,
-                       border_color=LM_OK,
-                       **_btn_spec).pack(side='left', padx=2)
-        ctk.CTkButton(parent, text="重命名", width=80, command=self.rename_style,
-                       **_btn_spec, **_btn_muted).pack(side='left', padx=2)
-        _del_spec = {"text_color": LM_ERR,
-                     "hover_color": LM_ERR_HOVER,
-                     "border_color": LM_ERR}
-        ctk.CTkButton(parent, text="删除", width=80, command=self.delete_style,
-                       **_btn_spec, **_del_spec).pack(side='left', padx=2)
-        # 风格注册地址：维度 + 该风格注册的若干上级级
-        ctk.CTkButton(parent, text="📍地址", width=62, command=self._edit_style_address,
-                       **_btn_spec, **_btn_muted).pack(side='left', padx=2)
 
     def _edit_style_address(self):
         style = self._get_current_style()
@@ -180,14 +163,14 @@ class LandmarkCardManager(CardManager):
                 values=items,
                 text_colors=text_colors,
                 command=self._on_dropdown_select,
-                height=200, button_height=28,
-                fg_color=LM_BG,
-                hover_color=LM_CARD_HOVER,
-                scrollbar_button_color=LM_HOVER,
-                scrollbar_button_hover_color=LM_HOVER,
-                frame_border_color=LM_BORDER_STRONG,
-                text_color=LM_TEXT,
-                button_color=LM_BG,
+                height=210, button_height=30,
+                fg_color=MGR_PANEL_BG,
+                hover_color=MGR_HOVER,
+                scrollbar_button_color=MGR_HOVER,
+                scrollbar_button_hover_color=MGR_HOVER,
+                frame_border_color=MGR_BORDER,
+                text_color=MGR_TEXT,
+                button_color=MGR_PANEL_BG,
                 frame_border_width=1,
                 justify="left"
             )
@@ -202,8 +185,9 @@ class LandmarkCardManager(CardManager):
                 self._set_combo_to_current_style()
                 return
             self.refresh_styles()
-            self.load_items()
-            self.show_first_view()
+            self._clear_search()
+            self.refresh_ui()
+            self._reset_scroll(self.rows)
             self.gui.load_combined_landmarks()
             ui.ctk.dialogs.showinfo("成功", f"已从挑战包导入 {imported} 条地标数据")
         else:
@@ -211,8 +195,9 @@ class LandmarkCardManager(CardManager):
             if new_style == self._get_current_style():
                 return
             self._set_current_style(new_style)
-            self.load_items()
-            self.show_first_view()
+            self._clear_search()
+            self.refresh_ui()
+            self._reset_scroll(self.rows)
             self.gui.sync_landmark_styles_state()
 
     def _set_combo_to_current_style(self):
@@ -249,159 +234,156 @@ class LandmarkCardManager(CardManager):
         return self._size_category(item.size)
 
     def get_card_display(self, item):
-        if item.dimension == "vertical":
-            dim_text = "高"
-        else:
-            dim_text = "长" if item.horizontal_type == "length" else "宽"
-        freq_text = "精确" if item.frequency == "unique" else "均值"
         return {
             "名称": item.name,
-            "尺寸": f"{item.size}米",
-            "属性": f"{dim_text} | {freq_text}"
+            "尺寸": format_size(item.size),
+            "属性": f"{self._dim_text(item)} | {self._freq_text(item)}"
         }
 
-    # ---------- 排序控件 ----------
-    def create_sort_widgets(self, parent):
-        self.sort_var = tk.StringVar(value="size_asc")
-        ctk.CTkRadioButton(parent, text="尺寸\u2191", variable=self.sort_var,
-                           value="size_asc", command=self.refresh_ui,
-                           font=ui_fonts.ui_font(13),
-                           fg_color=(LM_HOVER[1], LM_TEXT[1]),
-                           border_color=LM_BORDER_STRONG,
-                           hover_color=LM_HOVER,
-                           text_color=LM_TEXT).pack(side='left', padx=2)
-        ctk.CTkRadioButton(parent, text="尺寸\u2193", variable=self.sort_var,
-                           value="size_desc", command=self.refresh_ui,
-                           font=ui_fonts.ui_font(13),
-                           fg_color=(LM_HOVER[1], LM_TEXT[1]),
-                           border_color=LM_BORDER_STRONG,
-                           hover_color=LM_HOVER,
-                           text_color=LM_TEXT).pack(side='left', padx=2)
-
-    # ---------- 视图切换，控制排序控件可见性 ----------
-    def show_first_view(self):
-        self.current_view = "first"
-        self.second_view.pack_forget()
-        self.first_view.pack(fill='both', expand=True)
-        self.back_btn.pack_forget()
-        self._hide_category_title()
-        self.sort_frame.pack(anchor='w')
-        self._populate_categories()
-
-    def show_second_view(self, category_key):
-        self.current_view = "second"
-        self.current_category = category_key
-        self.first_view.pack_forget()
-        self.second_view.pack(fill='both', expand=True)
-        self.back_btn.pack(anchor='w', pady=(5, 0))
-        self._show_category_title(category_key)
-        self.sort_frame.pack_forget()
-        self._populate_items(category_key)
-
-    # ---------- 分类视图渲染（按尺寸排序）----------
-    def _populate_categories(self):
-        for w in self.first_view.winfo_children():
-            w.destroy()
-
-        self.load_items()
-        cat_counts = {}
-        cat_example = {}
-        cat_items = {}
-        for item in self.all_items:
-            cat = self.get_category(item)
-            cat_counts[cat] = cat_counts.get(cat, 0) + 1
-            if cat not in cat_example:
-                cat_example[cat] = item
-            if cat not in cat_items:
-                cat_items[cat] = []
-            cat_items[cat].append(item)
-
-        if not cat_counts:
-            ctk.CTkLabel(self.first_view, text="暂无条目，请先添加",
-                         font=ui_fonts.ui_font(14),
-                         text_color=LM_TEXT_SOFT).pack(pady=20)
-            return
-
-        sort_mode = self.sort_var.get()
-
-        def cat_sort_key(cat_name):
-            example = cat_example.get(cat_name)
-            size = example.size if example else 0
-            if sort_mode == "size_desc":
-                return -size
-            return size
-
-        sorted_cats = sorted(cat_counts.keys(), key=cat_sort_key)
-
-        for cat in sorted_cats:
-            items_in_cat = cat_items.get(cat, [])
-            shown_names = [it.name for it in items_in_cat[:5]]
-            names_text = "\u3001".join(shown_names)
-            if len(items_in_cat) > 5:
-                names_text += f"  等{len(items_in_cat)}条"
-            else:
-                names_text += f"  共{len(items_in_cat)}条"
-
-            card = ClickableCard(
-                self.first_view,
-                title=cat,
-                title_font=ui_fonts.ui_font(14, "bold"),
-                title_extra=[{
-                    "text": names_text,
-                    "font": ui_fonts.ui_font(12),
-                    "text_color": LM_TEXT_SOFT
-                }],
-                on_click=lambda c=cat: self.show_second_view(c)
-            )
-            card.pack(fill='x', padx=10, pady=4)
-
-    def _populate_items(self, category_key):
-        for w in self.second_view.winfo_children():
-            w.destroy()
-
-        items = [item for item in self.all_items if self.get_category(item) == category_key]
-        items.sort(key=lambda x: x.size)
-
-        for item in items:
-            bold_text = f"{item.name}  {item.size}米"
-
-            if item.dimension == "vertical":
-                dim_text = "高"
-            else:
-                dim_text = "长" if item.horizontal_type == "length" else "宽"
-            freq_text = "精确" if item.frequency == "unique" else "均值"
-            sub_text = f"{dim_text}方向 \u00B7 {freq_text}"
-
-            card = ClickableCard(
-                self.second_view,
-                title=bold_text,
-                title_font=ui_fonts.ui_font(14, "bold"),
-                title_extra=[{
-                    "text": sub_text,
-                    "font": ui_fonts.ui_font(12),
-                    "text_color": LM_TEXT_SOFT
-                }],
-                on_click=lambda i=item: self.edit_item(i),
-                buttons=[
-                    {"text": "删除",
-                     "command": lambda i=item: self.delete_item(i),
-                     "fg_color": "transparent",
-                     "text_color": LM_ERR,
-                     "hover_color": LM_ERR_HOVER,
-                     "border_width": 1, "border_color": LM_ERR,
-                     "corner_radius": 6, "width": 50}
-                ]
-            )
-            card.pack(fill='x', padx=5, pady=3)
-
-    # ---------- 增删改实现----------
     @staticmethod
-    def _parse_category(category: str) -> tuple:
-        m = re.search(r'介入(\d+)\s+破坏(\d+)', category)
-        if m:
-            return int(m.group(1)), int(m.group(2))
-        return 1, 1
+    def _dim_text(item):
+        if item.dimension == "vertical":
+            return "高"
+        return "长" if item.horizontal_type == "length" else "宽"
 
+    @staticmethod
+    def _freq_text(item):
+        return "精确" if item.frequency == "unique" else "均值"
+
+    # ---------- 分组 / 行内容 ----------
+    def category_keys(self):
+        return [name for _low, _high, name in self.SIZE_RANGES]
+
+    def selector_note(self):
+        filled = sum(1 for key in self.category_keys()
+                     if self.category_count(key))
+        return f"{filled} / {len(self.SIZE_RANGES)} 档"
+
+    def empty_hint(self, key):
+        return f"点「添加地标」把尺寸填进 {key} 即可"
+
+    def build_selector(self, parent):
+        groups = self._groups
+        keys = self.category_keys()
+        max_count = max((len(groups.get(k, ())) for k in keys), default=0)
+        grid = ctk.CTkFrame(parent, fg_color="transparent")
+        grid.pack(fill='x')
+        for col in range(2):
+            grid.grid_columnconfigure(col, weight=1, uniform="lmcell")
+        for idx, key in enumerate(keys):
+            row, col = divmod(idx, 2)
+            count = len(groups.get(key, ()))
+            selected = key == self.current_category
+            heat = self.heat_color(count, max_count)
+            chip = ctk.CTkFrame(
+                grid, corner_radius=8,
+                border_width=2 if selected else 1,
+                border_color=(MGR_BORDER_STRONG if selected else MGR_BORDER),
+                fg_color=MGR_PANEL_BG if selected else heat)
+            chip.grid(row=row, column=col, sticky='nsew', padx=2, pady=2)
+            name = ctk.CTkLabel(
+                chip, text=str(key), font=ui_fonts.ui_font(12),
+                text_color=MGR_TEXT if count else MGR_TEXT_MUTED,
+                anchor='w')
+            name.pack(side='left', fill='x', expand=True, padx=(8, 0),
+                      pady=6)
+            number = ctk.CTkLabel(
+                chip, text=str(count), font=ui_fonts.ui_font(11),
+                text_color=MGR_TEXT_SOFT)
+            number.pack(side='right', padx=(4, 8))
+
+            def on_enter(_event=None, f=chip, sel=selected):
+                if not sel:
+                    f.configure(fg_color=MGR_HOVER)
+
+            def on_leave(_event=None, f=chip, sel=selected, fill=heat):
+                if not sel:
+                    f.configure(fg_color=fill)
+
+            for widget in (chip, name, number):
+                widget.configure(cursor="hand2")
+                widget.bind("<Button-1>",
+                            lambda _e, k=key: self._select_category(k),
+                            add="+")
+                widget.bind("<Enter>", on_enter, add="+")
+                widget.bind("<Leave>", on_leave, add="+")
+
+    def sort_items(self, items):
+        return sorted(items, key=lambda x: x.size)
+
+    def search_text(self, item):
+        return f"{item.name} {item.address or ''} " \
+               f"{self._dim_text(item)} {self._freq_text(item)}"
+
+    def row_title(self, item):
+        return item.name
+
+    def row_preview(self, item):
+        addr = (item.address or "").strip() or "未绑定地址"
+        return self._clip(
+            f"{self._dim_text(item)}方向 · {self._freq_text(item)} · {addr}",
+            40)
+
+    def row_meta(self, item):
+        return format_size(item.size)
+
+    def pane_subtitle(self, items):
+        if not items:
+            return "0 个地标"
+        sizes = [item.size for item in items]
+        return (f"{len(items)} 个 · {format_size(min(sizes))}–"
+                f"{format_size(max(sizes))}")
+
+    def build_row_detail(self, parent, item):
+        card = ctk.CTkFrame(parent, fg_color=MGR_PANEL_BG, corner_radius=8)
+        card.pack(fill='x')
+
+        grid = ctk.CTkFrame(card, fg_color="transparent")
+        grid.pack(fill='x', padx=12, pady=(10, 4))
+        addr = (item.address or "").strip() or "未绑定地址"
+        pairs = [
+            ("尺寸", format_size(item.size)),
+            ("方向", self._dim_text(item)),
+            ("频率", self._freq_text(item)),
+            ("地址", addr),
+        ]
+        for idx, (label, value) in enumerate(pairs):
+            row, col = divmod(idx, 2)
+            ctk.CTkLabel(
+                grid, text=label, font=ui_fonts.ui_font(12),
+                text_color=MGR_TEXT_MUTED
+            ).grid(row=row, column=col * 2, sticky='w', padx=(0, 6), pady=3)
+            ctk.CTkLabel(
+                grid, text=value, font=ui_fonts.ui_font(13),
+                text_color=MGR_TEXT, anchor='w', justify='left',
+                wraplength=200
+            ).grid(row=row, column=col * 2 + 1, sticky='w',
+                   padx=(0, 16), pady=3)
+        grid.grid_columnconfigure(1, weight=1)
+        grid.grid_columnconfigure(3, weight=1)
+
+        actions = ctk.CTkFrame(card, fg_color="transparent")
+        actions.pack(fill='x', padx=8, pady=(6, 7))
+
+        def add_action(text, command, width=54, danger=False):
+            ctk.CTkButton(
+                actions, text=text, command=command, width=width, height=26,
+                corner_radius=6, border_width=0, fg_color="transparent",
+                hover_color=MGR_ERR_HOVER if danger else MGR_HOVER,
+                text_color=MGR_ERR if danger else MGR_TEXT_SOFT,
+                font=ui_fonts.ui_font(12)
+            ).pack(side='left', padx=1)
+
+        add_action("编辑", lambda: self.edit_item(item), width=46)
+        add_action("删除", lambda: self.delete_item(item), width=46,
+                   danger=True)
+
+        ctk.CTkLabel(
+            actions, text=f"分组：{self.get_category(item)}",
+            font=ui_fonts.ui_font(12), text_color=MGR_TEXT_MUTED
+        ).pack(side='right')
+
+    # ---------- 增删改实现 ----------
     def _current_style_address(self) -> str:
         """当前风格的注册地址（供地标地址下拉确定子地址树范围）。"""
         style = self._get_current_style()
@@ -423,13 +405,9 @@ class LandmarkCardManager(CardManager):
             )
             self.all_items.append(new_item)
             self.save_items(self.all_items)
-            if self.current_view == "second" and self.current_category:
-                self.show_second_view(self.current_category)
-            else:
-                self.show_first_view()
 
     def edit_item(self, item):
-        dlg = LandmarkDialog(self, f"编辑地标", item,
+        dlg = LandmarkDialog(self, "编辑地标", item,
                              style_address=self._current_style_address())
         if dlg.result:
             item.name = dlg.result["name"]
@@ -439,23 +417,11 @@ class LandmarkCardManager(CardManager):
             item.horizontal_type = dlg.result.get("horizontal_type")
             item.address = dlg.result.get("address", "")
             self.save_items(self.all_items)
-            if self.current_view == "second":
-                self.show_second_view(self.current_category)
-            else:
-                self.show_first_view()
 
     def delete_item(self, item):
         if ui.ctk.dialogs.askyesno("确认", f"确定要删除地标 '{item.name}' 吗？"):
             self.all_items.remove(item)
             self.save_items(self.all_items)
-            if self.current_view == "second":
-                remaining = [i for i in self.all_items if self.get_category(i) == self.current_category]
-                if not remaining:
-                    self.show_first_view()
-                else:
-                    self.show_second_view(self.current_category)
-            else:
-                self.show_first_view()
 
     def _on_module_switch(self, value):
         if value == "描述管理":
