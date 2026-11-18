@@ -1,6 +1,6 @@
 import customtkinter as ctk
 
-from paths import APP_VERSION
+from paths import APP_NAME, APP_VERSION
 from ui.ctk.theme import (
     NAV_BG, NAV_HOVER, NAV_TEXT, NAV_TITLE,
     NAV_SELECTED_BG, NAV_SELECTED_TEXT, NAV_WORLD_BG, NAV_WORLD_GREEN,
@@ -31,54 +31,87 @@ class NavigationBar(ctk.CTkFrame):
 
         self._build()
 
-    def _build(self):
-        self._title_label = ctk.CTkLabel(self, text="导航菜单", font=ui_fonts.ui_font(14, "bold"),
-                                         text_color=NAV_TITLE)
-        self._title_label.pack(pady=(12, 6))
-
-        pages = [
+    # 分组 → 页面。顺序即侧栏自上而下的显示顺序；设置单独放页脚。
+    _PAGE_GROUPS = (
+        ("游玩", (
             ("  🧭  探索模式", "generator"),
             ("  🎯  挑战模式", "challenge"),
-            ("  📑  文本管理", "text_mgmt"),
             ("  📦  资源中心", "resources"),
+        )),
+        ("内容", (
             ("  🎭  剧本编辑", "scenario"),
-            ("  ⚙️  设置", "settings"),
-        ]
+            ("  📍  地标管理", "landmark"),
+            ("  📝  描述管理", "quip"),
+        )),
+    )
 
-        for text, key in pages:
-            initial_color = NAV_SELECTED_BG if key == "generator" else "transparent"
-            btn = ctk.CTkButton(self, text=text, anchor='w', height=32,
-                                fg_color=initial_color,
-                                text_color=NAV_SELECTED_TEXT if key == "generator" else NAV_TEXT,
-                                hover_color=NAV_HOVER,
-                                font=ui_fonts.ui_font(13),
-                                command=lambda k=key: self._on_switch(k))
-            btn.pack(fill='x', padx=9, pady=3)
-            self._buttons[key] = btn
+    def _make_page_button(self, parent, text, key):
+        initial = key == "generator"
+        btn = ctk.CTkButton(
+            parent, text=text, anchor='w', height=36,
+            fg_color=NAV_SELECTED_BG if initial else "transparent",
+            text_color=NAV_SELECTED_TEXT if initial else NAV_TEXT,
+            hover_color=NAV_HOVER,
+            font=ui_fonts.ui_font(14),
+            command=lambda k=key: self._on_switch(k))
+        self._buttons[key] = btn
+        return btn
 
-        foots = ["app_version", "worldpack_version", "packloaded"]
+    def _build(self):
+        # 品牌区：应用名 + 版本，取代原来不承载信息的「导航菜单」标题
+        self._brand = ctk.CTkFrame(self, fg_color="transparent")
+        self._brand.pack(fill='x', padx=14, pady=(14, 10))
+        self.app_name_label = ctk.CTkLabel(
+            self._brand, text=APP_NAME, font=ui_fonts.ui_font(16, "bold"),
+            text_color=NAV_TITLE, anchor='w')
+        self.app_name_label.pack(anchor='w')
+        self.brand_version_label = ctk.CTkLabel(
+            self._brand, text=f"v{APP_VERSION}", font=ui_fonts.ui_font(11),
+            text_color=NAV_TEXT, anchor='w')
+        self.brand_version_label.pack(anchor='w')
+
+        for caption, pages in self._PAGE_GROUPS:
+            cap = ctk.CTkLabel(self, text=caption, font=ui_fonts.ui_font(12, "bold"),
+                               text_color=NAV_TITLE, anchor='w')
+            cap.pack(fill='x', padx=18, pady=(12, 3))
+            for text, key in pages:
+                self._make_page_button(self, text, key).pack(fill='x', padx=9, pady=2)
+
+        # ---- 页脚固定区 ----
+        # 世界包信息贴最底；其上的「页脚动作」用一个 grid 容器统一管，
+        # 从上到下依次是 设置 / 分隔线 / ME模式。程序版本号只在顶部品牌区
+        # 出现一次，页脚不再重复。
+        foots = ["worldpack_version", "packloaded"]
         for foot in foots:
             frame = ctk.CTkFrame(self, fg_color="transparent")
             frame.pack(side='bottom', fill='x')
             self._frames[foot] = frame
 
-        # 底部「ME模式」入口：与版本页脚同属导航栏底部固定区（后 pack 的
-        # bottom 排在先 pack 的上面，所以它会停在页脚正上方）。界面模式切换会
-        # 重建整个窗口，因此与页面按钮分开放，避免被当成「换一页」。
-        self._switch_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self._switch_frame.pack(side='bottom', fill='x')
+        self._footer_actions = ctk.CTkFrame(self, fg_color="transparent")
+        self._footer_actions.pack(side='bottom', fill='x')
+        self._footer_actions.grid_columnconfigure(0, weight=1)
+
+        # 「设置」从页面列表移到页脚，与玩法入口分层；它仍是普通页面按钮，
+        # 参与 set_active 高亮，只是放到页脚动作容器的首行。
+        settings_btn = self._make_page_button(self._footer_actions, "  ⚙️  设置", "settings")
+        settings_btn.grid(row=0, column=0, sticky='ew', padx=9, pady=(4, 0))
+
+        # 设置与 ME模式之间的分隔线。沿用探索参数面板的画法：
+        # CTkFrame(height=3, corner_radius=0) 配 grid 的 sticky='ew'——
+        # 纯 pack 下细 CTkFrame 会被几何管理器压到几乎不可见。
+        self._footer_sep = ctk.CTkFrame(
+            self._footer_actions, height=3, corner_radius=0, fg_color=NAV_HOVER)
+        self._footer_sep.grid(row=1, column=0, sticky='ew', padx=14, pady=(2, 4))
+
+        # 「ME模式」不参与页面高亮：界面模式切换会重建整个窗口，
+        # 因此和页面按钮分开，放在页脚动作容器的末行。
         self.ui_switch_btn = ctk.CTkButton(
-            self._switch_frame, text="  ⇄  ME模式", anchor='w', height=32,
+            self._footer_actions, text="  ⇄  ME模式", anchor='w', height=36,
             fg_color="transparent", text_color=NAV_TEXT, hover_color=NAV_HOVER,
-            font=ui_fonts.ui_font(13), command=self._on_ui_switch_clicked)
-        self.ui_switch_btn.pack(fill='x', padx=9, pady=(6, 2))
+            font=ui_fonts.ui_font(14), command=self._on_ui_switch_clicked)
+        self.ui_switch_btn.grid(row=2, column=0, sticky='ew', padx=9, pady=(6, 2))
 
-        # 底部容器：版本页脚与世界包信息统一收纳，使导航栏底部更紧凑
-        self.app_version_label = ctk.CTkLabel(
-            self._frames["app_version"], text=f"版本：v{APP_VERSION}", font=ui_fonts.ui_font(12),
-            text_color=NAV_TEXT)
-        self.app_version_label.pack(side="left", padx=22, pady=(0, 14))
-
+        # 世界包信息区
         self.worldpack_version_label = ctk.CTkLabel(
             self._frames["worldpack_version"], text="", font=ui_fonts.ui_font(11),
             text_color=NAV_WORLD_GREEN)
@@ -130,7 +163,7 @@ class NavigationBar(ctk.CTkFrame):
                          has_behavior_pack=False, behavior_report=None):
         """世界包加载状态：导航栏整体淡绿色风格 + 底部世界包信息区。
 
-        程序版本号始终显示在导航栏底部；加载世界包时额外展示世界包版本，
+        程序版本号显示在顶部品牌区；加载世界包时底部额外展示世界包版本，
         并在包含行为包时按启用诊断报告提示接管项数或诊断异常。
         """
         self._world_active = bool(active)
@@ -172,8 +205,10 @@ class NavigationBar(ctk.CTkFrame):
             sel_bg, sel_text = NAV_SELECTED_BG, NAV_SELECTED_TEXT
             bg, text, hover = "transparent", NAV_TEXT, NAV_HOVER
             footer_color = NAV_TEXT
-        self._title_label.configure(text_color=title_color)
-        self.app_version_label.configure(text_color=footer_color)
+        self.app_name_label.configure(text_color=title_color)
+        self.brand_version_label.configure(text_color=footer_color)
+        # 分隔线跟随悬停色，世界包风格下同步变绿，避免旧棕色细线突兀
+        self._footer_sep.configure(fg_color=hover)
         # 「ME模式」不是页面按钮，不参与高亮，只跟随整体文字/悬停配色
         self.ui_switch_btn.configure(text_color=text, hover_color=hover)
         for key, btn in self._buttons.items():

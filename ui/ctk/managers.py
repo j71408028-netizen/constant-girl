@@ -7,7 +7,6 @@ from typing import List, Any, Optional
 import customtkinter as ctk
 
 from ui.ctk.dialogs import ResourceNameDialog
-from ui.ctk.widgets import CTkToggleButtons
 from ui.ctk.theme import (
     MGR_BG, MGR_HEADER_BG, MGR_BORDER, MGR_BORDER_STRONG,
     MGR_HOVER, MGR_TEXT, MGR_TEXT_SOFT, MGR_OK,
@@ -361,23 +360,13 @@ class CardManager(ctk.CTkFrame):
 
     # ---------- 布局 ----------
     def _setup_ui(self):
-        # 卡片外只有一行：模块切换 + 作用域（风格 › 观测等级）+ 右侧动作
+        # 卡片外只有一行：作用域（风格 › 观测等级）+ 右侧动作。
+        # 地标/描述已拆成两个独立页面，由左侧导航直接切换，不再需要模块 tab。
         self.top_row = ctk.CTkFrame(self, fg_color="transparent")
         self.top_row.pack(fill='x', padx=12, pady=(10, 0))
 
-        self.switch_btn = CTkToggleButtons(
-            self.top_row,
-            values=["地标管理", "描述管理"],
-            command=self._on_module_switch,
-            button_width=96, height=32,
-            font=ui_fonts.ui_font(13)
-        )
-        self.switch_btn.pack(side='left')
-        self.switch_btn.set(
-            "地标管理" if "Landmark" in self.__class__.__name__ else "描述管理")
-
         self.scope_box = ctk.CTkFrame(self.top_row, fg_color="transparent")
-        self.scope_box.pack(side='left', padx=(16, 0))
+        self.scope_box.pack(side='left')
 
         ctk.CTkLabel(self.scope_box, text="风格", font=ui_fonts.ui_font(13),
                      text_color=MGR_TEXT_SOFT).pack(side='left')
@@ -996,7 +985,7 @@ class CardManager(ctk.CTkFrame):
             self._lock_overlay.destroy()
             self._lock_overlay = None
 
-        self.scope_box.pack(side='left', padx=(16, 0), after=self.switch_btn)
+        self.scope_box.pack(side='left', before=self.head_right)
         if getattr(self, 'type_view_active', False):
             self.type_view.pack(fill='both', expand=True, padx=12,
                                 pady=(10, 12))

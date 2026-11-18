@@ -883,11 +883,6 @@ class QuipCardManager(CardManager):
             self.all_items.remove(item)
             self.save_items(self.all_items)
 
-    # ---------- 模块切换 ----------
-    def _on_module_switch(self, value):
-        if value == "地标管理" and hasattr(self.gui, 'show_landmark_manager'):
-            self.gui.show_landmark_manager()
-
     # ---------- 排序 ----------
     def sort_items(self, items):
         return sorted(items, key=lambda x: float(x.get('step', 1.0)))

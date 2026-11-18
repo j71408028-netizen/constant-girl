@@ -423,11 +423,6 @@ class LandmarkCardManager(CardManager):
             self.all_items.remove(item)
             self.save_items(self.all_items)
 
-    def _on_module_switch(self, value):
-        if value == "描述管理":
-            if hasattr(self.gui, 'show_quip_manager'):
-                self.gui.show_quip_manager()
-
 
 class LandmarkDialog(BaseDialog):
     """地标编辑对话框"""

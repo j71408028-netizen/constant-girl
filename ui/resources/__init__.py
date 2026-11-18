@@ -426,7 +426,7 @@ class ResourceHubPanel(ctk.CTkFrame):
     # ───────────────── 分区：风格组 ─────────────────
     def _build_styles_section(self):
         can_nav = self.gui_ref is not None and hasattr(self.gui_ref, "show_page")
-        action = ("编辑条目", lambda: self.gui_ref.show_page("text_mgmt")) \
+        action = ("编辑条目", lambda: self.gui_ref.show_page("landmark")) \
             if can_nav else None
         body, _ = self._add_section(
             "风格组",

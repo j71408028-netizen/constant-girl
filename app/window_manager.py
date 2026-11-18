@@ -105,8 +105,8 @@ class MainWindowManager:
 
         # 创建各页面框架
         self.pages = {}
-        for key in ["generator", "text_mgmt", "scenario", "challenge",
-                    "resources", "settings"]:
+        for key in ["generator", "challenge", "resources", "scenario",
+                    "landmark", "quip", "settings"]:
             frame = ctk.CTkFrame(self.content_frame, corner_radius=0,
                                   fg_color=APP_BG)
             frame.place(relwidth=1, relheight=1)
@@ -232,26 +232,15 @@ class MainWindowManager:
         self.generator_panel.set_world_active(
             self.world_state is not None and self.world_state.active)
 
-    # ==================== 文本管理标签页 ====================
-    def create_text_mgmt_tab(self, parent):
+    # ==================== 地标管理页 ====================
+    def create_landmark_tab(self, parent):
         self.landmark_mgr = LandmarkCardManager(parent, self._landmark_repo, self._settings_repo, self)
         self.landmark_mgr.pack(fill='both', expand=True)
 
+    # ==================== 描述管理页 ====================
+    def create_quip_tab(self, parent):
         self.quip_card_mgr = QuipCardManager(parent, self._quip_repo, self._settings_repo, self)
-        self.quip_card_mgr.pack_forget()
-        self.show_landmark_manager()
-
-    def show_landmark_manager(self):
-        self.quip_card_mgr.pack_forget()
-        self.landmark_mgr.pack(fill='both', expand=True)
-        self.landmark_mgr.switch_btn.set("地标管理")
-        self.quip_card_mgr.switch_btn.set("地标管理")
-
-    def show_quip_manager(self):
-        self.landmark_mgr.pack_forget()
         self.quip_card_mgr.pack(fill='both', expand=True)
-        self.quip_card_mgr.switch_btn.set("描述管理")
-        self.landmark_mgr.switch_btn.set("描述管理")
 
     # ==================== 数据库管理标签页 ====================
     def refresh_personality_and_preset_combos(self):
