@@ -199,7 +199,7 @@ edge-tts 7.2.8 / winmm MCI，探针脚本在临时目录跑，未入库）：
 | 语音侧注入口 | 解析结果**显式**传给 `edge_tts.Communicate(proxy=...)`：aiohttp 的 `trust_env` 只认 `http(s)://`，对 `wss://` 不认环境变量，光挂环境变量握手仍走直连 | `audio/speech.py` |
 | AI 侧注入口 | 配了代理时构造 `openai.DefaultHttpxClient(proxy=...)` 注入 `OpenAI(http_client=...)`（用 openai 自己导出的类，免得直接 import httpx 多一条依赖声明）；没配就不传（交 SDK 默认读环境变量） | `core/ai.py::OpenAICompatibleClient.__init__` |
 | 失败说清 | 两端同口径，**看 HTTP 状态码**（各 SDK 异常都带 `status_code`）而非死认类型：401 / 403 / 404 / 429 / 400 / 5xx / 超时 / 连接 / 代理各给一句人话 | `speech._describe_synth_error` / `ai.describe_ai_error` |
-| 挂到界面 | 副本生成失败（`window/engine.py::_note_session_error`）、聊天失败（`services/chat`）、两处「测试连接」（`ui/settings/dialogs.py` / `ui/mini/screens.py`）都用可读原因；原始异常仍留在 `_session_errors` / 日志里 | 各调用点 |
+| 挂到界面 | 副本生成失败（`window/engine.py::_note_session_error`）、聊天失败（`services/chat`）、两处「测试连接」（`ui/settings/__init__.py` / `ui/mini/screens.py`）都用可读原因；原始异常仍留在 `_session_errors` / 日志里 | 各调用点 |
 
 **为什么单独成模块**：`core` 只依赖 `infra`，`netproxy` 零第三方依赖（只用 `os`），
 于是 `dungeon`（语音）与 `core`（AI）都能安全引用。两个已知的坑（环境变量代理对

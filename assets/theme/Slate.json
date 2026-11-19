@@ -483,25 +483,6 @@
     "SETTINGS_ERR": {
       "$role": "state-danger"
     },
-    "//settings_dlg": "设置对话框 · ui/settings_dlg.py",
-    "SETTINGS_DLG_HOVER": {
-      "$role": "bg-hover"
-    },
-    "SETTINGS_DLG_INPUT_BORDER": {
-      "$role": "border"
-    },
-    "SETTINGS_DLG_TEXT": {
-      "$role": "text-body"
-    },
-    "SETTINGS_DLG_TEXT_SOFT": {
-      "$role": "text-secondary"
-    },
-    "SETTINGS_DLG_OK": {
-      "$role": "state-success"
-    },
-    "SETTINGS_DLG_ERR": {
-      "$role": "state-danger"
-    },
     "//params": "角色创建参数面板 · ui/exploration/creation_params.py",
     "PARAMS_PANEL_BG": {
       "$role": "bg-panel"
