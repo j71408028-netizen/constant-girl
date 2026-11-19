@@ -14,16 +14,19 @@ class NavigationBar(ctk.CTkFrame):
     """左侧导航栏组件
 
     ``on_switch`` 是页面切换回调（点页面按钮）；``on_switch_ui`` 是**界面模式**
-    切换回调（点底部「ME模式」）。后者不是换页而是换掉整套界面——窗口会被销毁
-    重建，所以单独放一个 action 按钮，不混进页面列表。
+    切换回调（点底部「ME模式」）；``on_open_settings`` 是页脚「设置」的回调
+    ——设置是一个对话框，不是页面，所以它不参与 ``set_active`` 的页面高亮，
+    也不出现在页面列表里。
     """
 
-    def __init__(self, master, on_switch, on_switch_ui=None, **kwargs):
+    def __init__(self, master, on_switch, on_switch_ui=None,
+                 on_open_settings=None, **kwargs):
         super().__init__(master, width=200, height=60, corner_radius=0,
                          fg_color=NAV_BG, **kwargs)
         self.pack_propagate(False)
         self._on_switch = on_switch
         self._on_switch_ui = on_switch_ui
+        self._on_open_settings = on_open_settings
         self._buttons = {}
         self._frames = {}
         self._current_page = None
@@ -91,10 +94,13 @@ class NavigationBar(ctk.CTkFrame):
         self._footer_actions.pack(side='bottom', fill='x')
         self._footer_actions.grid_columnconfigure(0, weight=1)
 
-        # 「设置」从页面列表移到页脚，与玩法入口分层；它仍是普通页面按钮，
-        # 参与 set_active 高亮，只是放到页脚动作容器的首行。
-        settings_btn = self._make_page_button(self._footer_actions, "  ⚙️  设置", "settings")
-        settings_btn.grid(row=0, column=0, sticky='ew', padx=9, pady=(4, 0))
+        # 「设置」从页面列表移到页脚，与玩法入口分层。它打开的是模态对话框，
+        # 不是页面，因此不进 _buttons、不参与 set_active 高亮。
+        self.settings_btn = ctk.CTkButton(
+            self._footer_actions, text="  ⚙️  设置", anchor='w', height=36,
+            fg_color="transparent", text_color=NAV_TEXT, hover_color=NAV_HOVER,
+            font=ui_fonts.ui_font(14), command=self._on_settings_clicked)
+        self.settings_btn.grid(row=0, column=0, sticky='ew', padx=9, pady=(4, 0))
 
         # 设置与 ME模式之间的分隔线。沿用探索参数面板的画法：
         # CTkFrame(height=3, corner_radius=0) 配 grid 的 sticky='ew'——
@@ -154,6 +160,11 @@ class NavigationBar(ctk.CTkFrame):
         if self._on_switch_ui is not None:
             self._on_switch_ui()
 
+    def _on_settings_clicked(self):
+        """页脚「设置」：打开设置对话框。"""
+        if self._on_open_settings is not None:
+            self._on_open_settings()
+
     def set_active(self, page_key):
         """高亮指定按钮，其余恢复默认"""
         self._current_page = page_key
@@ -209,8 +220,9 @@ class NavigationBar(ctk.CTkFrame):
         self.brand_version_label.configure(text_color=footer_color)
         # 分隔线跟随悬停色，世界包风格下同步变绿，避免旧棕色细线突兀
         self._footer_sep.configure(fg_color=hover)
-        # 「ME模式」不是页面按钮，不参与高亮，只跟随整体文字/悬停配色
+        # 「ME模式」与「设置」不是页面按钮，不参与高亮，只跟随整体文字/悬停配色
         self.ui_switch_btn.configure(text_color=text, hover_color=hover)
+        self.settings_btn.configure(text_color=text, hover_color=hover)
         for key, btn in self._buttons.items():
             if key == self._current_page:
                 btn.configure(fg_color=sel_bg, text_color=sel_text, hover_color=hover)

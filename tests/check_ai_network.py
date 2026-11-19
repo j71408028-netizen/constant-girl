@@ -281,7 +281,7 @@ try:
     check("配置身份始终是 pid", set(_labels) == {"a", "b", "c"}, _labels)
 
     check("设置页连接测试用可读原因",
-          _uses("ui/settings/dialogs.py", "describe_ai_error"))
+          _uses("ui/settings/__init__.py", "describe_ai_error"))
     check("挂件连接测试用可读原因",
           _uses("ui/mini/screens.py", "describe_ai_error"))
     check("副本生成失败用可读原因",

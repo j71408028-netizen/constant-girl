@@ -1,197 +1,23 @@
 # ui/settings/dialogs.py（原 ui/settings_dlg.py）
 import os
 import re
-import threading
 import uuid
 import tkinter as tk
-from typing import Dict, Optional
+from typing import Dict
 
 import customtkinter as ctk
 
 from ui.ctk.dialogs import BaseDialog
 from ui.ctk.widgets import StyleListBox
 from ui.ctk import fonts as ui_fonts
-from ui.ctk import dialogs
 from ui.ctk.theme import (
     SETTINGS_DLG_HOVER, SETTINGS_DLG_INPUT_BORDER, SETTINGS_DLG_TEXT, SETTINGS_DLG_TEXT_SOFT,
-    SETTINGS_DLG_OK, SETTINGS_DLG_ERR,
+    SETTINGS_DLG_ERR,
 )
-
-from core.ai import PROVIDER_DEFAULTS, create_client, describe_ai_error
-
-
-class AIConfigDialog(BaseDialog):
-    """OpenAI-compatible profile editor."""
-
-    def __init__(self, parent, provider, config, is_new=False, can_delete=False):
-        super().__init__(parent)
-        self.title("新建 AI 配置" if is_new else f"配置{config.get('name', provider)}")
-        self.provider = provider
-        self.result = None
-        self.delete_requested = False
-        self.resizable(False, False)
-        self.protocol("WM_DELETE_WINDOW", self._cancel)
-        self.is_new = is_new
-        self.can_delete = can_delete
-
-        defaults = PROVIDER_DEFAULTS.get(provider, {})
-        self.name_var = tk.StringVar(value=config.get("name") or "新配置")
-        self.url_var = tk.StringVar(value=config.get("url") or defaults.get("url", ""))
-        self.model_var = tk.StringVar(value=config.get("model") or defaults.get("model", ""))
-        self.key_var = tk.StringVar(value=config.get("api_key") or "")
-
-        body = ctk.CTkFrame(self, fg_color="transparent")
-        body.pack(padx=22, pady=(18, 6), fill='x')
-
-        # 新建配置时显示模板选择
-        if is_new:
-            template_frame = ctk.CTkFrame(body, fg_color="transparent")
-            template_frame.pack(fill='x', pady=(0, 16))
-            ctk.CTkLabel(
-                template_frame, text="快速模板：", anchor='w',
-                font=self.UI_FONT, text_color=SETTINGS_DLG_TEXT
-            ).pack(side='left')
-
-            for profile_id, defaults in PROVIDER_DEFAULTS.items():
-                template_name = defaults.get("name", profile_id)
-                template_url = defaults.get("url", "")
-                template_model = defaults.get("model", "")
-
-                def make_template_command(name, url, model):
-                    def template_command():
-                        self.name_var.set(name)
-                        self.url_var.set(url)
-                        self.model_var.set(model)
-                    return template_command
-
-                btn = ctk.CTkButton(
-                    template_frame, text=template_name, width=80, height=28,
-                    command=make_template_command(template_name, template_url, template_model),
-                    fg_color="transparent", text_color=SETTINGS_DLG_TEXT_SOFT,
-                    hover_color=SETTINGS_DLG_HOVER,
-                    border_width=1, border_color=SETTINGS_DLG_INPUT_BORDER,
-                    corner_radius=8, font=ui_fonts.ui_font(11)
-                )
-                btn.pack(side='right', padx=(12, 0))
-
-        fields = [
-            ("配置名称", self.name_var, False),
-            ("接口 URL", self.url_var, False),
-            ("模型名称", self.model_var, False),
-            ("API Key", self.key_var, True),
-        ]
-        for text, var, hidden in fields:
-            row = ctk.CTkFrame(body, fg_color="transparent")
-            row.pack(fill='x', pady=4)
-            ctk.CTkLabel(
-                row, text=text, width=76, anchor='w',
-                font=self.UI_FONT, text_color=SETTINGS_DLG_TEXT
-            ).pack(side='left')
-            entry = ctk.CTkEntry(
-                row, textvariable=var, width=300, height=28,
-                show="*" if hidden else None,
-                font=self.UI_FONT
-            )
-            entry.pack(side='left')
-            if not hidden and text == "接口 URL":
-                self.url_entry = entry
-
-        self.test_label = ctk.CTkLabel(
-            body, text="", anchor='w', font=self.UI_FONT_SMALL,
-            text_color=SETTINGS_DLG_TEXT_SOFT)
-        self.test_label.pack(fill='x', pady=(6, 0))
-
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(pady=(8, 16))
-        self.test_btn = self._make_std_button(btn_frame, "测试连接", False, self._test_connection)
-        self.test_btn.pack(side='left', padx=6)
-
-        if can_delete:
-            ctk.CTkButton(
-                btn_frame, text="删除配置", width=80, height=30,
-                command=self._delete_config, fg_color="transparent",
-                text_color=SETTINGS_DLG_ERR,
-                hover_color=SETTINGS_DLG_HOVER,
-                border_width=1, border_color=SETTINGS_DLG_INPUT_BORDER,
-                corner_radius=8, font=ui_fonts.ui_font(13)
-            ).pack(side='left', padx=6)
-
-        self._make_std_button(btn_frame, "确定", True, self._ok).pack(side='left', padx=6)
-        self._make_std_button(btn_frame, "取消", False, self._cancel).pack(side='left', padx=6)
-
-        self.bind("<Escape>", self._cancel)
-        self._show_modal(focus_widget=getattr(self, "url_entry", None))
-
-    def _current_config(self):
-        return {
-            "name": self.name_var.get().strip(),
-            "url": self.url_var.get().strip(),
-            "model": self.model_var.get().strip(),
-            "api_key": self.key_var.get().strip(),
-        }
-
-    def _test_connection(self):
-        cfg = self._current_config()
-        if not cfg["name"]:
-            self.test_label.configure(text="请填写配置名称", text_color=SETTINGS_DLG_ERR)
-            return
-        if not cfg["api_key"]:
-            self.test_label.configure(text="请先填写 API Key", text_color=SETTINGS_DLG_ERR)
-            return
-        self.test_label.configure(text="正在测试连接...", text_color=SETTINGS_DLG_TEXT_SOFT)
-        self.test_btn.configure(state="disabled")
-        threading.Thread(
-            target=self._do_test, args=(self.provider, cfg), daemon=True
-        ).start()
-
-    def _do_test(self, provider, cfg):
-        try:
-            client = create_client(
-                provider, cfg["api_key"],
-                base_url=cfg["url"] or None, model=cfg["model"] or None)
-            ok, msg = client.test_connection()
-        except Exception as e:
-            ok, msg = False, describe_ai_error(e)
-        self.after(0, lambda: self._test_done(ok, msg))
-
-    def _test_done(self, ok, msg):
-        try:
-            if not self.winfo_exists():
-                return
-        except tk.TclError:
-            return
-        self.test_btn.configure(state="normal")
-        if ok:
-            self.test_label.configure(text="连接成功", text_color=SETTINGS_DLG_OK)
-        else:
-            text = msg or "连接失败"
-            self.test_label.configure(text=f"连接失败：{text}", text_color=SETTINGS_DLG_ERR)
-
-    def _ok(self, _event=None):
-        self.result = self._current_config()
-        if not self.result["name"]:
-            self.test_label.configure(text="请填写配置名称", text_color=SETTINGS_DLG_ERR)
-            return
-        self._close()
-
-    def _cancel(self, _event=None):
-        self.result = None
-        self._close()
-
-    def _delete_config(self):
-        config_name = self.name_var.get().strip() or self.provider
-        if dialogs.askyesno(
-            "确认删除",
-            f"确定要删除配置 \"{config_name}\" 吗？\n此操作不可恢复。",
-            parent=self
-        ):
-            self.delete_requested = True
-            self.result = None
-            self._close()
 
 
 class WorldPackCreateDialog(BaseDialog):
-    """创建世界包的配置对话框（风格参考 AI 配置对话框）。
+    """创建世界包的配置对话框。
 
     两级页面：基础信息 → 资源打包（可回退）。
     资源打包页用 StyleListBox 多选要打包的地标/描述风格、副本方案与挑战包，

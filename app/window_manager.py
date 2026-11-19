@@ -23,7 +23,7 @@ from ui.navbar import NavigationBar
 from ui.quip import QuipCardManager
 from ui.resources import ResourceHubPanel
 from ui.scenario.sc_frame import ScenarioEditor
-from ui.settings import SettingsPanel
+from ui.settings import SettingsDialog
 from ui.exploration.news_dlg import NewsDialog
 from ui.ctk.loading import LoadingPage
 from ui.ctk.theme import (
@@ -43,6 +43,8 @@ class MainWindowManager:
         self.root.title(APP_NAME)
         self.root.geometry("1280x720")
         self._closing = False
+        self._settings_open = False
+        self.settings_dialog = None
         self._active_dungeon_window = None
         self._on_progress = on_progress
 
@@ -96,7 +98,8 @@ class MainWindowManager:
         self.main_frame.pack(fill='both', expand=True)
 
         self.nav_bar = NavigationBar(self.main_frame, on_switch=self.show_page,
-                                     on_switch_ui=self.prompt_switch_to_mini)
+                                     on_switch_ui=self.prompt_switch_to_mini,
+                                     on_open_settings=self.open_settings)
         self.nav_bar.pack(side='left', fill='y')
 
         self.content_frame = ctk.CTkFrame(self.main_frame, corner_radius=0,
@@ -106,7 +109,7 @@ class MainWindowManager:
         # 创建各页面框架
         self.pages = {}
         for key in ["generator", "challenge", "resources", "scenario",
-                    "landmark", "quip", "settings"]:
+                    "landmark", "quip"]:
             frame = ctk.CTkFrame(self.content_frame, corner_radius=0,
                                   fg_color=APP_BG)
             frame.place(relwidth=1, relheight=1)
@@ -212,8 +215,6 @@ class MainWindowManager:
         return locked
 
     def show_page(self, page_key):
-        if page_key == "settings" and hasattr(self, 'settings_panel'):
-            self.settings_panel.sync_saved_theme()
         locked = self._locked_pages()
         if page_key in locked:
             ui.ctk.dialogs.showwarning(
@@ -303,36 +304,30 @@ class MainWindowManager:
         )
         self.resource_hub.pack(fill='both', expand=True)
 
-    # ==================== 设置面板 ====================
-    def create_settings_panel(self):
-        parent = self.pages["settings"]
-        for widget in parent.winfo_children():
-            widget.destroy()
+    # ==================== 设置 ====================
+    def open_settings(self):
+        """导航栏 ⚙️ 打开的设置对话框（模态，改动即时保存）。
 
-        main_container = ctk.CTkFrame(parent, fg_color="transparent")
-        main_container.pack(fill='both', expand=True)
-
-        self.settings_panel = SettingsPanel(
-            main_container,
-            self._settings_repo,
-            self.settings,
-            on_world_setting_changed=self.on_world_setting_changed,
-            on_return_callback=lambda: self.show_page("generator"),
-            gui_ref=self,
-            world_manager=self.world_manager
-        )
-        self.settings_panel.pack(fill='both', expand=True)
-
-        return_btn = ctk.CTkButton(
-            main_container, text="保存并返回主页面",
-            command=self.settings_panel._save_and_return,
-            fg_color="transparent", height=30,
-            text_color=APP_TEXT_SOFT,
-            hover_color=APP_HOVER,
-            border_width=1, border_color=APP_BORDER_STRONG,
-            corner_radius=8, font=ui_fonts.ui_font(12, "bold")
-        )
-        return_btn.pack(side='bottom', fill='x', padx=18, pady=9)
+        设置不再占一页：没有「保存并返回」，关掉窗口就是全部。对话框自己
+        处理落盘与换配色；模态由 ``_show_modal()`` 的 ``wait_window()`` 维持，
+        所以本方法会一直阻塞到对话框关闭——重入时用 ``_settings_open`` 挡掉
+        （例如对话框开着时脚本再次调用导航栏按钮）。
+        """
+        if self._settings_open:
+            return
+        self._settings_open = True
+        try:
+            self.settings_dialog = SettingsDialog(
+                self.root,
+                self._settings_repo,
+                self.settings,
+                on_world_setting_changed=self.on_world_setting_changed,
+                gui_ref=self,
+                world_manager=self.world_manager,
+            )
+        finally:
+            self.settings_dialog = None
+            self._settings_open = False
 
     # ---------- 设置回调 ----------
     def _get_landmark_count(self, style: str) -> int:
@@ -390,8 +385,6 @@ class MainWindowManager:
             self.scenario_editor._refresh_scenario_list()
         if hasattr(self, 'resource_hub'):
             self.resource_hub.on_world_state_changed()
-        if hasattr(self, 'settings_panel'):
-            self.settings_panel.on_world_state_changed()
 
     def _refresh_palette_bound_widgets(self):
         """配色切换后重建把单色 token 写死在创建参数里的控件。
@@ -421,8 +414,6 @@ class MainWindowManager:
             self.challenge_panel._sync_quip_styles()
         if hasattr(self, 'resource_hub'):
             self.resource_hub._sync_all_states()
-        if hasattr(self, 'settings_panel'):
-            self.settings_panel._sync_parts_states()
 
     def _effective_palette(self):
         """按系统亮暗解析生效配色：深色用深色配色，留空则跟随默认配色。"""
@@ -441,9 +432,9 @@ class MainWindowManager:
             self.root.after(2000, self._poll_system_mode)
 
     def apply_settings(self):
-        # SettingsPanel 在保存前只修改控件变量；保存完成后从 settings 读取
-        # 唯一有效值，再一次性切换配色并刷新原生 Tk 控件。外观模式由配色
-        # 声明的 mode 决定，不再单独设置。
+        # 设置由对话框即时写进 settings 并落盘，这里只负责把改动在界面上套用：
+        # 从 settings 读唯一有效值，一次性切换配色并刷新原生 Tk 控件。外观模式
+        # 由配色声明的 mode 决定，不再单独设置。
         loading_page = LoadingPage(self.root, title="「正在切换主题」")
         loading_page.place(relwidth=1, relheight=1)
         loading_page.lift()

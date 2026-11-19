@@ -311,6 +311,9 @@
     "DLG_OVERLAY": {
       "$prim": "ink.0"
     },
+    "DLG_OVERLAY_BLUR": {
+      "$pair": "#0000006B"
+    },
     "//manager": "通用列表管理页 · ui/common/managers.py",
     "MGR_BG": {
       "$role": "bg-app"

@@ -17,7 +17,7 @@ from ui.ctk.theme import (
     DLG_BTN_PRIMARY_HOVER, DLG_TEXT, DLG_TEXT_SOFT, DLG_TITLE,
     DLG_PLACEHOLDER, DLG_TEXT_WHITE, DLG_OK, DLG_OK_BTN_HOVER,
     DLG_ERR, DLG_CROP_OUTLINE, DLG_CANVAS_BG, DLG_CANVAS_BORDER,
-    DLG_OVERLAY,
+    DLG_OVERLAY, DLG_OVERLAY_BLUR,
 )
 
 
@@ -163,6 +163,19 @@ class BaseDialog(ctk.CTkToplevel):
     _GRAB_MAX_ATTEMPTS = 5
 
     # ---------------- 模态抓取 ----------------
+    def _reacquire_grab(self) -> None:
+        """二级对话框关闭后，把模态抓取重新拉回本窗口。
+
+        Tk 的抓取是独占的：从本窗口里弹出的子对话框 ``grab_set()`` 之后，
+        抓取就不再属于本窗口，子对话框销毁时也不会自动还回来——不重新抓一次，
+        父对话框会失去模态（点击主窗口照样有效）。窗口已销毁时静默跳过。
+        """
+        try:
+            if self.winfo_exists() and self.winfo_viewable():
+                self.grab_set()
+        except tk.TclError:
+            pass
+
     def _grab_deferred(self):
         """模态抓取：**等窗口在窗口系统里真正可见之后再** ``grab_set()``。
 
@@ -285,6 +298,70 @@ class BaseDialog(ctk.CTkToplevel):
             self.destroy()
         except tk.TclError:
             pass
+
+
+class ModalDialog(BaseDialog):
+    """带背景遮罩的模态对话框。
+
+    遮罩是一条盖住父窗口的黑色浮层（透明度取自 ``DLG_OVERLAY_BLUR``），铺在
+    对话框显示之前、``_show_modal`` 的 grab 建立之前——Tk 的 grab 是独占的，
+    遮罩自己不能抢输入，所以它只是「变暗」：点击落在遮罩上不产生任何行为，
+    关闭对话框只能走它自己的关闭入口。
+
+    Tk 里半透明（``-alpha``）只属于顶层窗口，普通 Frame 做不到，因此遮罩是
+    一条独立的无边框 Toplevel。
+
+    **遮罩只按一次父窗口的几何放置，不跟随移动/缩放**：早期版本给父窗口绑了
+    ``<Configure>``，只要遮罩自己 ``geometry()`` 就摸到父窗口的尺寸缓存，在
+    Windows 上会形成「配置事件 → 重设几何 → 又发配置事件」的忙循环，表现就是
+    闪烁多次后界面卡死。对话框本身是模态的，主窗口不会在遮罩存在期间被拖动，
+    所以静态放置足够；子类请在 ``_show_modal()`` 之前调用 ``_show_backdrop()``。
+    """
+
+    def _show_backdrop(self, alpha=1.0):
+        self._backdrop = None
+        reference = self._center_reference
+        try:
+            if not reference.winfo_exists():
+                return
+            reference.update_idletasks()
+            width, height = reference.winfo_width(), reference.winfo_height()
+            if width <= 1 or height <= 1:
+                return
+            overlay = tk.Toplevel(reference)
+            overlay.overrideredirect(True)
+            overlay.configure(bg="black")
+            overlay.geometry(
+                f"{width}x{height}+{reference.winfo_rootx()}+{reference.winfo_rooty()}")
+            token = DLG_OVERLAY_BLUR
+            base = token[1] if isinstance(token, (list, tuple)) else token
+            ratio = _hex_transparency_ratio(base)
+            overlay.attributes("-alpha", max(0.0, min(1.0, ratio * float(alpha))))
+            self._backdrop = overlay
+        except (tk.TclError, ValueError):
+            self._backdrop = None
+
+    def _drop_backdrop(self):
+        overlay = getattr(self, "_backdrop", None)
+        self._backdrop = None
+        if overlay is None:
+            return
+        try:
+            overlay.destroy()
+        except tk.TclError:
+            pass
+
+    def _close(self):
+        """关闭前先撤遮罩：父窗口不该在未变暗的状态下露出几帧。"""
+        self._drop_backdrop()
+        super()._close()
+
+
+def _hex_transparency_ratio(color):
+    """把 ``#RRGGBBAA`` 形式的半透明色折算成 Tk ``-alpha`` 需要的 0～1 比例。"""
+    if isinstance(color, str) and len(color) == 9 and color.startswith("#"):
+        return int(color[7:9], 16) / 255.0
+    return 0.42
 
 
 class InputDialog(BaseDialog):

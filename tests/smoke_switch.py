@@ -327,27 +327,49 @@ def main():
         check("专业界面建起", root.winfo_exists())
         check("生成器页已构建", hasattr(manager, "generator_panel"))
 
-        # 设置页的「启动界面模式」只记录下次启动用哪套界面：写设置，但不重建
-        # 窗口、也不登记切换请求（实时切换是导航栏那个按钮的事）。
+        # 设置对话框里的「启动界面模式」只记录下次启动用哪套界面：写设置，
+        # 但不重建窗口、也不登记切换请求（实时切换是导航栏那个按钮的事）。
+        # 对话框是模态的（构造里就 wait_window），这里在 after 里取到它、
+        # 改完再关掉，让 open_settings() 从 wait_window 返回。
+        panel_state = {}
+
+        def _drive_settings_dialog():
+            dialog = manager.settings_dialog
+            panel_state["built"] = dialog is not None
+            if dialog is None:
+                return
+            dialog._on_ui_mode_changed("ME模式")
+            panel_state["startup_mini"] = load_startup_mode()
+            panel_state["mode_pro"] = load_mode()
+            panel_state["root_alive"] = bool(root.winfo_exists())
+            panel_state["no_request"] = app_shell.take_request() is None
+            dialog._on_ui_mode_changed("退出时模式")
+            panel_state["startup_exit"] = load_startup_mode()
+            dialog._close()
+
+        root.after(200, _drive_settings_dialog)
         try:
-            manager.create_settings_panel()
-            panel_ok, panel_detail = True, ""
+            manager.open_settings()
+            panel_ok, panel_detail = bool(panel_state.get("built")), ""
         except Exception as e:
             panel_ok, panel_detail = False, f"{type(e).__name__}: {e}"
-        check("设置页可构建", panel_ok, panel_detail)
+        check("设置对话框可打开", panel_ok, panel_detail)
         if panel_ok:
-            manager.settings_panel._on_ui_mode_changed("ME模式")
             check("设置里选 ME 模式写进启动偏好",
-                  load_startup_mode() == MODE_MINI, str(load_startup_mode()))
+                  panel_state.get("startup_mini") == MODE_MINI,
+                  str(panel_state.get("startup_mini")))
             check("启动偏好不碰实际模式键（ui_mode 仍是专业）",
-                  load_mode() == MODE_PRO, str(load_mode()))
+                  panel_state.get("mode_pro") == MODE_PRO,
+                  str(panel_state.get("mode_pro")))
             check("设置里选 ME 模式不销毁窗口（当前仍是专业界面）",
-                  bool(root.winfo_exists()))
+                  bool(panel_state.get("root_alive")))
             check("设置里选 ME 模式不登记切换请求",
-                  app_shell.take_request() is None)
-            manager.settings_panel._on_ui_mode_changed("退出时模式")
+                  bool(panel_state.get("no_request")))
             check("设置里能改回退出时模式",
-                  load_startup_mode() == STARTUP_EXIT, str(load_startup_mode()))
+                  panel_state.get("startup_exit") == STARTUP_EXIT,
+                  str(panel_state.get("startup_exit")))
+            check("关闭后不残留对话框引用",
+                  getattr(manager, "settings_dialog", None) is None)
 
         # 实时切换走导航栏底部的「⇄ ME模式」按钮：点它先弹确认框，
         # 再用 after 定时触发，走真实的 mainloop → 销毁 → 返回路径。

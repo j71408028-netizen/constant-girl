@@ -60,10 +60,6 @@ def _build_tab(state, page_key):
     getattr(manager, f"create_{page_key}_tab")(manager.pages[page_key])
 
 
-def _build_settings(state):
-    state["manager"].create_settings_panel()
-
-
 def _launch_splash(color_theme, palette):
     """启动独立进程启动屏，返回 (Pipe 连接, Process)；失败时返回 (None, None)。"""
     parent_conn = child_conn = None
@@ -407,12 +403,11 @@ def run_professional(boot):
         (0.48, "构建挑战页面...", "challenge"),
         (0.55, "构建资源中心页面...", "resources"),
         (0.62, "构建剧本编辑页面...", "scenario"),
-        (0.70, "构建地标管理页面...", "landmark"),
-        (0.78, "构建描述管理页面...", "quip"),
+        (0.76, "构建地标管理页面...", "landmark"),
+        (0.86, "构建描述管理页面...", "quip"),
     ):
         enqueue(value, detail, lambda key=page_key: _build_tab(state, key))
 
-    enqueue(0.90, "构建设置页面...", lambda: _build_settings(state))
     enqueue(1.00, "初始化完成！", lambda: None)
 
     def run_next():
