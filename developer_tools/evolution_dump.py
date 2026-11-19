@@ -141,14 +141,14 @@ CORNER_PRESETS = [
 PHASE_REPORT = "报告步进"
 PHASE_DUNGEON = "副本演化"
 PHASE_IDLE = "闲置衰减"
-PHASE_OFFLINE = "离线恢复"
+PHASE_OFFLINE = "恢复结算"
 PHASE_WEIGHTS = {PHASE_REPORT: 0.45, PHASE_DUNGEON: 0.30, PHASE_IDLE: 0.25}
 PHASE_COLORS = {PHASE_REPORT: "#d9e8fb", PHASE_DUNGEON: "#fde2e2",
                 PHASE_IDLE: "#e2f7e2", PHASE_OFFLINE: "#fff3cc"}
 
 CUSTOM_ATTR = {"name": "亲密", "rate": 1.0, "random_offset": 0.2}
-OFFLINE_INTERVAL = 240   # 每隔多少步进入一次离线块
-OFFLINE_BLOCK = 12       # 离线块持续步数（模拟步）
+OFFLINE_INTERVAL = 240   # 每隔多少步进入一次结算块
+OFFLINE_BLOCK = 12       # 结算块持续步数（模拟步）
 
 # 行动点消耗习惯：ap_short = 长期点数不足（负向演化常态化）；
 # ap_moderate = 点数适中（每步回复，偶发低谷，负向演化仅偶发触发）
@@ -278,7 +278,7 @@ SIMULATED_HOOKS = (
 # 同为可覆盖目标、但**本模拟不调用**：覆盖后不会体现在结果里（报告里点明，免得误判）。
 NOT_SIMULATED_HOOKS = (
     "StateService.refund_action_points（返回副本结算才用）",
-    "offline.recover_plan / report_text（真实离线结算走 services.character.offline）",
+    "offline.recover_plan / report_text（真实恢复结算走 services.character.offline）",
     "CreationService.*（身高生成 / 出身烙印派生，与演化无关）",
     "logic.*（尺寸格式化 / 描述 / 屏蔽词等显示层）",
 )
@@ -872,7 +872,7 @@ SOURCE_LABELS = {
     "landmark_switch": "地标切换",
     "dungeon": "副本演化",
     "apply_negative_evolution": "负向演化",
-    "offline": "离线恢复",
+    "offline": "恢复结算",
 }
 
 

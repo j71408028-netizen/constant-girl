@@ -12,7 +12,7 @@ class StateService:
     以及快照级操作（传入 CharacterSnapshot，有变化时向演化表追加一行）。
     行动点数的消耗/恢复/返还同样统一在此。
 
-    离线结算（角色下线期间的步进/伤亡/明细）在
+    两次结算之间的步进/伤亡/明细在
     :class:`OfflineService`（``services/character/offline.py``），主体计划由
     ``offline.recover_plan`` 产出；本类不保留恢复入口。
     """

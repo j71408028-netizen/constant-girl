@@ -33,25 +33,25 @@
 | `apply_step_decay`         | `(state, fraction=0.1) -> None` | 闲置衰减（角色面板逗留每分钟 fraction=0.1），有变化时向演化表追加一行。              |
 | `nudge_depths`         | `(state, axis, direction, amount=0.02) -> Optional[(float, float)]` | 聊天 effect 的深度微调：`axis` 取 intrusion/destruction，`direction` 取 -1/0/1；单次幅度很小，接近 ±5 时衰减；只改深度、不写演化表，返回 `(旧值, 新值)` 或 `None`。 |
 | `consume_action_points`    | `(state, cost) -> bool` | 消耗行动点数；点数不足返回 `False`。                                  |
-| `receive_action_points`    | `(state, amount) -> int` | 自然回复行动点数（离线恢复、角色面板在线恢复），夹取到 0~100，返回实际变化量。 |
+| `receive_action_points`    | `(state, amount) -> int` | 自然回复行动点数（恢复结算、角色面板逗留恢复），夹取到 0~100，返回实际变化量。 |
 | `refund_action_points`     | `(state, amount) -> int` | 返还行动点数（副本结算、报告解锁返还等），不设 100 上限，返回实际变化量。 |
 | `recover_action_points`    | `(state) -> None` | 在角色面板逗留时，根据性格恢复行动点数（内部调用 `receive_action_points`，覆盖前者会自动生效）。 |
 
-## `offline`（离线恢复计划）
+## `offline`（恢复计划）
 
-离线结算拆成两层：`offline.recover_plan` 只读取状态并返回
+结算拆成两层：`offline.recover_plan` 只读取状态并返回
 `OfflineRecoveryPlan`，不写状态、不记演化；`OfflineService` 把计划写回角色并
 追加演化行。展示文案同为模块策略：`recover_offline` 把实际恢复的行动点与
-离线时长交给 `offline.report_text` 生成并返回。`OfflineModel` 是计划函数收到
+间隔时长交给 `offline.report_text` 生成并返回。`OfflineModel` 是计划函数收到
 的模型参数快照，**由角色出身烙印构造**（`OfflineModel.from_tuning
 (state.model_tuning)`，创建期经 `CreationService.derive_model_tuning` 派生并
-已夹取；离线 8 项默认值见 `core/models.py::ModelTuning`）。72 小时明细窗口与
+已夹取；8 项结算默认值见 `core/models.py::ModelTuning`）。72 小时明细窗口与
 2 小时精度同时是导出图表、演化表和 UI 的跨模块契约，固定不开放。
 
 | 目标 | 类型 | 签名 / 默认 | 说明 |
 |------|------|------|------|
 | `offline.recover_plan` | 函数 | `(state, now, model) -> Optional[OfflineRecoveryPlan]` | 生成恢复计划。返回 `None` 表示时间戳无效或没有可结算时长。计划字段：`action_point_gain`（请求恢复量）、`intrusion` / `destruction`（结算后坐标，`None` 表示不改）、`details`（明细，`None` 表示保留现有明细）、`step`、`casualties`（本次新增伤亡）。 |
-| `offline.report_text` | 函数 | `(state, plan, elapsed_minutes, action_point_gain) -> str` | 把一次离线结算转成展示文案，`plan` 为 `None` 返回空串。`elapsed_minutes` 是离线分钟数，`action_point_gain` 是执行层实际恢复的行动点（已受自然回复上限约束）；步进/伤亡增量取自计划。 |
+| `offline.report_text` | 函数 | `(state, plan, elapsed_minutes, action_point_gain) -> str` | 把一次结算转成展示文案，`plan` 为 `None` 返回空串。`elapsed_minutes` 是距上次结算的分钟数，`action_point_gain` 是执行层实际恢复的行动点（已受自然回复上限约束）；步进/伤亡增量取自计划。 |
 
 覆盖 `offline.recover_plan` 可调用 `runtime.default("offline.recover_plan")` 复用
 默认计划后再改字段。执行层会夹取坐标、把行动点恢复量交给

@@ -182,8 +182,8 @@ class OfflineDetail:
     start_at/end_at 为本地 ISO 时间，作为该明细在时间轴上的绝对区间
     （对齐偶数整点，供导出图表直接读取）。step/casualties 为该区间
     累计的步进与伤亡，env_factor 为该区间实际采用的环境因子（含噪声）。
-    明细只保留最近 _OFFLINE_WINDOW_HOURS(72) 小时；更早的离线时长按
-    “24小时平滑步进总量×离线天数×地址环境因子”汇总后只进入演化表总和。
+    明细只保留最近 _OFFLINE_WINDOW_HOURS(72) 小时；更早的这段时长按
+    “24小时平滑步进总量×经历天数×地址环境因子”汇总后只进入演化表总和。
     """
     start_at: str = ""         # 区间起始（本地 ISO 时间）
     end_at: str = ""           # 区间结束（本地 ISO 时间）
@@ -415,7 +415,7 @@ class CharacterSnapshot:
     # 活动区域（完整地址文本列表，软约束）：报告选取时区域内地标优先，让角色
     # 的空间行为有惯性；空 = 无偏好。不做合法性校验，坏文本使用时不命中。
     activity_regions: List[str] = field(default_factory=list)
-    # 离线恢复期间的2小时精度步进与伤亡明细，由离线结算
+    # 主程序未运行期间的2小时精度步进与伤亡明细，由离线结算
     # （services/character/offline.py::recover_offline）计算填充。
     offline_details: List[OfflineDetail] = field(default_factory=list)
     # 出身调制烙印：创建期由 CreationService.derive_model_tuning 派生并经

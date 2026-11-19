@@ -17,7 +17,7 @@
 - `profile`（`services/character/profile_text.py`，档案派生层的文本化出口）：作息与
   空间偏好的可读结论与实时提示（见 [hooks-logic.md](hooks-logic.md) 的 `profile` 组）。
   scope 同样是与文件位置无关的字面量契约——以后新域按此模式扩展。
-- `offline`（`services/character/offline.py`，离线恢复）：纯计划
+- `offline`（`services/character/offline.py`，恢复结算）：纯计划
   `offline.recover_plan` 与展示文案 `offline.report_text`；计划收到的模型参数
   快照来自角色出身烙印（见下文三层模型）。执行与持久化仍由服务层负责
   （见 [hooks-character.md](hooks-character.md) 的 `offline` 组）。
@@ -32,7 +32,7 @@
   节奏数值是 `chat.model.*` 常量钩子。JSON 协议、消息状态机、话题状态机、
   持久化与关系转移图不开放（见 [hooks-chat.md](hooks-chat.md) 的 `chat` 组）。
 
-离线模型参数与空间 / 环境先验的调制**不再是运行时钩子**：它们经
+结算模型参数与空间 / 环境先验的调制**不再是运行时钩子**：它们经
 `CreationService.derive_model_tuning` 在创建角色时烙印（出身层，见下文）。
 
 **核心规则**：
@@ -62,7 +62,7 @@
 | 层 | 内容 | 生效方式 |
 |---|---|---|
 | 世界规则 | `report.*`（含 `report.model.*` 常量）、`StateService` 坐标/行动点、`logic.*`、`offline.recover_plan` / `report_text`、`profile.*` 文本化 | 运行时钩子，随世界包启停 |
-| 角色出身 | 离线结算参数与空间/环境先验的调制烙印（`ModelTuning`） | `CreationService.derive_model_tuning` 创建时烙印，终身携带 |
+| 角色出身 | 结算参数与空间/环境先验的调制烙印（`ModelTuning`） | `CreationService.derive_model_tuning` 创建时烙印，终身携带 |
 | 角色习性 | rhythm / spatial 演化表学习 | 模型内部，参数封闭（不开放） |
 
 原理一句话：世界包能改「世界如何运转」，不能重写「她是谁」。出身层让
@@ -70,14 +70,14 @@
 （潜移默化）；两者相乘——烙印定**包络**（整体活动量、先验偏向），学习定
 **形状**（何时活跃、常去哪里），现有结构（`step_per_hour × rhythm.factor_at`、
 `priors × region_factor`）天然支持。存量角色因此结构性免疫：旧档案无
-tuning 字段 → 读档回退默认 → 任何世界包启停都不再触及其离线/空间调制。
+tuning 字段 → 读档回退默认 → 任何世界包启停都不再触及其结算/空间调制。
 
 - **世界规则可以换**（运行时层）。坐标演化（`StateService` 坐标 / 深度原语）
   服务于资源匹配，世界包自带与演化动态匹配的资源；选取仲裁（`report.*`）
-  配对的是世界内的资源供给；离线结算是把角色活动换算为世界效果的转换层
-  （`offline.recover_plan`，收到的 model 即来自角色烙印）。覆盖这些改变
+  配对的是世界内的资源供给；结算（`offline.recover_plan`）是把角色活动换算为世界效果的转换层
+  （收到的 model 即来自角色烙印）。覆盖这些改变
   「世界如何运转」，角色已学到的东西不被重新解释。
-- **角色出身只在创建时烙印**。角色的离线结算参数与空间 / 环境先验以
+- **角色出身只在创建时烙印**。角色的结算参数与空间 / 环境先验以
   `ModelTuning` 烙印在档案里（`CreationService.derive_model_tuning` 派生，
   内部 sanitize 夹取归一；`origin_world` 记录出身世界包）：世界包对
   「她是谁」的调制只发生在出身时刻，已有角色的烙印终身携带、不随世界包
@@ -212,7 +212,7 @@ data/worlds/<world_id>/
 
 > 全目录 `since` 以 **2.0** 为基线（出身烙印基线在 2.0 alpha 窗口重定了整个
 > 开放面）；已删 / 改名 key 不回潮：`offline.model.*`、`spatial.TAG_*`、
-> `StateService.recover_evolution`（离线恢复入口已收敛为 `offline.recover_plan`
+> `StateService.recover_evolution`（恢复入口已收敛为 `offline.recover_plan`
 > 与 `OfflineService` 直连）、`select.*`（域整体更名 `report`，更名时点无
 > 外部使用者）。
 

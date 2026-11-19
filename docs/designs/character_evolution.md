@@ -73,14 +73,16 @@
 
 ### 3.4 闲置衰减 / 离线恢复（`decayed_coordinates` / `OfflineService`）
 
+> 这里的「离线」指相邻两次结算之间、程序不一定在运行的那段间隔，不是「没有网络」。
+
 - 仅当坐标越过**性格初始值**（`init_intrusion` / `init_destruction`）时，
   向初始值回落 `fraction × 初始步长`，不越过初始值；方向由初始步长符号决定；
-- 角色面板逗留每分钟 fraction=0.1；离线按分钟衰减，行动点按分钟回复
+- 角色面板逗留每分钟 fraction=0.1；结算间隔内按分钟衰减，行动点按分钟回复
   `1 + 0.3 × 强度`（上限 100）；
-- 离线伤亡按 `RhythmService` 作息调制因子（星期 × 2h 桶）结算，明细保留 72 小时；
+- 结算间隔内的伤亡按 `RhythmService` 作息调制因子（星期 × 2h 桶）结算，明细保留 72 小时；
 - 离线恢复分两层：`offline.recover_plan` 只产出计划（行动点增量、结算坐标、明细、
   步进、本次伤亡），`OfflineService.recover_offline` 负责写回与记录演化，并把实际恢复量与
-  离线时长交给 `offline.report_text` 生成展示文案；行为包改计划与文案，
+  间隔时长交给 `offline.report_text` 生成展示文案；行为包改计划与文案，
   不改执行与持久化；
 - 离线模型参数（步进率、残留活动、行动点/坐标恢复速率、噪声与窗口外汇总
   除数）来自角色出身烙印 `ModelTuning`（创建期经 `CreationService.derive_model_tuning`

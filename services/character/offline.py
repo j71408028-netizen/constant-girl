@@ -1,10 +1,10 @@
-"""离线恢复服务：角色离线期间的行动点/坐标衰减与步进伤亡结算。
+"""离线恢复服务：角色两次结算之间的间隔里行动点/坐标衰减与步进伤亡结算。
 
-- 离线时长换算（分钟级行动点恢复、坐标回落）；
+- 间隔时长换算（分钟级行动点恢复、坐标回落）；
 - 最近 72 小时窗口内的 2 小时精度明细（含环境噪声）；
-- 更早离线时长的按天汇总段。
+- 更早一段时长的按天汇总段。
 
-离线步进曲线由 :class:`RhythmService` 从演化表学到的“角色作息模式”
+步进曲线由 :class:`RhythmService` 从演化表学到的“角色作息模式”
 （星期×2小时桶的归一化调制因子）驱动，替代旧的固定昼夜 sin 周期；
 退出后 2 小时内的残留活动快速衰减（指数）仍保留在步进率中。
 
@@ -14,7 +14,7 @@
 ``offline.report_text`` 从结算结果生成，``recover_offline`` 返回该文案。
 
 模型参数来自角色档案的出身烙印（``CharacterSnapshot.model_tuning``，
-创建期经 ``CreationService.derive_model_tuning`` 派生）：世界包对离线
+创建期经 ``CreationService.derive_model_tuning`` 派生）：世界包对这轮
 结算的调制只发生在角色创建时，已有角色的结算不随世界包启停变化。
 """
 
@@ -174,17 +174,17 @@ def _offline_noise_std(height: float, noise_scale: float) -> float:
 @behavior_hook("offline", "recover_plan", layer="module", contract="strategy")
 def build_recover_plan(state: CharacterSnapshot, now: datetime.datetime,
                        model: OfflineModel) -> Optional[OfflineRecoveryPlan]:
-    """按加载间隔生成离线恢复计划，不修改 ``state``。
+    """按加载间隔生成恢复计划，不修改 ``state``。
 
     步进曲线由 :class:`RhythmService` 的作息调制因子（星期×2h桶，归一化
     围绕 1.0）构成；退出后最初约 2 小时叠加快速指数衰减的残留活动。
 
     明细策略：仅在最近 72 小时窗口内按 2 小时精度记录 step/伤亡；早于
-    窗口的部分按“24 小时平滑步进总量×离线天数×作息均值”汇总成一段伤亡。
+    窗口的部分按“24 小时平滑步进总量×经历天数×作息均值”汇总成一段伤亡。
     环境因子取演化表中的在线沉淀，无沉淀时按位置精确度兜底，并叠加随
     log10(身高) 增大的噪声。
 
-    返回 ``None`` 表示没有可结算的离线时长（时间戳无效或未前进）。
+    返回 ``None`` 表示没有可结算的间隔（时间戳无效或未前进）。
     行为包可整体替换本函数；执行与持久化仍由服务层负责。
     """
     try:
@@ -215,7 +215,7 @@ def build_recover_plan(state: CharacterSnapshot, now: datetime.datetime,
     # 作息学习：从演化表学到 (星期×2h桶) 的归一化调制因子。
     rhythm = RhythmService().learn_from_evolution(state.evolution)
     step_per_hour = max(0.0, float(model.step_per_hour))
-    # 离线侧作息放大（夹取 0~3）：只重塑本计划的步进曲线，不动作息学习
+    # 结算侧作息放大（夹取 0~3）：只重塑本计划的步进曲线，不动作息学习
     swing = min(3.0, max(0.0, float(model.rhythm_swing)))
 
     # ---- 最近 72h 窗口：2h 精度明细（含噪声） ----
@@ -242,7 +242,7 @@ def build_recover_plan(state: CharacterSnapshot, now: datetime.datetime,
         detail_step += step
         detail_casualty += casualty
 
-    # ---- 窗口之前（仅当离线 >72h）：按天汇总 ----
+    # ---- 窗口之前（仅当间隔 >72h）：按天汇总 ----
     old_hours = (detail_begin - updated).total_seconds() / 3600.0
     if old_hours > 0:
         old_days = old_hours / 24.0
@@ -312,7 +312,7 @@ def apply_recover_plan(state: CharacterSnapshot,
 
 def _elapsed_minutes(state: CharacterSnapshot,
                      now: datetime.datetime) -> float:
-    """离线时长（分钟）；时间戳无效时为 0（与空计划一致）。"""
+    """间隔时长（分钟）；时间戳无效时为 0（与空计划一致）。"""
     try:
         updated = datetime.datetime.fromisoformat(state.updated_at)
     except (TypeError, ValueError):
@@ -325,9 +325,9 @@ def build_offline_report(state: CharacterSnapshot,
                          plan: Optional[OfflineRecoveryPlan],
                          elapsed_minutes: float,
                          action_point_gain: int) -> str:
-    """把一次离线结算转成展示文案；``plan`` 为 ``None`` 时返回空串。
+    """把一次结算转成展示文案；``plan`` 为 ``None`` 时返回空串。
 
-    ``elapsed_minutes`` 是离线时长（分钟），``action_point_gain`` 是执行层
+    ``elapsed_minutes`` 是距上次结算的分钟数，``action_point_gain`` 是执行层
     实际恢复的行动点（已受自然回复上限约束）；步进与伤亡增量取自计划。
     """
     if plan is None:
@@ -347,7 +347,7 @@ def build_offline_report(state: CharacterSnapshot,
 
 
 class OfflineService:
-    """离线结算：把角色从 updated_at 到 now 的离线时长换算为状态恢复。
+    """离线结算：把角色从 updated_at 到 now 的间隔时长换算为状态恢复。
 
     结算模型参数取角色档案的出身烙印（``state.model_tuning``），实例构造
     参数可显式覆盖（测试与特殊场景）；行为包优先覆盖 ``offline.recover_plan``
@@ -397,7 +397,7 @@ class OfflineService:
         """本次结算的环境因子（统一口径见 ``EnvironmentProfile``）。"""
         return _environment_factor(state, step, profile)
 
-    # ==================== 离线结算入口 ====================
+    # ==================== 恢复结算入口 ====================
 
     def recover_offline(self, state: CharacterSnapshot,
                         now: Optional[datetime.datetime] = None) -> str:
@@ -407,7 +407,7 @@ class OfflineService:
         （record_change），调用方负责持久化。计划生成与计划执行分离：
         ``offline.recover_plan`` 可被行为包整体替换（收到的 model 由角色
         出身烙印构造），写回仍由本方法完成。返回 ``offline.report_text``
-        生成的展示文案，无离线时长时为空串。
+        生成的展示文案，无可结算间隔时为空串。
         """
         now = now or datetime.datetime.now()
         plan = build_recover_plan(state, now, self._model(state))
