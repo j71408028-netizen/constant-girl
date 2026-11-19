@@ -850,7 +850,7 @@ class _MsgBox(BaseDialog):
     图标由对话框内部呈现。
     """
 
-    _ICON_SCALE = 116  # 图标显示高度上限
+    _ICON_SCALE = 96  # 图标显示高度上限
 
     def __init__(self, parent, title, message, icon, options):
         super().__init__(_resolve_parent(parent))
