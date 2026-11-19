@@ -483,6 +483,22 @@
     "SETTINGS_ERR": {
       "$role": "state-danger"
     },
+    "//res_dlg": "资源中心 · 世界包创建对话框 · ui/resources/dialogs.py",
+    "RES_DLG_HOVER": {
+      "$role": "bg-hover"
+    },
+    "RES_DLG_INPUT_BORDER": {
+      "$role": "border"
+    },
+    "RES_DLG_TEXT": {
+      "$role": "text-body"
+    },
+    "RES_DLG_TEXT_SOFT": {
+      "$role": "text-secondary"
+    },
+    "RES_DLG_ERR": {
+      "$role": "state-danger"
+    },
     "//params": "角色创建参数面板 · ui/exploration/creation_params.py",
     "PARAMS_PANEL_BG": {
       "$role": "bg-panel"
