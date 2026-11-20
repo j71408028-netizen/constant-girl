@@ -1,0 +1,17 @@
+{
+  "schema": "gg.scenarios/1",
+  "id": "default",
+  "title": "回稳会志",
+  "author": "XiaoCui",
+  "namespace": "",
+  "version": "1.0",
+  "content_hash": "sha256:b5f8b0299cd46cc5b98af92bec3f4abb1e25c1cce02d92be9c1b0f847a396ae8",
+  "updated_at": "2026-11-20T19:39:37+08:00",
+  "source": {
+    "kind": "local"
+  },
+  "status": "stable",
+  "tags": [],
+  "traits": [],
+  "language": "zh-CN"
+}

@@ -1,0 +1,1284 @@
+{
+  "initial_prompt": "【世界】\n终末之战的余波里，从中子致密物质中凝出的存在叫「巨神种」，通称巨娘，体型在数百米到十万米之间。其中体型最巨、并且成为「座系」核心的那一位叫「座主」——座系是围绕一座座主形成的地理单元，有座主的区域才有稳定的地貌与秩序。\n\n巨娘的正常形态，是从表世完全「叠合」进去：整个人沉入「里世」，表世只剩下她的投影或者什么都没有。叠合必须完全闭合，否则错位会被表世观测到。里世是一个看起来和表世一模一样的少女生活层面，巨娘们在里面上学、通勤、吃午饭；里世的社会结构里从来没有过「巨娘」这个概念，也没有任何关于巨娘的记录、图像或词汇。\n\n唯一能在表世与里世之间主动选择的是座主。而有一种极罕见的情况会让巨娘被卡在中间：她真正醒来过，并且保住了自己在表世的记忆。这样的人叫「醒者」——沉不进里世，也回不去叠合，只能带着过去的记忆站在表世里。\n\n旧战后，人类为了让巨娘安分，大规模扩大了「忆校」：一种记忆平滑校准手段，把巨娘对表世身份的认知抹掉，让她们相信自己一直是里世的普通少女。\n\n【技术】\n人类掌握了跨越体型差与巨娘对话的技术。但它几乎只被用在了一件事上：坑蒙拐骗。\n\n【回稳会】\n回稳会是人类与巨娘之间唯一还在做「往回接」这件事的组织：给醒着的年轻巨娘一点有限的教育、一点引导，能送回去的就送回去。它没有固定基地，只在那些又深又窄、连巨娘自己都爬不出来的盆地和坳子里临时落脚；帐篷、折叠桌、立起来的灯杆、一只电池喇叭、一叠纸，就是它的全部资产。每个来报到的巨娘会领到一台巴掌大的终端：断网也能连，是这种个头的人互相说话唯一还使得上的东西；上面只记一个数，她弄死了多少人。本意是让她们盯着这个数，看自己一天里又压坏了多少、碰塌了多少，学着收着点——只准在会里用。规矩写得极细，执行只到中等——念完条例，该放过的还是会放过。传闻最早是几对巨娘和人的夫妻办起来的，所以它对这类事的态度比任何地方都松。只是这套心思用在青春期的巨大少女身上，大多白费力气。\n\n组织早就散了：经费少，人手少，各地各管各的，彼此不太联系。一般人只知道它的名字，没人说得清它靠什么还在长——它真正的进展不在表世。\n\n她对这一切一无所知。她只能看见坳子、帐篷、折叠桌、纸上的格子，和一个念条例的人。\n\n【叙事口径】\n全程第一人称，视角是那个巨大的少女自己。她不知道自己是谁、为什么在这里，也不知道这套世界观里的任何名词——她只能用她看见的东西来描述，不能使用「里世」「叠合」「座主」「醒者」这些词，除非有人当面告诉她。\n所有尺度感受都必须通过具体的对照物来写：云、路、房子、人的手势，不要直接报数字。\n不要解释、不要总结、不要替她领会。她只能猜。",
+  "coupling_level": "solea",
+  "protagonist_title": "千米少女",
+  "protagonist_background": "三天前在矿区旁的野地里醒来，躺了一下午带一整夜，坐起来的时候压塌了一条缓坡和一排工棚，死了人——具体的数字还没人告诉她。她记不住别人的名字，也分不清表世的人到底是不是真人。她手里什么都没有，包括自己的过去。",
+  "text_component": "text",
+  "entry_action_cost": 0,
+  "ending_policy": "required",
+  "section_prompts": {
+    "background": "写她所站的那片地方本身：地表被她的重量压出的变化、云的层高、光从哪个方向来、远处那个躺着的人影占了多少天边，以及这些东西在她眼里多大。",
+    "branch": "写她和人之间那些说不清的片刻：谁先移开视线、谁把话说了一半、谁装作没看见。不写决定，只写他们彼此在试探什么。",
+    "dialog": "写对话。她说话很慢、很短，经常答非所问；人类的说法往往带着一套她听不懂的规矩。她的话传出去会先散掉一半，所以对方经常要她再说一遍。",
+    "interaction": "写她身体与地表的接触：落脚前的迟疑、手掌贴地的温度、重心移动时地面下的回馈、以及她为了少压到什么而做出的那些很小的调整。",
+    "action": "写她做一个具体决定的过程：看哪里、数什么、放弃什么。动作要慢，因为她必须慢。"
+  },
+  "section_steps": {
+    "background": 0.02,
+    "branch": 0.05,
+    "dialog": 0.1,
+    "interaction": 0.2,
+    "action": 0.3
+  },
+  "transition_matrix": {
+    "background": {
+      "background": 0.4,
+      "branch": 0.3,
+      "dialog": 0.2,
+      "interaction": 0.1,
+      "action": 0.0
+    },
+    "branch": {
+      "background": 0.2,
+      "branch": 0.3,
+      "dialog": 0.3,
+      "interaction": 0.2,
+      "action": 0.0
+    },
+    "dialog": {
+      "background": 0.1,
+      "branch": 0.2,
+      "dialog": 0.3,
+      "interaction": 0.3,
+      "action": 0.1
+    },
+    "interaction": {
+      "background": 0.1,
+      "branch": 0.1,
+      "dialog": 0.2,
+      "interaction": 0.4,
+      "action": 0.2
+    },
+    "action": {
+      "background": 0.2,
+      "branch": 0.1,
+      "dialog": 0.1,
+      "interaction": 0.2,
+      "action": 0.4
+    }
+  },
+  "evolution_attrs": [
+    {
+      "type": "intrusion",
+      "name": "介入度",
+      "display_state": "show",
+      "owner": "her"
+    },
+    {
+      "type": "destruction",
+      "name": "破坏性",
+      "display_state": "show",
+      "owner": "her"
+    },
+    {
+      "type": "casualty",
+      "name": "总伤亡",
+      "display_state": "collapse",
+      "owner": "environment"
+    },
+    {
+      "type": "custom",
+      "name": "数字",
+      "display_state": "internal",
+      "owner": "her",
+      "init_value": 128.0,
+      "rate": 1.0,
+      "random_offset": 0.0
+    },
+    {
+      "type": "custom",
+      "name": "信任",
+      "display_state": "collapse",
+      "owner": "her",
+      "init_value": 0.0,
+      "rate": 0.0,
+      "random_offset": 0.0
+    }
+  ],
+  "components": [
+    "attr_bar",
+    "proc_log"
+  ],
+  "components_params": {
+    "attr_bar": {
+      "name_color": [
+        226,
+        208,
+        176,
+        255
+      ],
+      "text_color": [
+        238,
+        234,
+        224,
+        255
+      ],
+      "panel_width": 460,
+      "draw_own_surface": false
+    },
+    "proc_log": {
+      "panel_width": 440,
+      "scroll_height": 280,
+      "max_lines": 300,
+      "draw_own_surface": false
+    },
+    "text": {
+      "height_percent": 48,
+      "max_lines": 1,
+      "gradient_color": [
+        14,
+        13,
+        16,
+        140
+      ],
+      "label_color": [
+        214,
+        196,
+        164,
+        255
+      ],
+      "highlight_color": [
+        240,
+        212,
+        140,
+        255
+      ],
+      "show_indicator": true
+    }
+  },
+  "voice": {
+    "enabled": true,
+    "voice_her": "zh-CN-XiaoxiaoNeural",
+    "voice_protagonist": "zh-CN-liaoning-XiaobeiNeural",
+    "voice_other": [
+      "zh-CN-YunjianNeural",
+      "zh-CN-YunyangNeural",
+      "zh-CN-XiaoyiNeural"
+    ],
+    "rate": "-6%",
+    "level": 3
+  },
+  "cast": [
+    {
+      "id": "student",
+      "role": "key",
+      "name": "饥饿游戏",
+      "intro_as": "坡上那个穿校服的女孩",
+      "aliases": [],
+      "pronoun": "她",
+      "call_her": "你",
+      "background": "不良少女醒者，比你高出一大截，拿活人当玩具：圈起来看他们撞墙，玩腻了就连人带地一起压平。这玩法她自己起名叫饥饿游戏，说上面那些城市爱看，数字涨了会替她数数。终端是她在回稳会外围顺手拿的，会里管得死，只准会内用。上面那个数就是她杀掉的人数——回稳会发它，本意是让巨娘看着自己又压坏了多少，学着收着点，她却读成了比分。她只对人这样，对同类没兴趣，被问也不解释，轻快地答。",
+      "voice": "zh-CN-XiaoyiNeural",
+      "purpose": "",
+      "speech": "轻、快，笑着把要紧的话说成玩笑；说到死了多少人，语气和说天气一样；被追问也不解释，要么反问回来，要么把话岔开"
+    },
+    {
+      "id": "keeper",
+      "role": "key",
+      "name": "矿区管理员",
+      "intro_as": "喇叭里的声音",
+      "aliases": [],
+      "pronoun": "他",
+      "call_her": "上面那位",
+      "background": "一号开采点的管理员。平、犯困、报数字极其熟练，报多少人死了的时候跟报产量一样。他守着一根对着躺着的巨人竖了很多年的喇叭，一辈子没离开过这个镇子，也从来没打算离开。他把往东那条路指给她，不是好心，是这活儿归他念。",
+      "voice": "zh-CN-YunjianNeural",
+      "purpose": "",
+      "speech": "慢，平，句尾往下掉；说到死人的时候会先翻一下纸"
+    },
+    {
+      "id": "officer",
+      "role": "key",
+      "name": "回稳会干事",
+      "intro_as": "穿灰衣服的人",
+      "aliases": [],
+      "pronoun": "他",
+      "call_her": "受测者",
+      "background": "回稳会派下来做事的人。他要做的只有一件事：把条例念完。编号、时段、下一次要带什么、能不能回去，他都按顺序念。他不解释为什么，也从不撒谎；这一辈子对着比自己高一千倍的东西念过很多遍同一段话，语气从来没变过。真的到了要问话的时候，他问的第一句不是编号。",
+      "voice": "zh-CN-YunyangNeural",
+      "purpose": "",
+      "speech": "快，准，像在念条例；被打断之后会从头再念一遍"
+    },
+    {
+      "id": "sleeper",
+      "role": "key",
+      "name": "沉睡的女孩",
+      "intro_as": "边上躺着的那位",
+      "aliases": [],
+      "pronoun": "她",
+      "call_her": "她",
+      "background": "万米级。躺在矿区旁边，矿区在她脚边的岩层上开采了很多年。她呼吸的时候，胸口的弧面上会起一层水汽；她翻身的时候，方圆几百里的地图要重新画。没有人在她醒着的时候见过她。",
+      "voice": "zh-CN-XiaoxiaoNeural",
+      "purpose": "",
+      "speech": ""
+    },
+    {
+      "id": "crowd",
+      "role": "extra",
+      "name": "地面上的人",
+      "pronoun": "",
+      "purpose": "表现人类对巨娘那种近乎麻木的日常态度：跑、站住看、像赶鸟一样挥手。",
+      "speech": "听不清，隔着很远，大多是短句和笑",
+      "voice": "",
+      "aliases": [],
+      "intro_as": "",
+      "background": "",
+      "call_her": ""
+    },
+    {
+      "id": "broadcast",
+      "role": "extra",
+      "name": "回稳会广播",
+      "pronoun": "",
+      "purpose": "播报编号、时段、下一次要带什么，制造一切都在被记录、被排进流程的压迫感。",
+      "speech": "录好的声音，循环，不带感情，只念编号和条目",
+      "voice": "",
+      "aliases": [],
+      "intro_as": "",
+      "background": "",
+      "call_her": ""
+    }
+  ],
+  "chapters": [
+    {
+      "name": "1-1",
+      "color": "#8C7A5B",
+      "start": true,
+      "ending": false,
+      "note": "她躺在地上，看见云、看见脚边的镇子、看见远处那个躺着的人；喇叭响了，告诉她往东去一个名字很长的会。她不说话，只接收，章末她准备坐起来。本章是固定文本，所有句子已经写定，不要改写她的口吻。",
+      "cast": [
+        "keeper"
+      ],
+      "place": "一号开采点",
+      "address": "",
+      "scene_landmarks": [],
+      "common_private_name": "",
+      "exit_address": "",
+      "max_paragraphs": 99,
+      "overflow_target": "1-2",
+      "intrusion_delta": 0,
+      "destruction_delta": 0,
+      "casualty_step": 0,
+      "action_points_refund": 0,
+      "custom_deltas": {},
+      "icon_path": "",
+      "background": {
+        "image_path": "images/a.jpg",
+        "smooth_transition": true,
+        "filter_effect": ""
+      },
+      "bgm": {},
+      "voice_fx": {
+        "others": {
+          "preset": "room_echo",
+          "intensity": 40
+        }
+      },
+      "fixed_text": {
+        "path": "texts/ch0_xing.txt"
+      },
+      "sensitivity": [
+        {
+          "attr": "数字",
+          "strength": 1.0,
+          "objective": 0.0
+        }
+      ]
+    },
+    {
+      "name": "1-2",
+      "color": "#7A6248",
+      "start": false,
+      "ending": false,
+      "note": "她坐起来。这一章只有一次事故，且这一次事故的后果由插入段决定：破坏性高时是整排工棚被压进地里，低时缓坡只塌了一角、灰里有人站起来。你先写她试着调整重心、把手放到硬地方，不要自己宣布压坏了什么。章末她扶着地站起来，往东看，但不要写她走出第一步。",
+      "cast": [
+        "keeper"
+      ],
+      "place": "一号开采点",
+      "address": "",
+      "scene_landmarks": [],
+      "common_private_name": "",
+      "exit_address": "",
+      "max_paragraphs": 12,
+      "overflow_target": "1-3",
+      "intrusion_delta": 0,
+      "destruction_delta": 0,
+      "casualty_step": 0,
+      "action_points_refund": 0,
+      "custom_deltas": {},
+      "icon_path": "",
+      "background": {
+        "image_path": "images/a.jpg",
+        "smooth_transition": true,
+        "filter_effect": ""
+      },
+      "bgm": {},
+      "voice_fx": {
+        "others": {
+          "preset": "room_echo",
+          "intensity": 40
+        }
+      },
+      "fixed_text": {},
+      "sensitivity": [
+        {
+          "attr": "数字",
+          "strength": 1.0,
+          "objective": 0.0
+        }
+      ]
+    },
+    {
+      "name": "1-3",
+      "color": "#6B6551",
+      "start": false,
+      "ending": false,
+      "note": "她站起来往东走，两步跨过一个省。人只有三种反应：跑、站住看、像赶鸟一样挥手。这一章的重点不是她压坏了什么，而是她学不会的东西：落脚前先看，看得越久越分不清这些人是不是真的人。她是否想记住其中一张脸、脚下有没有踩空过，都由插入段决定，你不要替她下结论。章末天暗下来，前面的坡上出现另一个比她矮的巨娘的剪影——只是剪影，不要给她台词，不要交代她是谁，也不要写她做了什么。",
+      "cast": [
+        "crowd"
+      ],
+      "place": "省界以东",
+      "address": "",
+      "scene_landmarks": [],
+      "common_private_name": "",
+      "exit_address": "",
+      "max_paragraphs": 12,
+      "overflow_target": "1-4",
+      "intrusion_delta": 0,
+      "destruction_delta": 0,
+      "casualty_step": 0,
+      "action_points_refund": 0,
+      "custom_deltas": {},
+      "icon_path": "",
+      "background": {
+        "image_path": "images/b.jpg",
+        "smooth_transition": true,
+        "filter_effect": ""
+      },
+      "bgm": {},
+      "voice_fx": {
+        "her": {
+          "preset": "open_valley",
+          "intensity": 50
+        }
+      },
+      "fixed_text": {},
+      "sensitivity": [
+        {
+          "attr": "数字",
+          "strength": 1.0,
+          "objective": 0.0
+        }
+      ]
+    },
+    {
+      "name": "1-4",
+      "color": "#4E6B72",
+      "start": false,
+      "ending": false,
+      "note": "夜里，两道坡之间。对面的巨娘先开口，手里攥着那块亮着的东西——一台从回稳会外围顺来的终端，屏幕上有一个数，她不给人看清。正文不要出现「终端」「回稳会发的」这类说法，主角还不认识它。她对这个场面毫不惊讶，也知道那数字是什么。本章要让玩家第一次意识到：我和她不是一个处境的人。数字的含义只由她自己说出来，一句就够——被追问时她说「这是我杀掉的人数」，说完不解释、不补充、不承认这叫残酷，反手就问主角「你不是也有吗」；终端本意是让人克制自己的东西，这句也由她说，说得不当回事。往西还是往东，由玩家自己选。\n视角只有一层：叙述者只当她是个比自己早来、比自己高、说话轻快的同龄巨娘。她是什么人，不要由谁下定论——她自己不解释来龙去脉、不自夸动机，叙述者也不替她判断。只准从三处漏出来：她身边那片被压得过分平的空地，她看远处那些小点时不肯挪开的眼神，和她说那个数时的语气。本章她不对任何人动手。",
+      "cast": [
+        "student"
+      ],
+      "place": "两道坡之间",
+      "address": "",
+      "scene_landmarks": [],
+      "common_private_name": "",
+      "exit_address": "",
+      "max_paragraphs": 12,
+      "overflow_target": "2-1",
+      "intrusion_delta": 0,
+      "destruction_delta": 0,
+      "casualty_step": 0,
+      "action_points_refund": 0,
+      "custom_deltas": {},
+      "icon_path": "",
+      "background": {
+        "image_path": "images/c.jpg",
+        "smooth_transition": true,
+        "filter_effect": ""
+      },
+      "bgm": {},
+      "voice_fx": {
+        "her": {
+          "preset": "open_valley",
+          "intensity": 45
+        }
+      },
+      "fixed_text": {},
+      "sensitivity": [
+        {
+          "attr": "介入度",
+          "strength": 1.0,
+          "objective": 0.0
+        },
+        {
+          "attr": "数字",
+          "strength": 1.0,
+          "objective": 0.0
+        }
+      ]
+    },
+    {
+      "name": "2-1",
+      "color": "#55665C",
+      "start": false,
+      "ending": true,
+      "note": "天亮前她走到坳口。坳不深，四面几乎是直上直下的岩壁，只有一条坡能下去。坳底支着几顶帐篷、一张折叠桌，桌上一排终端，一只电池喇叭架在杆上；人不多，都是灰衣服。她停在坳口，没有下去。接待她的人按条例来：先念编号、时段、下次来要带什么，念完才问话。这一章只写到坳口为止——她能不能下去、下面的人要不要她下去，都不写。正文里不要出现「终端」这个词，她只看见桌上一排亮着的东西。",
+      "cast": [
+        "officer"
+      ],
+      "place": "回稳会·坳口",
+      "address": "",
+      "scene_landmarks": [
+        {
+          "name": "坳壁",
+          "size": 800,
+          "dimension": "vertical"
+        },
+        {
+          "name": "灯杆",
+          "size": 45,
+          "dimension": "vertical"
+        },
+        {
+          "name": "坳口",
+          "size": 2600,
+          "dimension": "horizontal",
+          "horizontal_type": "length"
+        }
+      ],
+      "common_private_name": "",
+      "exit_address": "",
+      "max_paragraphs": 5,
+      "overflow_target": "",
+      "intrusion_delta": 0,
+      "destruction_delta": 0,
+      "casualty_step": 0,
+      "action_points_refund": 0,
+      "custom_deltas": {
+        "信任": 1.0
+      },
+      "icon_path": "",
+      "background": {
+        "image_path": "images/d.jpg",
+        "smooth_transition": true,
+        "filter_effect": ""
+      },
+      "bgm": {},
+      "voice_fx": {
+        "her": {
+          "preset": "open_valley",
+          "intensity": 40
+        }
+      },
+      "fixed_text": {},
+      "sensitivity": [
+        {
+          "attr": "数字",
+          "strength": 1.0,
+          "objective": 0.0
+        }
+      ]
+    },
+    {
+      "name": "2-2",
+      "color": "#6B5A56",
+      "start": false,
+      "ending": true,
+      "note": "天亮前她走到坳口。坳底是空的：帐篷拆走了，折叠桌搬到岩壁背面，只留一张桌子，桌上一排终端全部亮着，用石头压住一张写满格子的纸。坳口拉了一圈桩和绳，绳上挂着反光的布；广播还在念，人都在岩壁后面，没有一个出来。岩壁上有一排凿出来的台阶，太整齐了，不像水冲的。这一章只到她退到坡后为止，不写她下去。正文里不要出现「终端」这个词，她只看见桌上一排亮着的东西。",
+      "cast": [
+        "officer",
+        "broadcast"
+      ],
+      "place": "回稳会·坳口",
+      "address": "",
+      "scene_landmarks": [
+        {
+          "name": "坳壁",
+          "size": 800,
+          "dimension": "vertical"
+        },
+        {
+          "name": "桩绳",
+          "size": 1200,
+          "dimension": "horizontal",
+          "horizontal_type": "length"
+        },
+        {
+          "name": "灯杆",
+          "size": 45,
+          "dimension": "vertical"
+        }
+      ],
+      "common_private_name": "",
+      "exit_address": "",
+      "max_paragraphs": 5,
+      "overflow_target": "",
+      "intrusion_delta": 0,
+      "destruction_delta": 0,
+      "casualty_step": 0,
+      "action_points_refund": 0,
+      "custom_deltas": {
+        "信任": -0.5
+      },
+      "icon_path": "",
+      "background": {
+        "image_path": "images/d.jpg",
+        "smooth_transition": true,
+        "filter_effect": ""
+      },
+      "bgm": {},
+      "voice_fx": {
+        "her": {
+          "preset": "open_valley",
+          "intensity": 40
+        }
+      },
+      "fixed_text": {},
+      "sensitivity": [
+        {
+          "attr": "数字",
+          "strength": 1.0,
+          "objective": 0.0
+        }
+      ]
+    }
+  ],
+  "triggers": [
+    {
+      "name": "起·压进地里",
+      "chapter": "1-2",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 3
+          },
+          {
+            "key": "破坏性",
+            "comparator": ">=",
+            "value": 2.0
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "interaction",
+        "highlight": false,
+        "delayed": false,
+        "text": "我撑的那一下，缓坡是从中间断掉的。断口露出湿土，土里竖着一排一排的东西，像插进去的火柴。工棚顺着坡滑下去，滑到一半停住，屋顶压着屋顶，像一块被谁推歪的桌面。\n我把手抬起来。手心里印着一整片屋顶的格子，横的，竖的，都还在。"
+      }
+    },
+    {
+      "name": "起·只塌一角",
+      "chapter": "1-2",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 3
+          },
+          {
+            "key": "破坏性",
+            "comparator": "<",
+            "value": 2.0
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "interaction",
+        "highlight": false,
+        "delayed": false,
+        "text": "我把手放在硬的地方，只在缓坡边上按了一下。坡塌了一角，不大，像被人从边上掰掉一块饼干。\n灰扬起来，过了一会儿才散。灰里有咳嗽。一下，停一下，再一下——不是那种只能发出一个音的声音。有人站起来了，很小，扶着什么东西，站起来了。"
+      }
+    },
+    {
+      "name": "起·她问了",
+      "chapter": "1-2",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 6
+          },
+          {
+            "key": "介入度",
+            "comparator": ">=",
+            "value": 2.1
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "dialog",
+        "highlight": false,
+        "delayed": false,
+        "text": "@千米少女@“要怎么做，才不压到人。”\n喇叭里先是一阵电流声，然后才是人声。\n@矿区管理员@“看得见的地方别踩，看不见的地方别走。”\n@矿区管理员@“就这两条。别的都是骗你的。”"
+      }
+    },
+    {
+      "name": "起·她没有问",
+      "chapter": "1-2",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 6
+          },
+          {
+            "key": "介入度",
+            "comparator": "<",
+            "value": 2.1
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "branch",
+        "highlight": false,
+        "delayed": false,
+        "text": "我没有问。\n我把手掌翻过来，看上面印着的格子。喇叭自己说下去了，说得很慢，像怕我漏掉哪一句。我一句都没漏。我只是没有回答。"
+      }
+    },
+    {
+      "name": "起·往东看",
+      "chapter": "1-2",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 9
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "goto",
+      "action_data": {
+        "type": "goto",
+        "chapter": "1-3"
+      }
+    },
+    {
+      "name": "走·踩空",
+      "chapter": "1-3",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 3
+          },
+          {
+            "key": "破坏性",
+            "comparator": ">=",
+            "value": 2.3
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "interaction",
+        "highlight": false,
+        "delayed": false,
+        "text": "第二步落下去，脚底没有顶住东西。不是软，是空——像踩进一个刚好装得下脚的坑。\n我停在那儿，没有往下压。过了很久，坑底下才传来一点动静，很密，很轻，像一把沙子在筛。"
+      }
+    },
+    {
+      "name": "走·先看",
+      "chapter": "1-3",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 3
+          },
+          {
+            "key": "破坏性",
+            "comparator": "<",
+            "value": 2.3
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "interaction",
+        "highlight": false,
+        "delayed": false,
+        "text": "我现在落脚之前会先看。\n有一次，一条路上排着一长串车。我把脚抬起来，抬了很久，久到膝盖开始发酸，等那一串全部走完，才落下去。落下去的地方是空的，路面上只有几道压出来的白印。"
+      }
+    },
+    {
+      "name": "走·记住一张脸",
+      "chapter": "1-3",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 6
+          },
+          {
+            "key": "介入度",
+            "comparator": ">=",
+            "value": 2.3
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "branch",
+        "highlight": false,
+        "delayed": false,
+        "text": "我试着记住一张脸。田埂上有一个人仰着头，抱着一捆东西，嘴一直张着，喊的是同一句话。我盯着他看，看到他把嘴闭上，把东西放下，转身走了。\n我记住了他走路的姿势：左脚往外撇。"
+      }
+    },
+    {
+      "name": "走·人和天气",
+      "chapter": "1-3",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 6
+          },
+          {
+            "key": "介入度",
+            "comparator": "<",
+            "value": 2.3
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "branch",
+        "highlight": false,
+        "delayed": false,
+        "text": "看得久了，人也变成一种天气。\n跑的人是风，站着不动的人是石头，挥手的人是雨——落一阵就停。我开始按这个来躲：躲风，绕开石头，不理雨。"
+      }
+    },
+    {
+      "name": "走·天黑",
+      "chapter": "1-3",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 9
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "goto",
+      "action_data": {
+        "type": "goto",
+        "chapter": "1-4"
+      }
+    },
+    {
+      "name": "猜·她先开口",
+      "chapter": "1-4",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 1
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "dialog",
+        "highlight": false,
+        "delayed": false,
+        "text": "@饥饿游戏@“你也是刚醒的吧。”\n她的声音比我的轻，隔这么远，传过来已经散掉一半。\n@饥饿游戏@“太好了。好久没见过活的了。”\n@饥饿游戏@“你身上那个会嗡嗡响的东西，你有吗？”"
+      }
+    },
+    {
+      "name": "猜·那块亮的东西",
+      "chapter": "1-4",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 3
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "option",
+      "action_data": {
+        "type": "option",
+        "prompt": "她把手里那块亮着的东西举起来，等你。",
+        "options": [
+          {
+            "id": 0,
+            "prompt": "问她那上面是什么",
+            "text": "问下去"
+          },
+          {
+            "id": 1,
+            "prompt": "不问那个，问她叫什么",
+            "text": "换一个问"
+          },
+          {
+            "id": 2,
+            "prompt": "什么都不问，就看着它",
+            "text": "不问"
+          }
+        ]
+      }
+    },
+    {
+      "name": "猜·问分数",
+      "chapter": "1-4",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "选择:猜·那块亮的东西",
+            "comparator": "==",
+            "value": 0,
+            "metric": "last"
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "dialog",
+        "highlight": false,
+        "delayed": false,
+        "text": "@饥饿游戏@“这个是我的。”\n她把那块东西转过来。光里有一行数字，很大，大到我得在心里数好几遍才读得出来。\n@千米少女@“这是什么。”\n@饥饿游戏@“你猜。”\n我猜那是分数。或者走了多少步，或者安然无恙地撑过了多少天。\n她摇头，笑得眼睛都弯了。\n@饥饿游戏@“这是我杀掉的人数。”\n风从我们中间过去，很轻。她还在笑，笑得干干净净的，像我从前班上任何一个女生。\n@千米少女@“你杀掉的……”\n@饥饿游戏@“你干嘛这个表情。”\n@饥饿游戏@“你不是也有吗。等你到了回稳会，他们会发一个给你，你以前那些也会一起跟过来。”\n@饥饿游戏@“那东西本来是让我们看着，学着自己收着点的。”\n@饥饿游戏@“我看着看着，就把它当成分数了。”"
+      }
+    },
+    {
+      "name": "猜·问名字",
+      "chapter": "1-4",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "选择:猜·那块亮的东西",
+            "comparator": "==",
+            "value": 1,
+            "metric": "last"
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "dialog",
+        "highlight": false,
+        "delayed": false,
+        "text": "@千米少女@“你叫什么。”\n她报了一个名字，也可能是网名，风一吹就散了，我没记住。\n@饥饿游戏@“叫我饥饿游戏就行。”"
+      }
+    },
+    {
+      "name": "猜·不问",
+      "chapter": "1-4",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "选择:猜·那块亮的东西",
+            "comparator": "==",
+            "value": 2,
+            "metric": "last"
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "branch",
+        "highlight": false,
+        "delayed": false,
+        "text": "我什么都没问。\n那块东西在她手里亮着。她举了很久，久到我以为她会一直举下去，然后她把手放下了。\n@饥饿游戏@“行。你不问，我也不说。”"
+      }
+    },
+    {
+      "name": "猜·问过之后",
+      "chapter": "1-4",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "选择:猜·那块亮的东西",
+            "comparator": "==",
+            "value": 0,
+            "metric": "last"
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "effect",
+      "action_data": {
+        "type": "effect",
+        "duration": 3,
+        "sensitivity": [
+          {
+            "attr": "介入度",
+            "strength": 1.0,
+            "objective": 0.8
+          },
+          {
+            "attr": "数字",
+            "strength": 1.0,
+            "objective": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "name": "猜·没问之后",
+      "chapter": "1-4",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "选择:猜·那块亮的东西",
+            "comparator": "==",
+            "value": 2,
+            "metric": "last"
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "effect",
+      "action_data": {
+        "type": "effect",
+        "duration": 3,
+        "sensitivity": [
+          {
+            "attr": "介入度",
+            "strength": 1.0,
+            "objective": -0.8
+          },
+          {
+            "attr": "数字",
+            "strength": 1.0,
+            "objective": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "name": "猜·不要跟",
+      "chapter": "1-4",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 6
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "option",
+      "action_data": {
+        "type": "option",
+        "prompt": "她要往西走。回稳会在东边。她没有劝你，只是把那块东西收进衣兜，站在那儿，看你怎么选。",
+        "options": [
+          {
+            "id": 0,
+            "prompt": "跟上去。她手里的东西能告诉你该怎么办",
+            "text": "跟她走"
+          },
+          {
+            "id": 1,
+            "prompt": "往东。回稳会发东西，至少说的是人话",
+            "text": "去回稳会"
+          }
+        ]
+      }
+    },
+    {
+      "name": "猜·跟了一段",
+      "chapter": "1-4",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "选择:猜·不要跟",
+            "comparator": "==",
+            "value": 0,
+            "metric": "last"
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "branch",
+        "highlight": false,
+        "delayed": false,
+        "text": "我跟了她一段。她走得比我快，也从不回头看我在不在。\n走到第三道坡，她停下，没有转身。\n@饥饿游戏@“你跟着我，我就得替你看着脚下。”\n@饥饿游戏@“我不干这个。”\n她说完就走了。我站在原地，等她的背影小到看不见，才转回东边。"
+      }
+    },
+    {
+      "name": "猜·往东",
+      "chapter": "1-4",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "选择:猜·不要跟",
+            "comparator": "==",
+            "value": 1,
+            "metric": "last"
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "branch",
+        "highlight": false,
+        "delayed": false,
+        "text": "我往东。\n走了几步，我回头看了一眼。她还站在那儿，没有走，也没有挥手。她只是看着我走——像在看一个人去排一场她早就排过的队。"
+      }
+    },
+    {
+      "name": "猜·坳口还亮着",
+      "chapter": "1-4",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 9
+          },
+          {
+            "key": "破坏性",
+            "comparator": "<",
+            "value": 2.5
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "goto",
+      "action_data": {
+        "type": "goto",
+        "chapter": "2-1"
+      }
+    },
+    {
+      "name": "猜·坳口围起来了",
+      "chapter": "1-4",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 9
+          },
+          {
+            "key": "破坏性",
+            "comparator": ">=",
+            "value": 2.5
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "goto",
+      "action_data": {
+        "type": "goto",
+        "chapter": "2-2"
+      }
+    },
+    {
+      "name": "边缘·有人上来",
+      "chapter": "2-1",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 2
+          },
+          {
+            "key": "介入度",
+            "comparator": ">=",
+            "value": 2.5
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "dialog",
+        "highlight": false,
+        "delayed": false,
+        "text": "有人从坳底往上走。走得很慢，因为坡陡，也因为他在数还有多少步。\n走到我脚边，他停下，先抬头看了一眼我的手，才看我的脸。\n@回稳会干事@“编号先不念。我先问一句：你有没有喜欢的人。”"
+      }
+    },
+    {
+      "name": "边缘·他不上来",
+      "chapter": "2-1",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 2
+          },
+          {
+            "key": "介入度",
+            "comparator": "<",
+            "value": 2.5
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "dialog",
+        "highlight": false,
+        "delayed": false,
+        "text": "坳底有人举起喇叭。他没有上来，站在折叠桌旁边，离我大概有半座山那么远。\n@回稳会干事@“受测者，千米少女。到场时段，天亮前。下一次来，带一件自己的东西。”\n念完，他放下喇叭，等我动。我没有动。他把喇叭重新举起来，从第一句开始念。"
+      }
+    },
+    {
+      "name": "边缘·摊开手",
+      "chapter": "2-2",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 2
+          },
+          {
+            "key": "介入度",
+            "comparator": ">=",
+            "value": 2.5
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "dialog",
+        "highlight": false,
+        "delayed": false,
+        "text": "我把一只手摊开，放在坳口的地上。掌心朝上，不动。\n岩壁后面有个人探出头，看了一眼，又缩回去。过了一会儿，喇叭响了。\n@回稳会干事@“手不要动。就放在那儿。”\n@回稳会干事@“我们数到一百。数完你再说话。”"
+      }
+    },
+    {
+      "name": "边缘·退到坡后",
+      "chapter": "2-2",
+      "precondition_names": [],
+      "condition": {
+        "operator": "and",
+        "rules": [
+          {
+            "key": "节内计数",
+            "comparator": ">=",
+            "value": 2
+          },
+          {
+            "key": "介入度",
+            "comparator": "<",
+            "value": 2.5
+          }
+        ]
+      },
+      "repeatable": false,
+      "action_type": "insert",
+      "action_data": {
+        "type": "insert",
+        "text_type": "branch",
+        "highlight": false,
+        "delayed": false,
+        "text": "坳里没有人。\n广播还在念，念编号，念时段，念下一次要带什么。念到第三遍，我往后退了半步，退到坡的另一面，让岩壁把我挡住。\n退到那儿，我才发现自己一直屏着气。"
+      }
+    }
+  ],
+  "entry_address": "",
+  "entry_address_max_distance_m": null,
+  "entry_height_min_m": null,
+  "entry_height_max_m": null,
+  "speaker_notation": "tagged"
+}

@@ -66,7 +66,12 @@ htmlcov/
 # 编辑器临时文件
 tempCodeRunnerFile.py
 
-# 副本方案在测试阶段暂不入库
-/data/packs/scenarios/
+# 副本方案：只有内置方案 default 入库（随包发布的示例），
+# 其余是各人的写作草稿，留在本地
+/data/packs/scenarios/*
+!/data/packs/scenarios/default/
+!/data/packs/scenarios/default.meta.json
+# 放行目录内部仍按通用规则过滤（*.bak / *.tmp 见上）
+/data/packs/scenarios/default/config.json.bak
 # 迁移脚本的一次性回滚备份（整目录拷贝）
 /data.rollback-*/
