@@ -27,7 +27,7 @@
 | [角色系统](../designs/dungeon/characters.md)（机制在 designs/dungeon/） | 运行期角色账本、在场观测、揭示合并、提示词投影与语音解析怎么工作 | 动角色系统 / 改人物简报 / 改语音 |
 | [对话语音](../designs/dungeon/voice.md)（机制在 designs/dungeon/） | 方案级音色配置、合成底座（端点 / 代理 / 失败原因）、音量总线与 `voice_fx` 接线 | 配语音 / 排查不出声 |
 | [进入准入](../designs/dungeon/admission.md)（机制在 designs/dungeon/） | 入口地址、距离与身高区间的判定口径与检查时机 | 改准入 / 改挂件与挑战模式入口 |
-| [副本关系图与图校验](scenario_graph.md)  | 章节与触发器之间的四类关系怎么建模、图校验报什么、编辑器里怎么看 | 写方案 / 改校验器 / 改编辑器 |
+| [编排图与图校验](scenario_graph.md)  | 章节与触发器之间的四类关系怎么建模、图校验报什么、编辑器里怎么看 | 写方案 / 改校验器 / 改编辑器 |
 | [窗口逻辑与开发事项](window.md)        | imgui-bundle 会话窗口的生命周期、帧时钟、约束与坑 | 动 `dungeon/window/` |
 | [宿主边界与可移植性](window_host.md)   | window 层与宿主（Tk）的边界在哪、换 UI 框架能做到哪一步 | 评估可移植性 / 换宿主 |
 | [调试自动化](window_automation.md) | 怎么不手点电脑就回归窗口 | 改窗口后自检 |
@@ -43,8 +43,8 @@
 | 角色账本（身份状态机 / 在场观测 / 揭示合并 / 人物简报） | [角色系统](../designs/dungeon/characters.md) | `check_characters.py`、`check_cast.py` |
 | 配角语音分角色（显式音色 / 代词分池 / 稳定哈希键） | [角色系统](../designs/dungeon/characters.md) §5 | `check_audio_chain.py`、`check_characters.py` |
 | 校验规则（error / warning / info） | [数据模型](../designs/dungeon/script.md) §9 | `check_scenario_schema.py`、`scripts/scenario_validate.py` |
-| 章节 / 触发器之间的依赖与可达性（图校验五条规则） | [关系图与图校验](scenario_graph.md) §3 | `check_scenario_graph.py` |
-| 关系图界面（章节总览 / 触发器依赖 / 清单） | [关系图与图校验](scenario_graph.md) §4 | `run_checks.py --smoke` |
+| 章节 / 触发器之间的依赖与可达性（图校验五条规则） | [编排图与图校验](scenario_graph.md) §3 | `check_scenario_graph.py` |
+| 剧情页三标签（章节与触发器 / 章节编排 / 触发器依赖） | [编排图与图校验](scenario_graph.md) §4 | `run_checks.py --smoke` |
 | 章节 / 触发器运行时行为 | [数据模型](../designs/dungeon/script.md) §3、§5–§6 | `dungeon_autopilot.py` |
 | 演化、转移矩阵、段落步长 | [架构](architecture.md) §4 | `check_scenario_schema.py`（演化链路守卫） |
 | 窗口（Session）生命周期 / 关闭 / 收尾 | [窗口](window.md) §2、§3 | `dungeon_autopilot.py`、`check_dungeon_finalize.py` |
@@ -69,7 +69,7 @@
 | `dungeon/*.py`（包根） | 领域层 | Scenario 定义 + Run 执行；纯逻辑，禁 import GUI / 服务层（AST 强制） |
 | `dungeon/window/*.py` | 会话窗口/呈现层 | Session 生命周期；唯一允许 `imgui_bundle` 的地方；宿主能力一律经 `host.py` |
 | `dungeon/minigame_pack.py` | 领域层 | 小游戏数据包读取（manifest / 参数声明），validate 与 window/minigame 共用 |
-| `dungeon/scenario_graph.py` | 领域层 | 方案关系图模型：四类关系 + 归属的建图、两条可达性口径、强连通分量（零外部依赖，见 [关系图与图校验](scenario_graph.md)） |
+| `dungeon/scenario_graph.py` | 领域层 | 编排图模型：四类关系 + 归属的建图、两条可达性口径、强连通分量（零外部依赖，见 [编排图与图校验](scenario_graph.md)） |
 | `dungeon/graph_lint.py` | 领域层 | 图校验五条规则，产出 `(level, path, message)`；由 `validate.py` 包成诊断 |
 | `dungeon/settings.py` | 领域层 | 副本独占设置的键名与缺省（单一真相源，供 `persistence` 与 `window` 共用） |
 | `dungeon/admission.py` | 领域层 | 进入准入：入口地址（主世界锚点）距离与身高区间（窗口、挂件、挑战模式共用） |
@@ -81,7 +81,7 @@
 | `ui/hosting/tk_host.py` | 宿主适配 | `TkHost`——window 层之外唯一的 Tk 细节所在地 |
 | `persistence/scenario_repo.py` | 持久化 | 方案读写、旧目录迁移、保存即校验 |
 | `persistence/dungeon_settings_repo.py` | 持久化 | 副本独占设置读写（`data/user/dungeon_settings.json`），旧键一次性迁移 |
-| `ui/scenario/*` | 编辑器 | 按 `dungeon/schema.py` 的声明渲染表单；`graph_view.py` 是只读的关系图对话框（见 [关系图与图校验](scenario_graph.md)） |
+| `ui/scenario/*` | 编辑器 | 按 `dungeon/schema.py` 的声明渲染表单；`graph_view.py` 是剧情页「章节编排 / 触发器依赖」共用的只读画布（见 [编排图与图校验](scenario_graph.md)） |
 | `tests/*` | 离线自检（`tests/run_checks.py` 统一入口）；需显示器的自动驾驶脚本仍在 `scripts/` | 见 §4 |
 
 ## 4. 自检脚本索引
@@ -104,7 +104,7 @@
 | `check_dungeon_finalize.py` | 原子写 / `.bak` / 损坏回退 + `_finalize` 完成与未完成两条路径 | `python tests/check_dungeon_finalize.py` |
 | `check_dungeon_settings.py` | 副本独占设置：缺省取自 `dungeon/settings.py`、读写与合并、越界夹取、旧值迁移（幂等）与 `save` 清洗、会话侧接线 | `python tests/check_dungeon_settings.py` |
 | `check_scenario_naming.py` | 命名守卫（旧标识符残留）+ 兼容读与迁移行为 | `python tests/check_scenario_naming.py` |
-| `check_scenario_graph.py` | 方案关系图：节点与四类边构造、两条可达性口径、强连通分量与种子判定、五条图校验规则各命中一次、骨架方案不刷可达性诊断、同位置竞争只分组不报红、正常方案零诊断 | `python tests/check_scenario_graph.py` |
+| `check_scenario_graph.py` | 编排图：节点与四类边构造、两条可达性口径、强连通分量与种子判定、五条图校验规则各命中一次、骨架方案不刷可达性诊断、同位置竞争只分组不报红、正常方案零诊断 | `python tests/check_scenario_graph.py` |
 
 > 另有三支**不判红**的人工/批量工具在 `scripts/`：`child_dpi_probe.py`（副本子进程
 > DPI 感知探针）、`platform_api_report.py`（Windows 专有 API 落点清单，发布 macOS

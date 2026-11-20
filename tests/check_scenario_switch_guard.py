@@ -133,6 +133,7 @@ class FakeEditor:
         self.current_scenario_id = scenario_id
         self.character_panel = FakeCharacterPage()
         self.scenario_combo = FakeCombo()
+        self.summaries = []
         self.initial_prompt_text = FakeText("")
         self.section_frames = {}
         self.section_step_vars = {}
@@ -166,6 +167,10 @@ class FakeEditor:
 
     def _refresh_scenario_list(self):
         self.refresh_count += 1
+
+    # 顶栏校验条是真正的纯逻辑（ui/scenario/diagnostics.py），这里只截住 UI 刷新
+    def _apply_diagnostics(self, diagnostics):
+        self.summaries.append(diagnostics)
 
 
 # ---------------- 打桩：对话框与方案列表 ----------------

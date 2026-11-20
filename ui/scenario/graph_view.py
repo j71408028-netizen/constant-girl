@@ -1,6 +1,9 @@
-"""副本关系图对话框：章节与触发器之间的四类关系，一处看清，并与校验诊断联动。
+"""编排视图：章节与触发器之间的四类关系，一处看清，并与字段路径联动定位。
 
-「检查动态」按钮打开的界面（``ui/scenario/chapter_trigger_mgr.check_dependencies``）。
+嵌在「剧情」页里（上方分段切换「章节与触发器 / 章节编排 / 触发器依赖」），不再是
+独立对话框；校验结论与定位入口由编辑器顶栏的校验条承担（``ui/scenario/diagnostics.py``），
+本模块只负责把路径带到图上的节点（``ScenarioGraphPanel.focus_path``）。
+
 它替换掉早期的依赖图对话框（``dependency_dlg.py``，用 networkx 建图 + graphviz 出
 PNG），差别在三处：
 
@@ -13,8 +16,8 @@ PNG），差别在三处：
    （触发器 = goto 蓝实线，章节抬头 = 超限橙虚线）；跨章节箭头只留给「前置条件
    引用了另一章的触发器」这种触发器→触发器依赖。
 2. **是校验器的一部分**：图上的结构问题由 ``dungeon/graph_lint.py`` 产出，与字段级
-   规则共用同一套 ``Diagnostic``，保存方案和启动副本前**都会**跑。本对话框把它们
-   连同字段级诊断一起列在右侧，点一条就定位到对应节点。
+   规则共用同一套 ``Diagnostic``，保存方案和启动副本前**都会**跑。这些诊断与字段级
+   诊断一起收进编辑器顶栏的校验条，点一条就切回这里并定位到对应节点。
 3. **把校验器不报的「可能竞争」摆出来**：``ACTION_POSITIONS`` 同位置至多生效一个，
    条件非空时「谁挡住谁」需要求解器才判得准，因此不进校验器（见
    ``docs/Dungeon/scenario_graph.md`` §3.2）。这里按位分组呈现——点一个触发器就能
@@ -41,22 +44,22 @@ from dungeon.scenario_graph import (
     FLAG_START, NODE_CHAPTER, NODE_ROOT, NODE_TRIGGER, ROOT_ID, build_graph,
 )
 from dungeon.validate import (
-    LEGACY_ACTIONS, LEVEL_LABELS, format_diagnostics, has_errors, validate_scenario_config,
+    LEGACY_ACTIONS, LEVEL_LABELS, format_diagnostics, validate_scenario_config,
 )
 from ui.ctk import fonts as ui_fonts
 from ui.ctk.dialogs import BaseDialog, showerror
-from ui.ctk.widgets import CTkSegmentedControl
 from ui.ctk.theme import (
     ACTION_FILL_BACKGROUND, ACTION_FILL_EFFECT, ACTION_FILL_ENDING, ACTION_FILL_FX,
     ACTION_FILL_GOTO, ACTION_FILL_INSERT, ACTION_FILL_NONE, ACTION_FILL_OPTION,
     ACTION_FILL_SENSITIVITY,
-    DEPENDENCY_ERR, DEPENDENCY_OK, DEPENDENCY_TEXT, DEPENDENCY_TEXT_SOFT,
+    DEPENDENCY_ERR, DEPENDENCY_TEXT,
+    DLG_TEXT, DLG_TEXT_SOFT,
     GRAPH_CANVAS_BG, GRAPH_CANVAS_TEXT, GRAPH_CANVAS_TEXT_SOFT,
     GRAPH_EDGE_CHOICE, GRAPH_EDGE_ENTRY, GRAPH_EDGE_GOTO,
     GRAPH_EDGE_HIGHLIGHT, GRAPH_EDGE_OVERFLOW, GRAPH_EDGE_PRECOND, GRAPH_LANE_BG,
     GRAPH_LANE_BORDER, GRAPH_NODE_ERR_BORDER, GRAPH_NODE_HEAD_FILL,
     GRAPH_NODE_MUTED_FILL, GRAPH_NODE_OUTLINE,
-    SC_BORDER, SC_HOVER, SC_TEXT, SC_TEXT_SOFT, SCRIPT_TEXT_SOFT,
+    SC_BORDER, SC_HOVER, SC_TEXT, SC_TEXT_SOFT,
 )
 
 #: 动作类型 → 节点填充色。``mini_game`` 与 ``option`` 同处「模态」位（运行时同轮
@@ -86,10 +89,9 @@ _EDGE_COLOR = {
 #: 可开关的边。``entry`` 不是"关系"而是起点标记，恒画，不进开关。
 _TOGGLE_EDGE_KINDS = (EDGE_PRECOND, EDGE_GOTO, EDGE_OVERFLOW, EDGE_CHOICE)
 
-VIEW_FLOW = "章节总览"
-VIEW_TRIGGER = "触发器依赖"
-VIEW_LIST = "清单"
-_VIEWS = (VIEW_FLOW, VIEW_TRIGGER, VIEW_LIST)
+#: 剧情页上的两张编排图；面板本身不再带视图切换，由剧情页顶部的分段控件驱动。
+VIEW_CHAPTERS = "章节编排"
+VIEW_TRIGGERS = "触发器依赖"
 
 # 画布尺寸常量（世界坐标，缩放只在绘制时施加）
 BOX_H = 40
@@ -100,6 +102,7 @@ LANE_ROW_GAP = 16    # 泳道内同层相邻节点（行）的纵向间距
 LANE_PAD = 12
 LANE_GAP = 16
 ORIGIN = 36
+SIDE_W = 176         # 左侧「图层 / 过滤」栏宽度（网格定宽，不参与挤压）
 FLOW_GAP_Y = 22
 FLOW_COL_GAP = 64
 _SCALE_MIN = 0.45
@@ -108,6 +111,15 @@ _SCALE_MAX = 2.6
 _PATH_INDEX = re.compile(r"(triggers|chapters)\[(\d+)\]")
 
 _KIND_LABELS = {NODE_ROOT: "起点", NODE_CHAPTER: "章节", NODE_TRIGGER: "触发器"}
+
+
+def _legend_text():
+    """连线 / 节点图例文案：面板帮助对话框与离线导出报告共用同一份。"""
+    return ("绿=进入　灰=前置条件　蓝=章节跳转（触发器依赖视图上以节点右上角"
+            "实线 ↗ 角标表示）　橙=超限跳转（同一视图上以章节抬头右上角虚线 ↗ "
+            "角标表示，跳转目标都看详情面板）　紫点线=条件引用；"
+            "节点按动作类型着色，红框=有问题或指向不存在的章节。"
+            "拖拽平移 · 滚轮缩放 · 点节点高亮入出边并列出同位置竞争。")
 
 
 def _mode() -> str:
@@ -180,7 +192,7 @@ class Box:
 
 @dataclass
 class Band:
-    """节点背后的一条带：泳道（触发器依赖视图）或分层列（章节总览视图）。"""
+    """节点背后的一条带：泳道（触发器依赖视图）或分层列（章节编排视图）。"""
 
     x: float
     y: float
@@ -191,7 +203,7 @@ class Band:
 
 
 class GraphCanvas(ctk.CTkFrame):
-    """自绘分层画布：泳道式（触发器依赖）与分层式（章节总览）共用一套渲染。
+    """自绘分层画布：泳道式（触发器依赖）与分层式（章节编排）共用一套渲染。
 
     交互：拖拽平移、滚轮缩放、点节点高亮它的入边与出边。
     """
@@ -199,7 +211,6 @@ class GraphCanvas(ctk.CTkFrame):
     def __init__(self, parent, dialog):
         super().__init__(parent, fg_color="transparent")
         self.dialog = dialog
-        self.graph = dialog.graph
         self.scale = 1.0
         self._boxes = {}
         self._rects = {}
@@ -227,6 +238,11 @@ class GraphCanvas(ctk.CTkFrame):
         self.canvas.bind("<MouseWheel>", self._on_wheel)
         self.canvas.bind("<Button-4>", lambda _e: self._zoom(1.1))
         self.canvas.bind("<Button-5>", lambda _e: self._zoom(1 / 1.1))
+
+    @property
+    def graph(self):
+        """始终读面板当前的模型：``set_data`` 换方案时会替换整张图。"""
+        return self.dialog.graph
 
     # ---------- 绘制 ----------
 
@@ -278,7 +294,7 @@ class GraphCanvas(ctk.CTkFrame):
     def _layout(self):
         visible = self.dialog.visible_nodes()
         kinds = set(self.dialog.enabled_edge_kinds())
-        if self.dialog.view == VIEW_FLOW:
+        if self.dialog.view == VIEW_CHAPTERS:
             self._jump_marks = ()
             return self._flow_layout(visible, kinds)
         return self._lane_layout(visible, kinds)
@@ -622,37 +638,70 @@ class GraphCanvas(ctk.CTkFrame):
         self.canvas.yview_moveto(max(0.0, (self._sy(box.cy) - region[1]) / height - 0.28))
 
 
-class ScenarioGraphDialog(BaseDialog):
-    """关系图 + 校验诊断的同屏界面。"""
+class ScenarioGraphPanel(ctk.CTkFrame):
+    """编排视图：章节编排与触发器依赖共用一块画布。
 
-    def __init__(self, parent, config, scenario_dir=None, title="副本关系图"):
-        super().__init__(parent)
+    它嵌在「剧情」页里，与章节触发器列表平级（上方分段切换三者之一），不再是
+    独立对话框。两张图由剧情页的分段控件切换，面板内部不再自带视图选择，也没有
+    清单视图。校验结论由编辑器顶栏的校验条统一承担
+    （``ui/scenario/diagnostics.py``），因此面板里只做**定位**——``focus_path()``
+    把某个字段路径带到图上的节点。
+    只读，不写盘。
+    """
+
+    def __init__(self, parent, config=None, scenario_dir=None):
+        super().__init__(parent, fg_color="transparent")
+        # 字体：嵌在编辑器页里，与章节列表用同一档字号
+        self.UI_FONT = ui_fonts.ui_font(13)
+        self.UI_FONT_SMALL = ui_fonts.ui_font(12)
         self.config = config if isinstance(config, dict) else {}
         self.scenario_dir = scenario_dir
-        self.graph = build_graph(self.config)
+        #: 由面板自己做的整份校验（类型校验 + 图校验）；不传 config 时为空
         self.diagnostics = validate_scenario_config(self.config,
                                                     scenario_dir=scenario_dir)
+        self.graph = build_graph(self.config)
         self.graph_rules = lint_graph(self.graph)
         self.diags_by_node = {}
         self._chapter_colors = self._collect_chapter_colors()
         self._edge_toggles = {kind: ctk.BooleanVar(value=True)
-                             for kind in _TOGGLE_EDGE_KINDS}
+                              for kind in _TOGGLE_EDGE_KINDS}
         self._only_problems = ctk.BooleanVar(value=False)
-        self._tree_rows = {}
-        self.view = VIEW_TRIGGER
+        self.view = VIEW_TRIGGERS
         self._index_diagnostics()
-
-        self.title(title)
-        self.geometry("1180x720")
-        self.minsize(940, 560)
-        self.resizable(True, True)
-        self.transient(parent)
-        self._grab_deferred()
         self._build_ui()
-        self._center_dialog(parent)
-        self.wait_window()
 
     # ---------- 数据 ----------
+
+    def set_data(self, config, diagnostics=None, view=None):
+        """换方案 / 换章节触发器后重建模型；``diagnostics`` 缺省时自己校验。
+
+        传进来的诊断与编辑器顶栏校验条用的是同一份（``_diag_summary``），避免两处
+        各算一次给出不同结论。``view`` 为剧情页当前选中的图（章节编排 / 触发器依赖）。
+        """
+        self.config = config if isinstance(config, dict) else {}
+        if view in (VIEW_CHAPTERS, VIEW_TRIGGERS):
+            self.view = view
+        if diagnostics is None:
+            diagnostics = validate_scenario_config(
+                self.config, scenario_dir=self.scenario_dir)
+        self.diagnostics = list(diagnostics)
+        self.graph = build_graph(self.config)
+        self.graph_rules = lint_graph(self.graph)
+        self.diags_by_node = {}
+        self._chapter_colors = self._collect_chapter_colors()
+        self._index_diagnostics()
+        self._render()
+
+    def focus_path(self, path):
+        """把字段路径（``triggers[2].action_data.chapter``）定位到图上的节点。"""
+        node_id = self._node_for_path(path)
+        if not node_id:
+            return False
+        node = self.graph.node(node_id)
+        if node is None:
+            return False
+        self.canvas.focus_node(node_id)
+        return True
 
     def _collect_chapter_colors(self):
         colors = {}
@@ -706,7 +755,7 @@ class ScenarioGraphDialog(BaseDialog):
                 node = self.graph.node(node_id)
                 if node is not None and node.kind == NODE_TRIGGER:
                     keep.add(node.owner)
-        if self.view == VIEW_FLOW:
+        if self.view == VIEW_CHAPTERS:
             keep = {node_id for node_id in keep
                     if self.graph.node(node_id).kind in (NODE_CHAPTER, NODE_ROOT)}
         return keep
@@ -722,56 +771,59 @@ class ScenarioGraphDialog(BaseDialog):
 
     def _build_ui(self):
         main = ctk.CTkFrame(self, fg_color="transparent")
-        main.pack(fill="both", expand=True, padx=12, pady=10)
+        main.pack(fill="both", expand=True)
+        self._main = main
 
-        if not self.graph.chapters() and not self.graph.triggers():
-            ctk.CTkLabel(main, text="当前副本方案还没有章节与触发器，关系图为空。",
-                         font=self.UI_FONT, text_color=DEPENDENCY_TEXT).pack(pady=40)
-            ctk.CTkButton(main, text="关闭", width=88, height=28, font=self.UI_FONT,
-                          command=self.destroy).pack(pady=10)
-            return
+        self.empty_label = ctk.CTkLabel(
+            main, text="当前副本方案还没有章节与触发器，编排图为空。",
+            font=self.UI_FONT, text_color=DEPENDENCY_TEXT)
 
-        ctk.CTkLabel(main, text=self._summary_text(), justify="left", font=self.UI_FONT,
-                     text_color=DEPENDENCY_ERR if has_errors(self.diagnostics)
-                     else DEPENDENCY_OK).pack(anchor="w", pady=(0, 8))
+        # 摘要行：只报结构概况（章节 / 触发器 / 图校验条数 / 同位竞争）。
+        # 问题的条数与定位统一由编辑器顶栏的校验条负责，这里不重复报警；
+        # 图例与导出报告都挪到左侧栏的「帮助」对话框与按钮里。
+        self.summary_label = ctk.CTkLabel(main, text="", justify="left",
+                                          font=self.UI_FONT,
+                                          text_color=DEPENDENCY_TEXT)
 
         body = ctk.CTkFrame(main, fg_color="transparent")
-        body.pack(fill="both", expand=True)
+        self._body = body
         self._build_side_panel(body)
         self._build_center(body)
-        self._build_issue_panel(body)
+        self._render()
 
-        footer = ctk.CTkFrame(main, fg_color="transparent")
-        footer.pack(fill="x", pady=(8, 0))
-        ctk.CTkLabel(footer, text=self._legend_text(), justify="left",
-                     font=self.UI_FONT_SMALL, wraplength=800,
-                     text_color=DEPENDENCY_TEXT_SOFT).pack(side="left")
-        ctk.CTkButton(footer, text="导出报告", width=92, height=28, font=self.UI_FONT,
-                      fg_color="transparent", border_width=1, corner_radius=8,
-                      text_color=SCRIPT_TEXT_SOFT, hover_color=SC_HOVER,
-                      border_color=SC_BORDER,
-                      command=self._export_report).pack(side="right", padx=(8, 0))
-        ctk.CTkButton(footer, text="关闭", width=88, height=28, font=self.UI_FONT,
-                      fg_color="transparent", border_width=1, corner_radius=8,
-                      text_color=SCRIPT_TEXT_SOFT, hover_color=SC_HOVER,
-                      border_color=SC_BORDER,
-                      command=self.destroy).pack(side="right")
+    def _render(self):
+        """按当前模型重画：空方案只留一句话，否则更新摘要并刷新当前视图。"""
+        has_content = bool(self.graph.chapters() or self.graph.triggers())
+        for widget in (self.empty_label, self.summary_label, self._body):
+            widget.pack_forget()
+        if not has_content:
+            self.empty_label.pack(pady=40)
+            return
+        self.summary_label.pack(anchor="w", pady=(0, 8))
+        self._body.pack(fill="both", expand=True)
+        self.summary_label.configure(text=self._summary_text())
+        self._refresh()
 
     def _build_side_panel(self, parent):
-        panel = ctk.CTkFrame(parent, fg_color="transparent", width=180)
-        panel.pack(side="left", fill="y", padx=(0, 10))
-        panel.pack_propagate(False)
+        # 用 grid 定宽：pack 里固定宽度的面板会被右侧 expand 的内容区压窄
+        panel = ctk.CTkFrame(parent, fg_color="transparent", width=SIDE_W)
+        panel.grid(row=0, column=0, sticky="nsw", padx=(0, 10))
+        panel.grid_propagate(False)
 
-        ctk.CTkLabel(panel, text="视图", font=self.UI_FONT,
-                     text_color=SC_TEXT_SOFT).pack(anchor="w", pady=(0, 4))
-        self.view_control = CTkSegmentedControl(panel, values=list(_VIEWS),
-                                                command=self._on_view_change,
-                                                font=ui_fonts.ui_font(11), width=180)
-        self.view_control.pack(fill="x")
-        self.view_control.set(self.view)
+        # 操作入口：图例说明收进「帮助」对话框，导出报告也搬到这里
+        actions = ctk.CTkFrame(panel, fg_color="transparent")
+        actions.pack(fill="x", pady=(0, 12))
+        _action_btn = dict(width=SIDE_W // 2 - 4, height=28, font=self.UI_FONT_SMALL,
+                           fg_color="transparent", border_width=1, corner_radius=8,
+                           text_color=SC_TEXT_SOFT, hover_color=SC_HOVER,
+                           border_color=SC_BORDER)
+        ctk.CTkButton(actions, text="? 帮助", command=self._show_help,
+                      **_action_btn).pack(side="left", padx=(0, 3))
+        ctk.CTkButton(actions, text="导出报告", command=self._export_report,
+                      **_action_btn).pack(side="left", padx=(3, 0))
 
         ctk.CTkLabel(panel, text="图层", font=self.UI_FONT,
-                     text_color=SC_TEXT_SOFT).pack(anchor="w", pady=(14, 4))
+                     text_color=SC_TEXT_SOFT).pack(anchor="w", pady=(0, 4))
         for kind in _TOGGLE_EDGE_KINDS:
             ctk.CTkCheckBox(panel, text=EDGE_LABELS[kind], font=self.UI_FONT,
                             checkbox_width=16, checkbox_height=16, text_color=SC_TEXT,
@@ -786,115 +838,22 @@ class ScenarioGraphDialog(BaseDialog):
                         command=self._refresh).pack(anchor="w", pady=2)
 
         self.detail = ctk.CTkLabel(panel, text="点一个节点看它的关系。", justify="left",
-                                   wraplength=172, font=self.UI_FONT_SMALL,
+                                   wraplength=SIDE_W - 8, font=self.UI_FONT_SMALL,
                                    text_color=SC_TEXT_SOFT)
         self.detail.pack(anchor="w", pady=(16, 0))
 
     def _build_center(self, parent):
+        parent.grid_columnconfigure(1, weight=1)
+        parent.grid_rowconfigure(0, weight=1)
         holder = ctk.CTkFrame(parent, fg_color="transparent")
-        holder.pack(side="left", fill="both", expand=True)
+        holder.grid(row=0, column=1, sticky="nsew")
         self.canvas = GraphCanvas(holder, self)
-        self.tree_box = self._build_tree(holder)
-        self._show_view()
-
-    def _build_tree(self, parent):
-        """复用编辑器列表的 ``Custom.Treeview`` 样式，配色/行高与章节面板一致。"""
-        from tkinter import ttk
-        box = ctk.CTkFrame(parent, fg_color="transparent")
-        self.tree = ttk.Treeview(
-            box, style="Custom.Treeview", show="tree headings",
-            columns=("kind", "owner", "action", "issue"))
-        for column, label, width in (("#0", "节点", 260), ("kind", "类型", 70),
-                                     ("owner", "归属", 110), ("action", "动作", 110),
-                                     ("issue", "问题", 90)):
-            self.tree.heading(column, text=label)
-            self.tree.column(column, width=width, anchor="w")
-        scrollbar = ctk.CTkScrollbar(box, orientation="vertical",
-                                     command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scrollbar.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
-        return box
-
-    def _build_issue_panel(self, parent):
-        panel = ctk.CTkFrame(parent, fg_color="transparent", width=290)
-        panel.pack(side="right", fill="y", padx=(10, 0))
-        panel.pack_propagate(False)
-        ctk.CTkLabel(panel, text="校验诊断", font=self.UI_FONT,
-                     text_color=SC_TEXT_SOFT).pack(anchor="w", pady=(0, 4))
-        box = ctk.CTkScrollableFrame(panel, fg_color="transparent")
-        box.pack(fill="both", expand=True)
-        if not self.diagnostics:
-            ctk.CTkLabel(box, text="未发现问题。", font=self.UI_FONT,
-                         text_color=DEPENDENCY_OK).pack(anchor="w")
-            return
-        order = {"error": 0, "warning": 1, "info": 2}
-        for diagnostic in sorted(self.diagnostics,
-                                 key=lambda d: (order.get(d.level, 9), d.path)):
-            color = DEPENDENCY_ERR if diagnostic.level in ("error", "warning") \
-                else DEPENDENCY_TEXT_SOFT
-            text = (f"{LEVEL_LABELS.get(diagnostic.level, diagnostic.level)}·"
-                    f"{diagnostic.path}\n{diagnostic.message}")
-            # CTkButton 不支持 wraplength/justify，用可点的 Label 代替
-            item = ctk.CTkLabel(box, text=text, justify="left", anchor="w",
-                                wraplength=252, cursor="hand2",
-                                font=self.UI_FONT_SMALL, text_color=color)
-            item.pack(fill="x", pady=2)
-            item.bind("<Button-1>",
-                      lambda _event, d=diagnostic: self._focus_diagnostic(d))
-
-    # ---------- 视图切换 ----------
-
-    def _on_view_change(self, value):
-        self.view = value
-        self._show_view()
-
-    def _show_view(self):
-        if self.view == VIEW_LIST:
-            self.canvas.pack_forget()
-            self.tree_box.pack(fill="both", expand=True)
-            self._fill_tree()
-            return
-        self.tree_box.pack_forget()
         self.canvas.pack(fill="both", expand=True)
         self.canvas.redraw()
 
     def _refresh(self):
-        if self.view == VIEW_LIST:
-            self._fill_tree()
-        else:
-            self.canvas.redraw()
-
-    def _fill_tree(self):
-        self.tree.delete(*self.tree.get_children())
-        self._tree_rows = {}
-        visible = self.visible_nodes()
-        for label, ids in self.graph.lanes:
-            shown = [node_id for node_id in ids if node_id in visible]
-            if not shown:
-                continue
-            parent = self.tree.insert("", "end", text=label, open=True,
-                                      values=("泳道", "", "", ""))
-            for node_id in shown:
-                node = self.graph.node(node_id)
-                if node is None:
-                    continue
-                issue = self.worst_level(node_id)
-                row = self.tree.insert(
-                    parent, "end", text=node_title(node),
-                    values=(_KIND_LABELS.get(node.kind, ""), node.chapter or "—",
-                            node_caption(node) if node.kind == NODE_TRIGGER else "",
-                            LEVEL_LABELS.get(issue, "") if issue else ""))
-                self._tree_rows[row] = node_id
-
-    def _on_tree_select(self, _event):
-        selection = self.tree.selection()
-        if not selection:
-            return
-        node_id = self._tree_rows.get(selection[0])
-        if node_id:
-            self._show_detail(node_id)
+        """图层 / 过滤开关变化后重画当前那张图。"""
+        self.canvas.redraw()
 
     # ---------- 联动 ----------
 
@@ -963,58 +922,44 @@ class ScenarioGraphDialog(BaseDialog):
             lines.extend(f"　{member.name}" for member in losers)
         return lines
 
-    def _focus_diagnostic(self, diagnostic):
-        node_id = self._node_for_path(diagnostic.path)
-        if not node_id:
-            return
-        node = self.graph.node(node_id)
-        if self.view == VIEW_FLOW and node.kind == NODE_TRIGGER:
-            self.view = VIEW_TRIGGER
-            self.view_control.set(VIEW_TRIGGER)
-            self._show_view()
-        elif self.view == VIEW_LIST:
-            for row, mapped in self._tree_rows.items():
-                if mapped == node_id:
-                    self.tree.selection_set(row)
-                    self.tree.see(row)
-                    return
-            return
-        self.canvas.focus_node(node_id)
-
     # ---------- 文案 ----------
 
     def _summary_text(self):
+        """面板顶部的结构概况；诊断计数与定位由编辑器顶栏校验条承担，这里不重复。"""
+        groups = len(self.graph.same_position_groups())
+        competitors = f" · {groups} 组同位竞争" if groups else ""
+        return (f"{len(self.graph.chapters())} 个章节 · "
+                f"{len(self.graph.triggers())} 个触发器 · "
+                f"图校验 {len(self.graph_rules)} 条{competitors}")
+
+    def _diagnostic_counts_text(self):
+        """导出报告里单独给出的诊断统计——报告是离线文档，没有顶栏可看。"""
         counts = {"error": 0, "warning": 0, "info": 0}
         for diagnostic in self.diagnostics:
             counts[diagnostic.level] = counts.get(diagnostic.level, 0) + 1
-        groups = len(self.graph.same_position_groups())
-        competitors = f" · {groups} 组同位竞争" if groups else ""
-        head = (f"{len(self.graph.chapters())} 个章节 · "
-                f"{len(self.graph.triggers())} 个触发器 · "
-                f"图校验 {len(self.graph_rules)} 条{competitors}")
         if not self.diagnostics:
-            return f"{head}\n未发现问题：章节与触发器的依赖关系正常。"
-        return (f"{head}\n{counts['error']} 错误 · {counts['warning']} 警告 · "
-                f"{counts['info']} 提示（点右侧诊断可定位）")
+            return "未发现问题：章节与触发器的依赖关系正常。"
+        return (f"{counts['error']} 错误 · {counts['warning']} 警告 · "
+                f"{counts['info']} 提示")
 
-    def _legend_text(self):
-        return ("绿=进入　灰=前置条件　蓝=章节跳转（触发器依赖视图上以节点右上角"
-                "实线 ↗ 角标表示）　橙=超限跳转（同一视图上以章节抬头右上角虚线 ↗ "
-                "角标表示，跳转目标都看详情面板）　紫点线=条件引用；"
-                "节点按动作类型着色，红框=有问题或指向不存在的章节。"
-                "拖拽平移 · 滚轮缩放 · 点节点高亮入出边并列出同位置竞争。")
+    # ---------- 帮助 ----------
+
+    def _show_help(self):
+        """打开只读说明对话框：两张图的区别、图例与画图示意。"""
+        GraphHelpDialog(self)
 
     # ---------- 导出 ----------
 
     def _export_report(self):
         from tkinter import filedialog
         path = filedialog.asksaveasfilename(
-            parent=self, title="导出关系图报告", defaultextension=".txt",
-            initialfile="副本关系图报告.txt",
+            parent=self, title="导出编排报告", defaultextension=".txt",
+            initialfile="剧情编排报告.txt",
             filetypes=[("文本文件", "*.txt"), ("所有文件", "*.*")])
         if not path:
             return
-        lines = [self._summary_text(), "", "【图例】" + self._legend_text(), ""]
+        lines = [self._summary_text(), self._diagnostic_counts_text(), "",
+                 "【图例】" + _legend_text(), ""]
         for label, ids in self.graph.lanes:
             lines.append(f"● 泳道 {label}")
             for node_id in ids:
@@ -1058,3 +1003,116 @@ class ScenarioGraphDialog(BaseDialog):
                 lines.append("        恒真且配置顺序靠后（永远轮不到）："
                              + "、".join(member.name for member in losers))
         return lines
+
+
+class GraphHelpDialog(BaseDialog):
+    """编排图的只读帮助：两张图的区别、连线图例、一张画图示意与操作方法。"""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("编排图帮助")
+        self.geometry("680x620")
+        self.resizable(False, False)
+
+        body = ctk.CTkFrame(self, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=18, pady=(16, 6))
+
+        ctk.CTkLabel(body, text="两张关系图", font=self.SECTION_FONT,
+                     text_color=DLG_TEXT).pack(anchor="w")
+        intro = (
+            "图是只读的：双击节点不会改配置，只看关系。问题计数与定位在编辑器顶栏的校验条，"
+            "点一条会切到这里并选中对应节点。"
+        )
+        ctk.CTkLabel(body, text=intro, font=self.UI_FONT_SMALL, justify="left",
+                     text_color=DLG_TEXT_SOFT, wraplength=640).pack(anchor="w", pady=(4, 10))
+
+        for title, desc in (
+            ("章节编排", "按可达深度分列，节点是章节，画章节之间的跳转与不可达。"),
+            ("触发器依赖", "泳道式：一条泳道一个章节；泳道内按依赖分层，列是依赖深度、行是同层逐个。"),
+        ):
+            row = ctk.CTkFrame(body, fg_color="transparent")
+            row.pack(fill="x", pady=2)
+            ctk.CTkLabel(row, text=title, font=self.UI_FONT_BOLD,
+                         text_color=DLG_TEXT, width=76, anchor="w").pack(side="left")
+            ctk.CTkLabel(row, text=desc, font=self.UI_FONT_SMALL, justify="left",
+                         text_color=DLG_TEXT_SOFT, wraplength=560,
+                         anchor="w").pack(side="left", fill="x", expand=True)
+
+        ctk.CTkLabel(body, text="画图示意", font=self.SECTION_FONT,
+                     text_color=DLG_TEXT).pack(anchor="w", pady=(14, 4))
+        sketch = tk.Canvas(body, height=190, bg=_pick(GRAPH_CANVAS_BG),
+                           highlightthickness=0)
+        sketch.pack(fill="x")
+        self._draw_sketch(sketch)
+
+        ctk.CTkLabel(body, text="连线与节点", font=self.SECTION_FONT,
+                     text_color=DLG_TEXT).pack(anchor="w", pady=(14, 4))
+        ctk.CTkLabel(body, text=_legend_text(), font=self.UI_FONT_SMALL,
+                     justify="left", text_color=DLG_TEXT_SOFT,
+                     wraplength=640).pack(anchor="w")
+
+        ctk.CTkLabel(body, text="操作", font=self.SECTION_FONT,
+                     text_color=DLG_TEXT).pack(anchor="w", pady=(14, 4))
+        ctk.CTkLabel(
+            body,
+            text="拖拽平移 · 滚轮缩放 · 点节点高亮入出边并在左侧列出关系与同位置竞争。"
+                 "左侧「图层」可关掉某类边，「只看有问题的」只留带诊断的节点。",
+            font=self.UI_FONT_SMALL, justify="left", text_color=DLG_TEXT_SOFT,
+            wraplength=640).pack(anchor="w")
+
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.pack(pady=(6, 14))
+        self._make_std_button(btns, "知道了", True, self._close).pack()
+        self.bind("<Escape>", self._close)
+        self._show_modal()
+
+    @staticmethod
+    def _draw_sketch(canvas):
+        """画一张示意：一条泳道、章节抬头与触发器、几类连线和跳转角标。"""
+        def rect(x0, y0, x1, y1, **kw):
+            return canvas.create_rectangle(x0, y0, x1, y1, **kw)
+
+        def text(x, y, label, color, size=10):
+            canvas.create_text(x, y, text=label, fill=color,
+                               font=ui_fonts.ui_font(size))
+
+        def arrow(x0, y0, x1, y1, color, dashed=False, label=""):
+            opts = {"fill": color, "width": 2,
+                    "arrow": tk.LAST, "arrowshape": (10, 12, 4)}
+            if dashed:
+                opts["dash"] = (5, 3)
+            canvas.create_line(x0, y0, x1, y1, **opts)
+            if label:
+                text((x0 + x1) // 2, (y0 + y1) // 2 - 9, label, color, 9)
+
+        lane_fill = _pick(GRAPH_LANE_BG)
+        lane_border = _pick(GRAPH_LANE_BORDER)
+        canvas.create_rectangle(18, 16, 662, 168, fill=lane_fill,
+                                outline=lane_border)
+        text(32, 32, "泳道：坠入城内", _pick(GRAPH_CANVAS_TEXT_SOFT), 10)
+
+        head_fill = _pick(GRAPH_NODE_HEAD_FILL)
+        outline = _pick(GRAPH_NODE_OUTLINE)
+        trig_fill = _pick(ACTION_FILL_OPTION)
+        err = _pick(GRAPH_NODE_ERR_BORDER)
+
+        # 章节抬头（第 0 列）
+        rect(36, 74, 176, 122, fill=head_fill, outline=outline)
+        text(106, 92, "坠入城内", _pick(GRAPH_CANVAS_TEXT), 10)
+        text(106, 108, "章节", _pick(GRAPH_CANVAS_TEXT_SOFT), 9)
+        # 触发器 A / B（第 1、2 列）
+        rect(268, 84, 408, 132, fill=trig_fill, outline=outline)
+        text(338, 102, "钟声响起", _pick(GRAPH_CANVAS_TEXT), 10)
+        text(338, 118, "选项分支", _pick(GRAPH_CANVAS_TEXT_SOFT), 9)
+        rect(500, 84, 640, 132, fill=trig_fill, outline=err)
+        text(570, 102, "坠入深井", _pick(GRAPH_CANVAS_TEXT), 10)
+        text(570, 118, "跳转章节 · 红框=有问题", _pick(GRAPH_CANVAS_TEXT_SOFT), 9)
+
+        arrow(176, 104, 264, 104, _pick(GRAPH_EDGE_PRECOND), label="前置")
+        arrow(408, 104, 496, 104, _pick(GRAPH_EDGE_CHOICE), dashed=True,
+              label="条件引用")
+        # 起点进入
+        arrow(28, 60, 60, 76, _pick(GRAPH_EDGE_ENTRY), label="进入")
+        # 跳转角标（触发器右上角 ↗ 蓝实线）
+        canvas.create_text(632, 78, text="↗", fill=_pick(GRAPH_EDGE_GOTO),
+                           font=ui_fonts.ui_font(13))

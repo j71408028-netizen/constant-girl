@@ -931,6 +931,10 @@ class CharacterPage(ctk.CTkFrame):
         editor.protagonist_background = background
         editor.cast = cast
         editor.voice = voice
+        # 角色页是自动保存：保存后顶栏校验条也要跟着刷新，不能等换页
+        notify = getattr(editor, "_notify_validation", None)
+        if callable(notify):
+            notify()
         # 只把这几项写回通用页的已保存快照：整份重拍会把「通用」页里尚未保存的
         # 编辑当成已保存，切方案时就再也不会提示了
         snapshot = getattr(editor, "_saved_prompt_snapshot", None)

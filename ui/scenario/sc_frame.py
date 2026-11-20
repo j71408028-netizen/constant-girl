@@ -21,9 +21,20 @@ from ui.ctk.widgets import (CTkScrollableDropdownFrame, CTkToggleButtons,
                                OptionButton)
 from ui.ctk.address_dlg import AddressTextDialog
 from ui.ctk.dialogs import BaseDialog, ResourceNameDialog
+from ui.scenario import diagnostics as tab
+from ui.scenario.diagnostics import root_key as diag_root_key
+from ui.scenario.diagnostics import summarize as diag_summarize
 from ui.scenario.chapter_trigger_mgr import ChapterTriggerManager
+from ui.scenario.graph_view import (VIEW_CHAPTERS, VIEW_TRIGGERS,
+                                    ScenarioGraphPanel)
+from ui.ctk.widgets import CTkSegmentedControl
+#: 剧情页的三个标签：章节触发器列表 / 章节编排图 / 触发器依赖图。
+#: 后两者的文案直接复用 graph_view 的视图名，传入 set_data(view=...) 即可选图。
+STORY_VIEW_ROWS = "章节与触发器"
+STORY_VIEWS = (STORY_VIEW_ROWS, VIEW_CHAPTERS, VIEW_TRIGGERS)
 from dungeon.terms import DEFAULT_SCENARIO_ID, scenario_config_of, scenario_id_of
-from dungeon.validate import format_diagnostics, has_errors
+from dungeon.validate import (LEVEL_LABELS, format_diagnostics, has_errors,
+                              validate_scenario_config)
 from ui.scenario.character_page import CharacterPage
 from ui.scenario.component_mgr import ComponentManager
 from services.challenges import unique_display
@@ -32,6 +43,7 @@ from ui.ctk.theme import (
     SC_HOVER, SC_MENU_HOVER, SC_CARD_HOVER, SC_TEXT,
     SC_TEXT_SOFT, SC_TITLE, SC_LINK, SC_OK,
     SC_OK_HOVER, SC_ERR, SC_ERR_HOVER,
+    SEG_TRACK_BG, SEG_TRACK_BORDER,
 )
 from ui.ctk import fonts as ui_fonts
 
@@ -71,6 +83,12 @@ class ScenarioEditor(ctk.CTkFrame):
         self._modified = False
         self._saved_prompt_snapshot = {}  # 用于检测提示词是否被修改
         self._prompt_modified = False  # 辅助标志（实际用快照对比更准确）
+        # 顶栏校验条的状态：最近一次校验的汇总（None = 还没校验过）
+        self._diag_summary = None
+        # 抽屉展开状态自己记：CTkScrollableFrame.winfo_manager() 恒为 'canvas'，
+        # pack 与否只看内部 _parent_frame，不能拿它当展开依据（见 _toggle_diag_panel）
+        self._diag_panel_open = False
+        self.story_view_switch = None
 
         # --- 新增：自定义步进值与转移矩阵 ---
         self.section_steps = {}
@@ -94,51 +112,59 @@ class ScenarioEditor(ctk.CTkFrame):
     def _build_ui(self):
         toolbar = ctk.CTkFrame(self, fg_color=SC_BG)
         toolbar.pack(fill='x', padx=10, pady=6)
+
+        # 右侧：页签收进带底色的轨道，选中项铺浅底——与校验条的分段同一套语言
+        tabs_track = ctk.CTkFrame(toolbar, fg_color=SEG_TRACK_BG,
+                                  border_width=1, border_color=SEG_TRACK_BORDER,
+                                  corner_radius=9)
+        tabs_track.pack(side='right', padx=(6, 2), pady=(3, 1))
         self.dungeon_switch_btn = CTkToggleButtons(
-            toolbar,
-            values=["通用", "角色", "动态", "组件"],
+            tabs_track,
+            values=["通用", "角色", tab.TAB_STORY, "组件"],
             command=self._on_scenario_tab_switch,
-            button_width=84, height=30, font=ui_fonts.ui_font(13)
+            button_width=80, height=28, font=ui_fonts.ui_font(13)
         )
-        self.dungeon_switch_btn.pack(side='left', padx=5, pady=(3, 1))
+        self.dungeon_switch_btn.pack(padx=2, pady=2)
         # 初始化即选中“通用”
         self.dungeon_switch_btn.set("通用")
-        right_frame = ctk.CTkFrame(toolbar, fg_color="transparent")
-        right_frame.pack(side='right', padx=5)
-        ctk.CTkLabel(right_frame, text="副本方案:",
-                     text_color=SC_TEXT_SOFT).pack(side='left', padx=5)
+
+        # 左侧：方案身份收进描边胶囊——标签 + 下拉 + 紧凑图标动作成一块
+        picker = ctk.CTkFrame(toolbar, fg_color=SC_PANEL_BG,
+                              border_width=1, border_color=SC_BORDER_STRONG,
+                              corner_radius=8)
+        picker.pack(side='left', padx=5, pady=(3, 1))
+        ctk.CTkLabel(picker, text="方案", font=ui_fonts.ui_font(11),
+                     text_color=SC_TEXT_SOFT).pack(side='left', padx=(11, 2))
         # ---- CTkComboBox + CTkScrollableDropdownFrame ----
         self.scenario_combo = ctk.CTkComboBox(
-            right_frame,
+            picker,
             values=[],
             state="readonly",
-            width=150,
+            width=148,
             fg_color=SC_PANEL_BG,
-            border_color=SC_BORDER_STRONG,
+            border_color=SC_BORDER,
             button_color=SC_BORDER_STRONG,
             button_hover_color=SC_MENU_HOVER,
             dropdown_fg_color=SC_PANEL_BG,
             dropdown_hover_color=SC_HOVER
         )
-        self.scenario_combo.pack(side='left', padx=7)
+        self.scenario_combo.pack(side='left', padx=4, pady=4)
         self._rebuild_dropdown()
 
-        _btn_spec = {"fg_color": "transparent", "border_width": 1, "corner_radius": 8}
-        _btn_muted = {"text_color": SC_TEXT_SOFT,
-                      "hover_color": SC_HOVER,
-                      "border_color": SC_BORDER_STRONG}
-        ctk.CTkButton(right_frame, text="新建", width=80, command=self._new_scenario,
-                       text_color=SC_OK,
-                       hover_color=SC_OK_HOVER,
-                       border_color=SC_OK,
-                       **_btn_spec).pack(side='left', padx=2)
-        ctk.CTkButton(right_frame, text="重命名", width=80, command=self._rename_scenario,
-                       **_btn_spec, **_btn_muted).pack(side='left', padx=2)
-        _del_spec = {"text_color": SC_ERR,
-                     "hover_color": SC_ERR_HOVER,
-                     "border_color": SC_ERR}
-        ctk.CTkButton(right_frame, text="删除", width=80, command=self._delete_scenario,
-                       **_btn_spec, **_del_spec).pack(side='left', padx=2)
+        _icon = dict(fg_color="transparent", border_width=0, corner_radius=6,
+                     width=28, font=ui_fonts.ui_font(14))
+        ctk.CTkButton(picker, text="＋", command=self._new_scenario,
+                      text_color=SC_OK, hover_color=SC_OK_HOVER,
+                      **_icon).pack(side='left', padx=(0, 1))
+        ctk.CTkButton(picker, text="✎", command=self._rename_scenario,
+                      text_color=SC_TEXT_SOFT, hover_color=SC_HOVER,
+                      **_icon).pack(side='left', padx=1)
+        ctk.CTkButton(picker, text="🗑", command=self._delete_scenario,
+                      text_color=SC_ERR, hover_color=SC_ERR_HOVER,
+                      **_icon).pack(side='left', padx=(1, 9))
+
+        # 第二层：校验结果条——跨页签常驻，保存后即给出「哪里有问题」，点开看全文
+        self._build_diag_bar()
 
         # 内容容器
         self.content_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -154,13 +180,187 @@ class ScenarioEditor(ctk.CTkFrame):
         self.evolution_panel = self.character_panel.evolution_panel
         self.chapter_trigger_panel = ChapterTriggerManager(
             self.content_frame, self._scenario_repo, self)
+        # 剧情页三标签：章节与触发器 / 章节编排 / 触发器依赖
+        self.story_view_switch = CTkSegmentedControl(
+            self.content_frame, values=list(STORY_VIEWS),
+            command=self._on_story_view_switch,
+            font=ui_fonts.ui_font(12), width=340)
+        self.graph_panel = ScenarioGraphPanel(
+            self.content_frame, scenario_dir=None)
+        self._story_view = STORY_VIEW_ROWS
         self.component_panel = ComponentManager(self.content_frame, self._scenario_repo, self)
 
         # 默认显示通用面板
         self.character_panel.pack_forget()
         self.chapter_trigger_panel.pack_forget()
+        self.story_view_switch.pack_forget()
+        self.graph_panel.pack_forget()
         self.component_panel.pack_forget()
         self.prompt_panel.pack(fill='both', padx=9, expand=True)
+
+    # ==================== 顶栏校验条 ====================
+
+    def _build_diag_bar(self):
+        """校验结果条：错误 / 警告 / 提示计数 + 第一条问题 + 各页签的问题数。
+
+        点条子展开一份完整诊断，点其中一行跳到对应页签并高亮位置；点页签计数
+        只切页。安静时（无错误无警告）只留一行浅色状态，不抢视线。
+        """
+        self.diag_bar = ctk.CTkFrame(self, fg_color=SC_PANEL_BG, corner_radius=0,
+                                     border_width=0, height=28)
+        self.diag_bar.pack(fill='x', padx=0, pady=(0, 2))
+        inner = ctk.CTkFrame(self.diag_bar, fg_color="transparent")
+        inner.pack(fill='x', padx=14, pady=3)
+
+        self.diag_pills = {}
+        for level, text in (("error", "● 0 错误"), ("warning", "▲ 0 警告")):
+            label = ctk.CTkLabel(inner, text=text, font=ui_fonts.ui_font(12, "bold"),
+                                 cursor="hand2")
+            label.pack(side='left', padx=(0, 8))
+            label.bind("<Button-1>", lambda _e: self._toggle_diag_panel())
+            self.diag_pills[level] = label
+
+        self.diag_headline = ctk.CTkLabel(
+            inner, text="", anchor='w', justify='left',
+            font=ui_fonts.ui_font(12), text_color=SC_TEXT_SOFT, cursor="hand2")
+        self.diag_headline.pack(side='left', fill='x', expand=True, padx=(2, 8))
+        self.diag_headline.bind("<Button-1>", lambda _e: self._toggle_diag_panel())
+
+        self.diag_caret = ctk.CTkLabel(inner, text="▾", font=ui_fonts.ui_font(12),
+                                       text_color=SC_TEXT_SOFT, cursor="hand2")
+        self.diag_caret.pack(side='right', padx=(8, 0))
+        self.diag_caret.bind("<Button-1>", lambda _e: self._toggle_diag_panel())
+
+        # 各页签的问题数（点击只切页，不展开）
+        self.tab_chips = {}
+        for tab_name in reversed(tab.TABS):
+            chip = ctk.CTkLabel(inner, text="", font=ui_fonts.ui_font(11),
+                                text_color=SC_TEXT_SOFT, cursor="hand2",
+                                fg_color=SC_PANEL_BG, corner_radius=9, padx=6)
+            chip.bind("<Button-1>",
+                      lambda _e, name=tab_name: self._switch_to_tab(name, expand=False))
+            self.tab_chips[tab_name] = chip
+
+        # 抽屉：默认收起，展开时列出全部诊断（每条可点，定位到页签）
+        self.diag_panel = ctk.CTkScrollableFrame(self, fg_color=SC_PANEL_BG,
+                                                 height=190, corner_radius=0)
+
+    def _toggle_diag_panel(self, open_=None):
+        # CTkScrollableFrame 的 pack() 转发给内部 _parent_frame，
+        # 而 winfo_manager() 恒返回 'canvas'，据此判展开会永远当成已展开、
+        # 每次点击都走收起分支——抽屉因此打不开。改用自己维护的状态。
+        visible = self._diag_panel_open
+        want = (not visible) if open_ is None else bool(open_)
+        if want == visible:
+            return
+        if want:
+            self._fill_diag_panel()
+            self.diag_panel.pack(fill='x', padx=0, pady=(0, 4),
+                                 before=self.content_frame)
+            self.diag_caret.configure(text="▴")
+        else:
+            self.diag_panel.pack_forget()
+            self.diag_caret.configure(text="▾")
+        self._diag_panel_open = want
+
+    def _fill_diag_panel(self):
+        for child in self.diag_panel.winfo_children():
+            child.destroy()
+        summary = self._diag_summary
+        if summary is None or not summary.total:
+            ctk.CTkLabel(self.diag_panel, text="未发现问题。",
+                         font=ui_fonts.ui_font(12), text_color=SC_OK).pack(anchor='w')
+            return
+        for diagnostic, tab_name in zip(summary.diagnostics, summary.tabs):
+            color = (SC_ERR if diagnostic.level == "error"
+                     else SC_TEXT_SOFT if diagnostic.level == "info" else SC_TEXT)
+            row = ctk.CTkFrame(self.diag_panel, fg_color="transparent")
+            row.pack(fill='x', pady=1)
+            left = ctk.CTkLabel(row, text="", anchor='w', justify='left')
+            text = (f"{LEVEL_LABELS.get(diagnostic.level, diagnostic.level)} · "
+                    f"{diagnostic.path + '：' if diagnostic.path else ''}"
+                    f"{diagnostic.message}")
+            left.configure(text=text, font=ui_fonts.ui_font(12), text_color=color,
+                           wraplength=620)
+            left.pack(side='left', fill='x', expand=True)
+            where = ctk.CTkLabel(row, text=f"{tab_name} ▸", font=ui_fonts.ui_font(11),
+                                 text_color=SC_LINK, cursor="hand2")
+            where.pack(side='right', padx=(8, 0))
+            handler = lambda _e, d=diagnostic, t=tab_name: self._jump_to_diagnostic(d, t)
+            left.bind("<Button-1>", handler)
+            where.bind("<Button-1>", handler)
+
+    def _jump_to_diagnostic(self, diagnostic, tab_name):
+        """诊断行 → 切到页签、尽量定位到具体行/节点、收起抽屉。"""
+        self._switch_to_tab(tab_name, expand=False)
+        self._toggle_diag_panel(False)
+        self._locate_path(diagnostic.path)
+
+    def _switch_to_tab(self, tab_name, expand=False):
+        self.dungeon_switch_btn.set(tab_name)
+        self._on_scenario_tab_switch(tab_name)
+        if expand:
+            self._toggle_diag_panel(True)
+
+    def _locate_path(self, path):
+        """按字段路径把作者带到大致位置；定位不了就只切页（不弹窗、不打断）。"""
+        root = diag_root_key(path)
+        if root in ("chapters", "triggers"):
+            # 剧情页：章节走「章节编排」，触发器走「触发器依赖」，再选中节点
+            view = VIEW_CHAPTERS if root == "chapters" else VIEW_TRIGGERS
+            self._on_story_view_switch(view, switch_widget=True)
+            self.graph_panel.focus_path(path)
+        elif root in ("components", "components_params", "text_component"):
+            refresh = getattr(self.component_panel, "refresh_list", None)
+            if callable(refresh):
+                refresh()
+
+    def _validate_config(self, scenario_id, config):
+        """校验一份配置，按方案目录解析素材路径；整份编辑器只认这一处口径。"""
+        scenario_dir = None
+        if scenario_id:
+            try:
+                scenario_dir = self._scenario_repo.scenario_dir(scenario_id)
+            except Exception:      # 目录算不出来不该挡着校验
+                scenario_dir = None
+        return validate_scenario_config(config, scenario_dir=scenario_dir)
+
+    def _apply_diagnostics(self, diagnostics):
+        self._diag_summary = diag_summarize(diagnostics)
+        self._render_diag_bar()
+
+    def _render_diag_bar(self):
+        summary = self._diag_summary
+        if summary is None:
+            return
+        quiet = summary.quiet
+        self.diag_pills["error"].configure(
+            text=f"● {summary.errors} 错误",
+            text_color=SC_ERR if summary.errors else SC_TEXT_SOFT)
+        self.diag_pills["warning"].configure(
+            text=f"▲ {summary.warnings} 警告",
+            text_color=(SC_TEXT if summary.warnings else SC_TEXT_SOFT))
+        if quiet:
+            self.diag_headline.configure(
+                text=("未发现问题。" if not summary.total
+                      else f"{summary.counts.get('info', 0)} 条提示"),
+                text_color=SC_OK if not summary.total else SC_TEXT_SOFT)
+        else:
+            self.diag_headline.configure(text=summary.headline(),
+                                         text_color=SC_TEXT_SOFT)
+        for tab_name, chip in self.tab_chips.items():
+            errors, warnings = summary.tab_counts(tab_name)
+            if errors or warnings:
+                chip.configure(text=f"{tab_name} {errors + warnings}",
+                               text_color=SC_ERR if errors else SC_TEXT,
+                               fg_color=SC_PANEL_BG)
+                if not chip.winfo_manager():
+                    chip.pack(side='right', padx=2)
+            elif chip.winfo_manager():
+                # 没问题的页签不占位，免得顶栏右侧挂一串空方块
+                chip.pack_forget()
+        if self._diag_panel_open:
+            self._fill_diag_panel()
 
     def _scenario_display(self, scenario_id):
         """方案 id → 界面显示名（未命名时回落成 id）。"""
@@ -265,26 +465,64 @@ class ScenarioEditor(ctk.CTkFrame):
             "成功", f"已从挑战包加载剧本「{self._scenario_repo.display_name(scenario_id)}」")
 
     def _on_scenario_tab_switch(self, value):
-        tab = value.strip()
-        # 角色页有防抖保存：换页前先落盘，动态页的章节多选要用最新人物表
+        tab_name = value.strip()
+        # 角色页有防抖保存：换页前先落盘，剧情页的章节多选要用最新人物表
         self.character_panel.flush_pending()
         # 隐藏所有面板
         self.prompt_panel.pack_forget()
         self.character_panel.pack_forget()
         self.chapter_trigger_panel.pack_forget()
+        self.story_view_switch.pack_forget()
+        self.graph_panel.pack_forget()
         self.component_panel.pack_forget()
 
-        if tab == "通用":
+        if tab_name == tab.TAB_GENERAL:
             self.prompt_panel.pack(fill='both', padx=9, expand=True)
-        elif tab == "角色":
+        elif tab_name == tab.TAB_CHARACTER:
             self.character_panel.refresh_from_config()
             self.character_panel.pack(fill='both', expand=True)
-        elif tab == "动态":
-            self.chapter_trigger_panel.refresh_list()
-            self.chapter_trigger_panel.pack(fill='both', expand=True)
-        elif tab == "组件":
+        elif tab_name == tab.TAB_STORY:
+            self.story_view_switch.pack(fill='x', padx=9, pady=(0, 6))
+            self._show_story_view(self._story_view)
+        elif tab_name == tab.TAB_COMPONENT:
             self.component_panel.refresh_list()
             self.component_panel.pack(fill='both', expand=True)
+
+    def _on_story_view_switch(self, value, switch_widget=False):
+        self._story_view = value
+        if switch_widget and self.story_view_switch is not None:
+            self.story_view_switch.set(value)
+        self._show_story_view(value)
+
+    def _story_config(self) -> dict:
+        """编排图吃的配置：磁盘上的完整配置 + 面板里的实时章节与触发器。
+
+        章节要过一遍 ``normalize_chapters``：方案里存的是精简字段，颜色等缺失项
+        靠这一步补默认值，否则泳道强调条取不到章节自定义色。
+        """
+        config = {}
+        if self.current_scenario_id:
+            config = self._scenario_repo.load_config(self.current_scenario_id) or {}
+        config = copy.deepcopy(config)
+        config["chapters"] = normalize_chapters(self.chapters)
+        config["triggers"] = self.triggers
+        return config
+
+    def _show_story_view(self, view):
+        """剧情页只有一块内容区：列表与两张编排图三者互相替代。"""
+        if view in (VIEW_CHAPTERS, VIEW_TRIGGERS):
+            self.chapter_trigger_panel.pack_forget()
+            # 顶栏校验条与编排图吃同一份诊断，避免两处各算一次给出不同结论
+            summary = self._diag_summary
+            self.graph_panel.set_data(
+                self._story_config(),
+                diagnostics=summary.diagnostics if summary is not None else None,
+                view=view)
+            self.graph_panel.pack(fill='both', expand=True)
+            return
+        self.graph_panel.pack_forget()
+        self.chapter_trigger_panel.refresh_list()
+        self.chapter_trigger_panel.pack(fill='both', expand=True)
 
     # ------------------ 新版通用面板 ------------------
     def _build_prompt_ui(self, parent):
@@ -694,6 +932,8 @@ class ScenarioEditor(ctk.CTkFrame):
     def _load_scenario(self, scenario_id):
         config = self._scenario_repo.load_config(scenario_id)
         if config is None:
+            # 没有可读配置时不能沿用上一个方案的诊断
+            self._apply_diagnostics([])
             return
         self.initial_prompt = config.get("initial_prompt", "")
         self.section_prompts = config.get("section_prompts", {})
@@ -742,6 +982,17 @@ class ScenarioEditor(ctk.CTkFrame):
         self.current_scenario_id = scenario_id
         self._refresh_ui_from_config()
         self.scenario_combo.set(self._scenario_display(scenario_id))
+
+        # 加载进来的方案也要立刻有诊断：顶栏与剧情页的编排图共用这一份，
+        # 不能等作者保存一次才显示（`last_diagnostics` 只记最近一次保存）。
+        diag_config = dict(config)
+        diag_config["chapters"] = self.chapters
+        diag_config["triggers"] = self.triggers
+        self._apply_diagnostics(self._validate_config(scenario_id, diag_config))
+        # 切方案时若正停在编排图，节点与诊断都得跟着换
+        if (self._story_view in (VIEW_CHAPTERS, VIEW_TRIGGERS)
+                and self.story_view_switch.winfo_manager()):
+            self._show_story_view(self._story_view)
 
     def _get_prompt_data_from_ui(self) -> dict:
         """从UI控件收集提示词相关数据"""
@@ -877,12 +1128,12 @@ class ScenarioEditor(ctk.CTkFrame):
         # 不更新提示词快照
 
     def _notify_validation(self) -> None:
-        """保存后把方案校验结果反馈给作者：有错误级诊断时弹窗汇总，其余仅控制台。"""
+        """保存后刷新顶栏校验条；有错误时只提示一次「去哪看」，不再弹窗挡住编辑。"""
         diagnostics = getattr(self._scenario_repo, "last_diagnostics", None) or []
+        self._apply_diagnostics(diagnostics)
         if has_errors(diagnostics):
-            ui.ctk.dialogs.showwarning(
-                "副本方案校验发现问题",
-                format_diagnostics(diagnostics, include_info=False))
+            print("[剧本编辑] 方案校验发现问题：\n"
+                  + format_diagnostics(diagnostics, include_info=False))
 
     def _rename_scenario(self):
         """改名只改显示名，方案目录与 id 不变（已进世界包的清单照旧有效）。"""

@@ -58,7 +58,6 @@ class ChapterTriggerManager(TreeviewManager):
         super().__init__(parent, repository, columns, item_name="章节/触发器")
         self.toolbar_frame.pack_forget()
         self._build_buttons()
-        self._build_hint_bar()
         self.refresh_list()
 
     # ---------- 底部按钮：两个新建键 + 共用编辑/删除/上移/下移 ----------
@@ -89,57 +88,6 @@ class ChapterTriggerManager(TreeviewManager):
                       width=80, **muted, **btn_style).pack(side='right', padx=5)
         ctk.CTkButton(right, text="上移", command=self.move_up,
                       width=80, **muted, **btn_style).pack(side='right', padx=5)
-
-    def _build_hint_bar(self):
-        """面板下方的说明与依赖检查栏。"""
-        bar = ctk.CTkFrame(self, fg_color="transparent")
-        bar.pack(fill='x', padx=9, pady=(0, 5))
-        ctk.CTkLabel(
-            bar,
-            text="章节行下方的缩进行是其触发器；「任意章节 / 无章节」的触发器排在最后。"
-                 "「固定文本」章节按脚本推进，其内的插入文本触发器会被跳过。",
-            font=ui_fonts.ui_font(12),
-            text_color=SCRIPT_TEXT_SOFT).pack(side='left', padx=(4, 12))
-        self.dep_status_label = ctk.CTkLabel(
-            bar, text="点击 “检查动态” 打开关系图",
-            font=ui_fonts.ui_font(12),
-            text_color=SCRIPT_TEXT_SOFT)
-        self.dep_status_label.pack(side='left', padx=(4, 5))
-        ctk.CTkButton(
-            bar, text="检查动态", width=100,
-            fg_color="transparent", border_width=1, corner_radius=8,
-            font=ui_fonts.ui_font(13),
-            text_color=SCRIPT_TEXT_SOFT,
-            hover_color=SCRIPT_HOVER,
-            border_color=SCRIPT_BORDER,
-            command=self.check_dependencies).pack(side='right', padx=(8, 0))
-
-    def check_dependencies(self):
-        """打开副本关系图对话框（章节总览 / 触发器依赖 / 清单）。
-
-        图上的结构问题与保存时的校验同一套判据（``dungeon/graph_lint.py`` 已并入
-        ``validate_scenario_config``），因此这里看到的就是保存/启动副本时会报的东西，
-        不需要另装 networkx / graphviz。
-        """
-        if not self._chapter_list() and not self._trigger_list():
-            ui.ctk.dialogs.showwarning("检查动态", "当前副本方案还没有章节与触发器，关系图为空。")
-            return
-        from ui.scenario.graph_view import ScenarioGraphDialog
-        dialog = ScenarioGraphDialog(self, self._scenario_config(),
-                                     scenario_dir=self._scenario_dir(),
-                                     title="副本关系图")
-        errors = sum(1 for item in dialog.diagnostics if item.level == "error")
-        warnings = sum(1 for item in dialog.diagnostics if item.level == "warning")
-        if errors:
-            self.dep_status_label.configure(
-                text=f"{errors} 错误 · {warnings} 警告（点右侧诊断可定位）",
-                text_color=SCRIPT_ERR)
-        elif warnings:
-            self.dep_status_label.configure(
-                text=f"{warnings} 警告（点右侧诊断可定位）",
-                text_color=SCRIPT_TEXT_SOFT)
-        else:
-            self.dep_status_label.configure(text="关系正常，未发现问题", text_color=SCRIPT_OK)
 
     def _scenario_config(self) -> dict:
         """关系图 / 校验用的配置：磁盘上的完整配置 + 面板里的实时章节与触发器。

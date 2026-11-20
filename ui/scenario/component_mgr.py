@@ -481,6 +481,10 @@ class ComponentManager(ctk.CTkFrame):
         editor.text_component = self.text_component
         editor.components = list(self.components)
         editor.components_params = dict(params)
+        # 组件页是自动保存：保存后顶栏校验条也要跟着刷新
+        notify = getattr(editor, "_notify_validation", None)
+        if callable(notify):
+            notify()
         self._saved_snapshot = (self.text_component, list(self.components),
                                 dict(params))
 
