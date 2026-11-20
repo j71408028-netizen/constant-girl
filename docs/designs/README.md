@@ -18,6 +18,9 @@
 | 行为包 | [behaviors/](behaviors/README.md) | 玩家 + 世界包 / 行为包作者 |
 | 资源与包体系 | [resources.md](resources.md)（挑战包另见 [challenges.md](challenges.md)） | 资源作者 |
 | 世界包 | [world_packs.md](world_packs.md) | 玩家 + 资源作者 |
+| 剧本编辑器 | [scenario_editor.md](scenario_editor.md) | 副本方案作者 + 想懂编排机制的人 |
+| 界面双模式与外观 | [ui_modes.md](ui_modes.md) | 核心开发者 + 界面改造者 |
+| 角色的时间维度 | [character_time.md](character_time.md) | 玩家 + 核心开发者 |
 
 跨机制的界面用词（副本、观测等级、耦合等级、性格、资源与行动）见
 `docs/terminology.md`；写界面文案、提示词或玩家文档前先查这一页。
@@ -41,6 +44,10 @@
 | 做**挑战包**（加密、秘钥、创建 / 导入 / 启动） | [challenges.md](challenges.md) |
 | 打包 / 分享**世界包**，理解激活期间的资源接管与命名空间 | [world_packs.md](world_packs.md) |
 | 做**小游戏**（副本触发器 + 作者 API） | [dungeon/minigame.md](dungeon/minigame.md) |
+| 用**剧本编辑器**（页签 / 编排图 / 校验条 / 素材导入） | [scenario_editor.md](scenario_editor.md) |
+| 写**副本显示组件**（钩子 / 参数 / slot 代管区） | [dungeon/components.md](dungeon/components.md) |
+| 理解**专业 / 挂件双界面**、主题配色或字体解析 | [ui_modes.md](ui_modes.md) |
+| 理解**恢复结算 / 作息 / 近况新闻 / 档案与角色卡导出** | [character_time.md](character_time.md) |
 
 ## 本组文档的写法：机制 = 目录
 

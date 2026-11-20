@@ -14,6 +14,7 @@
 | [admission.md](admission.md) | 方案进入准入：入口地址、距离与身高区间的字段与判定口径 |
 | [scene.md](scene.md) | 副本内地点与参照物：章节地址、地标候选池、尺寸换算与出口传送 |
 | [minigame.md](minigame.md) | 小游戏触发器：运行时、包格式与作者 API（小游戏作者） |
+| [components.md](components.md) | 显示组件：钩子契约、参数声明与夹取、注册与加载链、slot 代管区、窗口级浮层（组件作者） |
 
 ## 玩法结构的一条主线
 
@@ -21,6 +22,8 @@
 - **characters.md 定人物**：人物表是初始设定，运行期账本持有状态，提示词每段投影
   「此刻谁在场」；
 - **voice.md / scene.md / admission.md 是三个外围机制**：朗读与空间效果、章节地点与
-  尺寸换算、以及进入前的准入判定。
+  尺寸换算、以及进入前的准入判定；
+- **components.md 定窗口版式**：方案声明显示组件，文本主组件用 slot 代管区给
+  状态栏 / 过程日志留位。
 
 写方案从 [script.md](script.md) 进；只关心角色就先读 [characters.md](characters.md)。
