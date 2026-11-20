@@ -125,6 +125,11 @@ class TriggerHandler:
 
         self.current_chapter = name or None
         self.dungeon_state.chapter_steps = 0
+        # 细节探究按章降频：换章即丢掉上一章问过的线索、注入计数与「问过」标记，
+        # 新章节的第一段写完后再问一次（见 engine._start_detail_query）
+        self._detail_queries = []
+        self._detail_query_chapter = None
+        self._detail_injected = {}
         # 固定文本章节：换章即重置脚本进度（未播完就跳走 = 进度丢弃）
         self._reset_script_progress()
         self.chapter_sensitivity_effects = [

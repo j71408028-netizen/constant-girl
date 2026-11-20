@@ -1,12 +1,17 @@
-"""细节探究：AI 在后台提出「对象 + 方面」的查询，下次生成前检索参考。
+"""细节探究：AI 每章提一次「还想了解什么」，正文提到该线索时才注入参考。
 
-流式输出完成后（``engine._generate_next_text`` 尾部），立即用刚生成的
-段落、长期概要与章节意图组装提问，后台线程询问 AI 还想了解哪些会影响
-后续走向的线索（最多 2 组）。方面取自本模块的白名单，对象必须逐字来自
-提问时给 AI 的文本。下一次生成前，``build_turn`` 用对象在回放与长期记忆
-里召回、用方面信号词排序，把「原文参考 / 仅提及 / 未记载」三档结果注入
-提示词。``commit_turn`` 在回合成功后消费这一批查询，来源步不匹配的
-过期查询直接丢弃。
+**提问按章降频**：每章的第一段写完后（``engine._generate_next_text`` 尾部）
+问一次，最多 2 组「对象 + 方面」。方面取自本模块的白名单，对象必须逐字
+出现在提问时给 AI 的文本里（本章首段 / 长期记忆 / 近期剧情）。整章不再
+重复提问——逐段提问的产物寿命只有一段，只允许问「下一段就能解释的疑问」，
+而那类疑问主模型自己就能答，最后只会问出一堆泛泛的废话并逐段推高 prefill。
+
+**注入由关键词触发**：此后每段生成前 ``build_turn`` 看刚写完的那一段有没有
+提到某条线索的对象，命中才去回放与长期记忆里召回原文、把「原文参考 /
+仅提及 / 未记载」三档注入下一段；同一条线索一章内最多注入
+``MAX_INJECT_PER_CHAPTER`` 次，避免每段重复塞同一段参考。检索刻意放在
+**触发时**而不是提问后：这样本章后来才写下的解答也能被召回。
+换章时整批查询作废（见 ``triggers._enter_chapter``）。
 """
 
 import json
@@ -18,6 +23,10 @@ from typing import NamedTuple
 from .cast import clean_name
 
 MAX_QUERIES = 2
+#: 同一条线索在**一章内**最多注入几次（触发式注入的上限）。
+#: 一条线索一旦被正文反复提到，每段都重述同一段参考既浪费 prefill，
+#: 也会把模型按在那段参考上打转。
+MAX_INJECT_PER_CHAPTER = 2
 QUERY_CHARS = 30
 OBJECT_CHARS = 12
 MATCH_CLIP_CHARS = 120
@@ -33,9 +42,11 @@ _PRONOUN_OBJECTS = {"她", "他", "它", "自己", "主角", "这个", "那个",
                     "东西", "事情", "对方", "他们", "她们", "它们"}
 #: 单字虚词与泛词，不能充当检索对象
 _STOP_SINGLE = set("的了是在吗呢吧啊和与对把被从向在为有这那其之者也")
-#: 角色抽取搭车：不增加调用次数，只扩展同一次细节提问的返回格式
+#: 角色抽取搭车：不增加调用次数，只扩展同一次细节提问的返回格式。
+#: 这条通道随「每章一次」降频（见模块文档串），逐段的在场 / 被提起仍由
+#: ``engine._observe_characters`` 确定性记账，真名与关系变化另有摘要搭车补。
 CHARACTER_UPDATE_HINT = (
-    "另外，如果本段出现了值得继续追踪的角色，把它们放进 characters 数组："
+    "另外，如果上面这些正文里出现了值得继续追踪的角色，把它们放进 characters 数组："
     '[{"handle": "正文里实际出现的称呼", "true_name": "", "pronoun": "他/她/空", '
     '"traits": ["特征", "近况"], "relation": "与她的关系", '
     '"status": "temporary"}]。真名尚未揭示时 true_name 留空；正文明确揭示真名时'
@@ -146,7 +157,9 @@ def build_detail_query_prompt(paragraph_text, recent_texts=(), chapter_name="",
         lines.extend(f"- {_clip(t, 100)}" for t in recent)
     lines.append("刚生成的段落：")
     lines.append(_clip(paragraph_text, 200))
-    lines.append("请只提出真正会影响后续多段或跨章节走向、且正文尚未交代清楚的线索；"
+    lines.append("这次提问覆盖接下来整个章节，本章不会再问第二次。"
+                 "请只提出本章接下来真正需要交代、而正文尚未说清楚的线索"
+                 "（动机、关系、伏笔、承诺、未解事件等）；"
                  "不要问刚刚写明的信息，也不要把问题问成对具体物件或路人的考据。")
     lines.append(f"每条线索写成「对象 + 方面」，最多 {MAX_QUERIES} 组。"
                  f"方面只能从这个白名单里选：{aspect_names()}。"
@@ -411,3 +424,57 @@ def search_replay_details(queries, replay_data) -> list:
     """在回放缓存中为每条查询检索最相关段落，返回命中的解释行。"""
     return [f"{m.label}——{m.text}"
             for m in resolve_detail_queries(queries, replay_data) if m.text]
+
+
+# ---------------- 关键词触发（本章内注入的闸门） ----------------
+
+def detail_key(query) -> str:
+    """查询的稳定键：用于「本章已注入几次」的计数表。"""
+    if isinstance(query, DetailQuery):
+        return f"{query.object}\x1f{query.aspect}"
+    return str(query)
+
+
+def detail_trigger_score(query, text) -> float:
+    """刚写完的正文提到这条线索的程度；0 表示没提到、不触发。
+
+    结构化查询以对象字面出现为硬条件（与提问时的校验同口径），方面信号词
+    只用来排序——同一段里出现「于是 / 结果」说明这次提到的正好是这条线索的
+    后果，比单纯点名更值得注入。旧字符串查询按二元组覆盖率判定，与
+    :func:`_resolve_legacy` 的命中阈值一致，保留既有调用方的行为。
+    """
+    text = str(text or "")
+    if not text:
+        return 0.0
+    if isinstance(query, DetailQuery):
+        if not query.object or query.object not in text:
+            return 0.0
+        spec = ASPECTS.get(query.aspect)
+        hits = sum(1 for signal in spec.signals if signal in text) if spec else 0
+        return 1.0 + 0.5 * hits
+    keywords = _keywords(str(query))
+    if not keywords:
+        return 0.0
+    hits = sum(1 for keyword in keywords if keyword in text)
+    if hits < max(1, math.ceil(len(keywords) * 0.35)):
+        return 0.0
+    return hits / len(keywords)
+
+
+def pick_triggered(queries, text, injected=None, limit=MAX_QUERIES) -> list:
+    """挑出这一轮该注入的查询：正文命中、且本章注入次数未满，按强度排序。
+
+    ``injected`` 是 ``detail_key -> 已注入次数`` 的计数表。返回查询对象列表
+    （保持与 ``resolve_detail_queries`` 的入参同型），最多 ``limit`` 条。
+    """
+    injected = injected if isinstance(injected, dict) else {}
+    scored = []
+    for query in queries or ():
+        if int(injected.get(detail_key(query), 0)) >= MAX_INJECT_PER_CHAPTER:
+            continue
+        score = detail_trigger_score(query, text)
+        if score > 0:
+            scored.append((score, query))
+    if len(scored) > 1:
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [query for _score, query in scored[:limit]]

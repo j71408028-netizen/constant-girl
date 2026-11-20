@@ -258,9 +258,12 @@ class DungeonWindowBase:
         # 真流式下目标文本随 chunk 增长；同时为自动播放记录停留到期时刻。
         self._reveal = None
         self._advance_due = 0.0
-        # 细节探究：AI 在后台提出的想了解细节，下次生成前检索解答并消费
+        # 细节探究：**每章问一次**「还想了解什么」，之后只在本章正文提到某条线索
+        # （对象命中）时，把它检索出来的参考注入下一段。逐段提问会退化成一堆
+        # 泛泛的废话，还让预生成每段都等一次调用（见 dungeon/details.py 文档串）
         self._detail_queries = []
-        self._detail_query_step = None
+        self._detail_query_chapter = None   # 已经问过的那一章；None = 本章还没问
+        self._detail_injected = {}          # 线索键 -> 本章已注入次数
         self._detail_querying = False
         # 预生成会等这次提问落地再组装提示词（见 engine._start_pregen）
         self._detail_query_done = threading.Event()

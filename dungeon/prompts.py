@@ -19,7 +19,8 @@ from .speaker_notation import (DEFAULT_SPEAKER_NOTATION, SPEAKER_STABILITY_RULE,
                               TAGGED, TAGGED_SPEAKER_RULE,
                               normalize_speaker_notation,
                               notation_declaration)
-from .details import detail_injection_line, resolve_detail_queries
+from .details import (detail_injection_line, detail_key, pick_triggered,
+                      resolve_detail_queries)
 from .models import DungeonTextType
 from .response import canonical_user_entry
 from .scene import place_label
@@ -69,10 +70,8 @@ class TurnEffects:
     introduced_cast: set = field(default_factory=set)
     #: 本章 ``cast`` 声明的在场成员 id，提交后写入角色账本的观测状态
     declared_present: set = field(default_factory=set)
-    #: 构建时读过细节疑问，提交后清空 ``_detail_queries``
-    consume_detail_queries: bool = False
-    #: 本次读到的疑问属于哪一步（提交时只清这一批，不误伤后到的新问题）
-    detail_query_step: int | None = None
+    #: 本轮注入的细节线索键，提交后累加本章的注入计数（不丢弃其余查询）
+    detail_injected: list = field(default_factory=list)
     #: 本段用过的「同时在场」地标，提交后才写入会话
     prompted_presence_landmark: str = ""
 
@@ -320,36 +319,14 @@ class DungeonPromptBuilder:
             place = place_label(chapter)
             if place:
                 chapter_line += f"当前地点：{place}\n"
-        # 细节补充：AI 在上一段生成后提出的疑问，回到正文里找参考；
-        # 找不到明确记载的也保留下来，由主生成模型决定补全还是留悬念。
+        # 细节补充：本章开头问过一次「还想了解什么」，此后只有刚写完的那一段
+        # 真的提到那条线索时才注入——命中才出现，避免了每段都塞一段无关设定。
+        detail_lines, injected_keys = self._triggered_detail_block()
         detail_block = ""
-        pending_queries = getattr(session, "_detail_queries", None)
-        query_step = getattr(session, "_detail_query_step", None)
-        current_step = getattr(session, "step_num", None)
-        step_matches = (query_step is None or current_step is None
-                        or int(query_step) == int(current_step))
-        if pending_queries:
-            if step_matches:
-                pairs = resolve_detail_queries(
-                    pending_queries, getattr(session, "replay_data", None),
-                    memory_lines=self._detail_memory_lines(),
-                    source_step=query_step)
-                if pairs:
-                    lines = ["细节补充（AI 此前想了解、正文尚未交代清楚的线索）："]
-                    lines.extend(detail_injection_line(query, match)
-                                 for query, match in zip(pending_queries, pairs))
-                    detail_block = "\n".join(lines) + "\n"
-                    answered = sum(1 for match in pairs
-                                   if match.state == "answered")
-                    process_log.log(
-                        f"[DetailQuery] 注入 {answered}/{len(pairs)} 条线索"
-                        "（含仅提及与未记载）")
-            else:
-                process_log.log(
-                    f"[DetailQuery] 丢弃过期线索（来源步 {query_step}，"
-                    f"当前步 {current_step}）")
-            effects.consume_detail_queries = True
-            effects.detail_query_step = query_step
+        if detail_lines:
+            detail_block = ("细节补充（本章提到、正文尚未交代清楚的线索）：\n"
+                            + "\n".join(detail_lines) + "\n")
+            effects.detail_injected.extend(injected_keys)
         pack = coupling_prompts(level)
         cast_block, introduced, declared_present = self._cast_block()
         effects.introduced_cast.update(introduced)
@@ -420,11 +397,14 @@ class DungeonPromptBuilder:
             introduced.update(effects.introduced_cast)
         if effects.prompted_presence_landmark:
             session.prompted_presence_landmark = effects.prompted_presence_landmark
-        if effects.consume_detail_queries:
-            current = getattr(session, "_detail_query_step", None)
-            if effects.detail_query_step is None or current == effects.detail_query_step:
-                session._detail_queries = []
-                session._detail_query_step = None
+        if effects.detail_injected:
+            # 只累加计数、不丢弃查询：同一条线索本章还能再注入到上限
+            registry = getattr(session, "_detail_injected", None)
+            if not isinstance(registry, dict):
+                registry = {}
+                session._detail_injected = registry
+            for key in effects.detail_injected:
+                registry[key] = int(registry.get(key, 0)) + 1
         ledger = getattr(session, "characters", None)
         if isinstance(ledger, CharacterLedger):
             step = int(getattr(session, "step_num", 0) or 0)
@@ -433,6 +413,38 @@ class DungeonPromptBuilder:
                 ledger.mark_declared(effects.declared_present, step=step,
                                      chapter=chapter)
             ledger.decay(step)
+
+    def _triggered_detail_block(self):
+        """本章细节线索的关键词闸门：命中才检索、才注入。
+
+        返回 ``(注入行, 本轮注入的线索键)``；没有可用线索时返回两个空列表。
+        判定链（全部是本地字符串运算，不开请求）：
+
+        1. 本章没问过、或问的是别的章（换章后旧查询作废）→ 不注入；
+        2. 拿**刚写完的那一段**当触发语料（``last_ai_text``），对象没出现就不触发；
+        3. 已注入满 ``MAX_INJECT_PER_CHAPTER`` 次的线索跳过；
+        4. 命中后才去回放与长期记忆里召回原文——检索放在触发时，本章后来才写下的
+           解答也能被召回（提问后立刻检索会漏掉它们）。
+        """
+        session = self.context
+        queries = getattr(session, "_detail_queries", None) or ()
+        chapter = str(getattr(session, "current_chapter", "") or "")
+        if str(getattr(session, "_detail_query_chapter", "") or "") != chapter:
+            return [], []
+        picked = pick_triggered(
+            queries, getattr(session, "last_ai_text", ""),
+            injected=getattr(session, "_detail_injected", None))
+        if not picked:
+            return [], []
+        matches = resolve_detail_queries(
+            picked, getattr(session, "replay_data", None),
+            memory_lines=self._detail_memory_lines())
+        lines = [detail_injection_line(query, match)
+                 for query, match in zip(picked, matches)]
+        process_log.log(
+            f"[DetailQuery] 正文提到线索，注入 {len(lines)} 条："
+            f"{[match.label for match in matches]}")
+        return lines, [detail_key(query) for query in picked]
 
     def _detail_memory_lines(self) -> list:
         """细节检索可用的长期记忆行：事实卡、压缩概要与关键事件。"""

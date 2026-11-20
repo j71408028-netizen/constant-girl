@@ -477,27 +477,41 @@ class DungeonStoryEngine:
             self._enter_chapter(target, record=True)
 
     # ---------- 细节探究 ----------
-    def _start_detail_query(self, paragraph_text, step=None):
-        """流式输出完成后立即在后台询问 AI 想了解的细节。
+    def _should_ask_detail(self) -> bool:
+        """本章是否还没问过细节（每章只问一次，换章由 _enter_chapter 复位）。"""
+        return getattr(self, "_detail_query_chapter", None) is None
 
-        同一请求搭车抽取角色更新（``characters``）；结果存入
-        ``_detail_queries`` / 角色账本，由 ``build_turn`` 在下一次生成前检索
-        回放缓存解答、``commit_turn`` 在成功后消费。与正常生成互不阻塞。
+    def _start_detail_query(self, paragraph_text, step=None):
+        """本章第一段写完后，在后台问一次 AI 想了解哪些细节。
+
+        **按章降频**：逐段提问的产物寿命只有一段（第 N 段问、第 N+1 段注入），
+        只允许问「下一段就能解释的疑问」，因此必然退化成泛泛的废话，还让
+        ``_start_pregen`` 每段都要等它落地。现在整章只问一次，结果留在
+        ``_detail_queries`` 里整章有效，由 ``build_turn`` 在正文提到该线索时
+        才注入、``commit_turn`` 累加注入次数。
+
+        同一请求搭车抽取角色更新（``characters``）；失败时复位「问过」标记，
+        下一次生成会重试一次，不让一次网络抖动废掉整章。
         """
         if self._in_fixed_text_chapter():
             return  # 固定文本章节没有 AI 生成，细节探究无处消费
         if getattr(self, "_detail_querying", False):
             return
+        if not self._should_ask_detail():
+            return  # 本章已经问过
         client = getattr(self, "ai_client", None)
         if client is None or self._closing:
             return
         self._detail_querying = True
+        # 先占位再起线程：避免同一章被并发问两遍（异常时在 finally 里复位）
+        self._detail_query_chapter = str(getattr(self, "current_chapter", "") or "")
         done = getattr(self, "_detail_query_done", None)
         if done is not None:
             done.clear()
-        chapter = str(getattr(self, "current_chapter", "") or "")
+        chapter = self._detail_query_chapter
 
         def run():
+            ok = False
             try:
                 replay = getattr(self, "replay_data", [])
                 recent = [e.get("text") for e in replay[:-1]
@@ -523,10 +537,13 @@ class DungeonStoryEngine:
                 updates = parse_character_updates(raw)
                 if not self._closing:
                     self._detail_queries = queries
-                    self._detail_query_step = step
+                    self._detail_injected = {}
+                    ok = True
                     if queries:
                         labels = [format_detail_label(q) for q in queries]
-                        process_log.log(f"[DetailQuery] 想了解的细节: {labels}")
+                        process_log.log(
+                            f"[DetailQuery] 本章线索（写满一章，按关键词注入）: "
+                            f"{labels}")
                     if updates:
                         # 账本只在主线程改：后台线程把结果投递回帧时钟
                         self._frame.call(
@@ -536,6 +553,9 @@ class DungeonStoryEngine:
                 process_log.log(f"[DetailQuery] 细节提问失败: {e}")
             finally:
                 self._detail_querying = False
+                if not ok:
+                    # 没拿到结果就不算问过：留给后面的段落再试一次
+                    self._detail_query_chapter = None
                 if done is not None:
                     done.set()
 
@@ -568,8 +588,8 @@ class DungeonStoryEngine:
     def _start_pregen(self):
         """后台预生成下一段：缓存 (turn, 生成前历史, 原始响应, 段落类型)。
 
-        预生成与细节提问几乎同时起跑；这里先等提问落地再组装提示词，
-        否则预生成会在细节结果返回前定型，细节补充永远慢一段。
+        细节提问现在每章只发一次，所以这条等待一章里最多真正生效一次（第一次
+        预生成与本章提问几乎同时起跑）；其余时候 Event 已是置位状态，直接放行。
         等待发生在后台线程里，不占帧循环；超时则按现有上下文继续。
         """
         # build_turn 不写会话状态；预生成失败直接丢弃产物即可，无需快照还原。

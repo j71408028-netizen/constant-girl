@@ -13,7 +13,8 @@
 6. 归一化（别称串 / id 缺省 / 非法 role / 章节 cast 的 @ 与分隔符）；
 7. 校验器：重名撞车、非法代词、章节 cast 指向不存在的成员；
 8. 构建 / 提交分离：``build_turn`` 不写会话状态，``commit_turn`` 才生效，
-   canonical 历史只留章节与叙事指令；细节疑问按来源步消费，不误清后到的新疑问；
+   canonical 历史只留章节与叙事指令；细节线索每章一份、正文提到才注入，
+   提不到不注入、换章作废、同一条有注入次数上限；
 9. 称呼稳定性规则只在有角色时注入；
 10. ``intro_as``：按临时称呼出场且不泄漏真名，撞车校验。
 """
@@ -44,8 +45,9 @@ def check(name, ok, extra=""):
 
 
 from dungeon import cast  # noqa: E402
-from dungeon.details import (ASPECTS, DetailQuery, build_detail_query_prompt,  # noqa: E402
-                             detail_injection_line, format_detail_label,
+from dungeon.details import (ASPECTS, MAX_INJECT_PER_CHAPTER, DetailQuery,  # noqa: E402
+                             build_detail_query_prompt, detail_injection_line,
+                             detail_key, format_detail_label,
                              parse_detail_queries, resolve_detail_queries,
                              search_replay_details)
 from dungeon.models import DungeonState, DungeonTextType  # noqa: E402
@@ -282,13 +284,14 @@ check("提交后下一段改用简报",
 
 _queries = make_session(cast_members=[_li], chapters=[{"name": "城里"}])
 _queries._detail_queries = ["她有多大"]
+_queries._detail_query_chapter = "城里"
 _qbuilder = DungeonPromptBuilder(_queries)
 _qturn = _qbuilder.build_turn(_TEXT_TYPE)
-check("build_turn 不消费细节疑问",
+check("build_turn 不消费细节疑问（旧字符串查询本章还能再用）",
       _queries._detail_queries == ["她有多大"]
-      and _qturn.effects.consume_detail_queries)
+      and _qturn.effects.detail_injected == [])
 _qbuilder.commit_turn(_qturn.effects)
-check("commit_turn 才清空细节疑问", _queries._detail_queries == [])
+check("commit_turn 也不清空细节疑问", _queries._detail_queries == ["她有多大"])
 
 _detail_replay = [
     {"text": "她把那块亮着的东西举起来，上面有一行字：我的分数。"},
@@ -374,36 +377,55 @@ check("旧字符串检索与解释行接口保持可用",
       and any("【桥】的【后果】" in line for line in search_replay_details(
           [DetailQuery("桥", "后果")], _aspect_replay)))
 
+# ---------------- 细节线索的关键词闸门（每章问一次，提到才注入） ----------------
 _inject = make_session()
 _inject._detail_queries = [DetailQuery("桥", "后果")]
-_inject._detail_query_step = None
+_inject._detail_query_chapter = "城里"
+_inject.last_ai_text = "桥在午后塌了，她低头看着断口。"
 _inject.replay_data = _aspect_replay
-_inject_turn = DungeonPromptBuilder(_inject).build_turn(_TEXT_TYPE)
-check("build_turn 注入结构化标签与命中的原文参考",
+_inject_builder = DungeonPromptBuilder(_inject)
+_inject_turn = _inject_builder.build_turn(_TEXT_TYPE)
+check("正文提到线索对象才注入，标签与原文参考齐全",
       "【桥】的【后果】" in _inject_turn.text
-      and "没能全部撤出" in _inject_turn.text)
+      and "没能全部撤出" in _inject_turn.text
+      and _inject_turn.effects.detail_injected == [detail_key(DetailQuery("桥", "后果"))])
+_inject_builder.commit_turn(_inject_turn.effects)
+check("提交后只累加注入次数，不丢弃本章线索",
+      _inject._detail_queries == [DetailQuery("桥", "后果")]
+      and _inject._detail_injected[detail_key(DetailQuery("桥", "后果"))] == 1)
 
-_stale = make_session(cast_members=[_li], chapters=[{"name": "城里"}])
-_stale._detail_queries = ["她有多大"]
-_stale._detail_query_step = 4
-_stale.step_num = 5
-_stale.replay_data = [{"text": "她很巨大。"}]
-_stale_turn = DungeonPromptBuilder(_stale).build_turn(_TEXT_TYPE)
-check("过期细节疑问不进入提示词",
-      "细节补充" not in _stale_turn.text
-      and _stale_turn.effects.consume_detail_queries)
-DungeonPromptBuilder(_stale).commit_turn(_stale_turn.effects)
-check("过期细节疑问在提交后清空", _stale._detail_queries == [])
+_quiet = make_session()
+_quiet._detail_queries = [DetailQuery("桥", "后果")]
+_quiet._detail_query_chapter = "城里"
+_quiet.last_ai_text = "她俯身看清掌心里的他，指节微微收拢。"
+check("正文没提到线索就不注入（不再逐段硬塞）",
+      "细节补充" not in DungeonPromptBuilder(_quiet).build_turn(_TEXT_TYPE).text)
 
-_fresh = make_session(cast_members=[_li], chapters=[{"name": "城里"}])
-_fresh._detail_queries = ["旧问题"]
-_fresh._detail_query_step = 5
-_fresh.step_num = 5
-_fresh_turn = DungeonPromptBuilder(_fresh).build_turn(_TEXT_TYPE)
-_fresh._detail_queries = ["新问题"]
-_fresh._detail_query_step = 6
-DungeonPromptBuilder(_fresh).commit_turn(_fresh_turn.effects)
-check("提交旧回合不误清后到的新疑问", _fresh._detail_queries == ["新问题"])
+_other = make_session(current="别处")
+_other._detail_queries = [DetailQuery("桥", "后果")]
+_other._detail_query_chapter = "城里"
+_other.last_ai_text = "桥在午后塌了。"
+_other.replay_data = _aspect_replay
+check("换章后上一章的线索作废，不再注入",
+      "细节补充" not in DungeonPromptBuilder(_other).build_turn(_TEXT_TYPE).text)
+
+_capped = make_session()
+_capped._detail_queries = [DetailQuery("桥", "后果")]
+_capped._detail_query_chapter = "城里"
+_capped.last_ai_text = "桥又塌了一次。"
+_capped.replay_data = _aspect_replay
+_capped._detail_injected = {detail_key(DetailQuery("桥", "后果")):
+                            MAX_INJECT_PER_CHAPTER}
+check("同一条线索本章注入到上限后不再重复",
+      "细节补充" not in DungeonPromptBuilder(_capped).build_turn(_TEXT_TYPE).text)
+
+_legacy_trigger = make_session()
+_legacy_trigger._detail_queries = ["回稳会发东西"]
+_legacy_trigger._detail_query_chapter = "城里"
+_legacy_trigger.last_ai_text = "回稳会会给你发一个东西。"
+_legacy_trigger.replay_data = _detail_replay
+check("旧字符串查询按二元组命中触发",
+      "细节补充" in DungeonPromptBuilder(_legacy_trigger).build_turn(_TEXT_TYPE).text)
 
 _wrapped = make_session(cast_members=[_li],
                         chapters=[{"name": "城里", "cast": ["李队长"]}])
@@ -501,13 +523,20 @@ def _source(rel_path):
 _base_source = _source(os.path.join("dungeon", "window", "base.py"))
 _engine_source = _source(os.path.join("dungeon", "window", "engine.py"))
 _prompts_source = _source(os.path.join("dungeon", "prompts.py"))
-check("窗口初始化细节提问来源步", "self._detail_query_step = None" in _base_source)
+_triggers_source = _source(os.path.join("dungeon", "window", "triggers.py"))
+check("窗口初始化细节提问的「问过哪一章」标记",
+      "self._detail_query_chapter = None" in _base_source)
 check("窗口初始化并放行预生成等待 Event",
       "self._detail_query_done = threading.Event()" in _base_source
       and "self._detail_query_done.set()" in _base_source)
 check("预生成消费等待 Event", "_detail_query_done" in _engine_source
       and ".wait(" in _engine_source)
-check("提示词消费并清空来源步", "_detail_query_step" in _prompts_source)
+check("换章复位细节线索（每章只问一次）",
+      "_detail_query_chapter = None" in _triggers_source
+      and "self._detail_queries = []" in _triggers_source)
+check("提示词按关键词闸门注入，不再按步消费",
+      "_detail_query_chapter" in _prompts_source
+      and "consume_detail_queries" not in _prompts_source)
 
 # ---------------- 结论 ----------------
 print()

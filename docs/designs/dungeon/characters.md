@@ -195,10 +195,13 @@ revealed ──不回退；改名只追加 aka──▶ revealed
 | 通道 | 触发 | 落点 |
 |---|---|---|
 | 确定性 | `@X@` 解析、章节 `cast`、`intro_as`、说话人规则 | 不需要 AI |
-| 细节探究搭车 | 后台细节调用返回 `characters[]`（`details.py::parse_character_updates`） | `apply_updates` |
+| 细节探究搭车 | 每章一次的后台细节调用返回 `characters[]`（`details.py::parse_character_updates`） | `apply_updates` |
 | 摘要搭车 | 压缩响应带 `character_updates`（`summary.py::drain_character_updates`） | `apply_updates` |
 
 两条 AI 通道都是**既有调用的搭车**，不新增调用次数；解析失败返回空列表，不影响主流程。
+细节探究按章降频（见 `docs/Dungeon/window.md`「细节探究」）后，这条通道的
+节奏跟章节而不是段落；逐段的在场 / 被提起仍由确定性通道记账，
+真名揭示与关系变化则由压缩搭车（默认每 20 段）与换章压缩补上。
 `apply_updates` 里：未知称呼首次出现登记成临时角色；真名揭示走 §4.4 的锚点规则；
 特征 / 关系有界去重；群像不吸收任何可变状态。
 
