@@ -3,8 +3,8 @@
 > **这一篇回答什么问题**：角色和「某个人」聊天时，她此刻适合聊什么、为什么同一个人
 > 换一个身份她就像不认识你、聊天又凭什么反过来改变世界。
 >
-> 这是**现状**（2026-10-27 已实现部分）。消息的生命周期、协议解析、投递节奏等实现细节
-> 实现细节在 `docs/dev/chat_delivery.md`；本篇只讲机制与调参入口。
+> 消息的生命周期、协议解析、投递节奏等实现细节在 `docs/dev/chat_delivery.md`；
+> 本篇只讲机制与调参入口。
 
 一句话：聊天按 **玩家身份** 拆成互不相通的线程；每条线程用 **好感、紧张度、状态**
 三轴坐标筛选 **话题类型**；AI 在候选类型里决定聊什么，并在回复后最多执行 **一个世界效果**。
@@ -51,7 +51,7 @@ AI 决策：继续 / 开新话题 / 切换 / 结束 / 已读不回
   算默认身份，读时回退、不迁移不删除。
 - 未读按线程统计；角色卡徽标是各线程之和，**只是显示层聚合**，域内隔离不受影响。
 
-实现与存储细节见 [`../dev/chat_delivery.md`（实现细节在 `docs/dev/chat_delivery.md`） §3。
+实现与存储细节见 `docs/dev/chat_delivery.md` §3。
 
 ## 3. 三轴坐标
 
@@ -99,7 +99,7 @@ size_state = clamp(0.5 + 0.4 × resilience − 0.5 × edge − 0.5 × ap_deficit
 定义：坐标、半径、标签、优先级、注意力框架（`frame`）、体裁（`prompt`）与信息视角
 （`opens` / `denies` / `budget` / `disclosure`）都在同一条 `TopicKind` 里——增删
 一个话题只动一处。坐标决定"能不能选"，视角决定"选了给什么"（视角的字段目录与预算见
-[`chat_topic_lens.md`](lens.md)）。
+[`lens.md`](lens.md)）。
 
 初始注册表（坐标顺序：好感 / 紧张度 / 状态）：
 
@@ -115,7 +115,7 @@ size_state = clamp(0.5 + 0.4 × resilience − 0.5 × edge − 0.5 × ap_deficit
 | `aloof` | 疏离/客套 | 关系状态 | 0.20 / 0.25 / 0.30 | 冷淡、公事公办、回避私事 |
 | `showoff` | 自得/炫耀 | 关系状态 | 0.25 / 0.25 / 0.80 | 享受尺寸、带炫耀、保持距离 |
 
-**试运行批次**（2026-10-28 加入，未定版；判定标准是「一条类型要么是一类事，要么
+**试运行批次**（未定版；判定标准是「一条类型要么是一类事，要么
 是一种交流状态」，半径按类型单独设，0.24~0.28）：
 
 | id | 名称 | 类别 | 坐标 | 话题落点 |
@@ -207,8 +207,7 @@ size_state = clamp(0.5 + 0.4 × resilience − 0.5 × edge − 0.5 × ap_deficit
 | 关系认知的紧急度映射 | 同文件：`RELATIONSHIP_TENSION_OFFSETS` |
 | 话题类型集 / 坐标 / 半径 / 框架 / 体裁 / 视角 | `services/chat/topic_kinds.py`：`TOPIC_KINDS` 里的一条 `TopicKind`（常量 `TOPIC_KIND_RADIUS`、`TOPIC_REPEAT_PENALTY`、`TOPIC_CANDIDATE_LIMIT` 同文件） |
 | 按类别查阅话题（关系状态 / 话题） | 同文件：`tags` + `kinds_with_tag(KIND_TAG_RELATION / KIND_TAG_TOPIC)`；只影响查阅，不影响筛选 |
-| 某类话题下 AI 知道什么（字段 / 预算 / 是否透露） | 同一条 `TopicKind` 的 `opens` / `denies` / `budget` / `disclosure`；字段目录在 `services/chat/topic_lens.py`，见 [`chat_topic_lens.md`](lens.md) |
-| 世界包增删话题（尚未接线） | `install_topic_kinds` / `topic_kind_from_dict`，见 [`chat_topic_lens.md`](lens.md) §7.1 |
+| 某类话题下 AI 知道什么（字段 / 预算 / 是否透露）；世界包整表替换话题 | 视角层与整表替换的入口见 [`lens.md`](lens.md) §6 |
 | 关系转移图与冷却 | `services/chat/__init__.py`：`IDENTITY_TRANSITIONS`、`IDENTITY_UPDATE_COOLDOWN_HOURS` |
 | 话题轮数上限 / 过期 | 同文件：`MAX_TOPIC_TURNS`、`TOPIC_EXPIRE_HOURS` |
 | 效果工具与幅度 | `services/chat/effects.py`：`EFFECT_HANDLERS`、`SELF_VIEW_CHAR_LIMIT`、`STEP_NUDGE_AMOUNT` |
@@ -231,9 +230,8 @@ python tests/run_checks.py check_chat_coordinates check_chat_topics \
 - 状态长期偏高是待观察的调参问题：若实测贴住 1，把 `W_E / W_A` 调大或把状态中心从 0.5
   下调。
 - **敌意与后果类不扩**：`EFFECT_HANDLERS` 只有 `self_view` / `step_nudge`，没有任何
-  制裁通道；玩家身份只是马甲，世界也罚不到她。写出来的威胁没有落点，说多了反而不可
-  信，所以对抗向只保留 `spar`（言语施压）与 `guard`（戒备）两条，高紧张区（≥0.75）
-  刻意稀疏——那里本来只在世界敌对且刚出大事时才到得了。
+  制裁通道；对抗向只保留 `spar`（言语施压）与 `guard`（戒备）两条，高紧张区（≥0.75）
+  类型稀疏。
 - **个人状态不单独成类型**：疼痛、不适、硬撑、走神、困倦是 `size_state` 与体裁的取值，
   不是「聊什么」；它们并入 `body` / `reflect` 的 `frame`，或交给投递节奏（短回复、
   间隔长）。告别、已读不回同属话题生命周期，由 `topic.status` / `silent_reason` 承担。
@@ -245,6 +243,6 @@ python tests/run_checks.py check_chat_coordinates check_chat_topics \
 
 ## 相关
 
-- 消息生命周期、协议解析、投递与界面职责：[`../dev/chat_delivery.md`（实现细节在 `docs/dev/chat_delivery.md`）
+- 消息生命周期、协议解析、投递与界面职责：`docs/dev/chat_delivery.md`
 - 演化坐标、深度与不适应性衰减：[`character_evolution.md`](../character_evolution.md)
 - 行为包能覆盖什么：[`behaviors/dev-guide.md`](../behaviors/dev-guide.md)

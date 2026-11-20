@@ -1,7 +1,7 @@
 # 小游戏框架
 
 > **定位**：`mini_game` 触发器的运行时、小游戏包格式与作者 API。
-> 触发器动作字段见[数据模型](script.md) §6；宿主端口见[宿主边界（见 `docs/Dungeon/window_host.md` 宿主边界） §1。
+> 触发器动作字段见[数据模型](script.md) §6；宿主端口见 `docs/Dungeon/window_host.md` §1。
 
 一句话：**写一个 Python 类就是一个小游戏**——作者不接触窗口框架；
 绘制 / 输入 / 帧时钟 / 纹理 / 结算 / 回放全部由框架（`dungeon/window/minigame/`）承担。
@@ -12,10 +12,6 @@
 覆盖层舞台**运行：帧末绘制的一个铺满客户区的顶层窗口（压在工具条之上），步进挂起
 （阅读模态 `overlay_open()=="minigame"`），ESC 中止。实现在
 `dungeon/window/minigame/stage.py`（由 `ui._draw_frame` 帧末调用 `render`）。
-
-> 早期版本另有 `web` 后端（独立 pywebview 子进程窗口），2.0 前砍掉：它与副本
-> 状态在跨进程边界上，无法支撑远期「小游戏 ↔ 状态面板双向交互」；且始终无内容包
-> 使用。结果管线本身与后端无关。
 
 `api.finish(result)` 的 `result`（整数标量 / dict）→ 同一条 `_finish_mini_game`
 管线（返回值记入 `trigger_choices` / 叙事行 / 回放记录 `game_result`）。小游戏

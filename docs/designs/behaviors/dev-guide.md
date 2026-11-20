@@ -10,10 +10,10 @@
 覆盖核心算法的实现，而无需修改主程序代码。可覆盖范围包括：
 
 - `CreationService` / `StateService` 的部分静态方法；
-- `core/logic/`（原 `core/logic.py`，已按职责拆为 `sizing` / `quips` / `simulation` / `text`
-  四个子模块，`core/logic/__init__.py` 薄壳再导出全部公开名）中除 `get_size_category` 外的
-  全部模块函数，以及 `PREDEFINED_TAGS` 常量（注册用的键**仍是 `"logic.xxx"`**——键是稳定
-  契约，不含包路径，拆分不改键）；
+- `core/logic/`（`sizing` / `quips` / `simulation` / `text` 四个子模块，
+  `core/logic/__init__.py` 再导出全部公开名）中除 `get_size_category` 外的
+  全部模块函数，以及 `PREDEFINED_TAGS` 常量（注册键是与文件位置无关的
+  `"logic.xxx"` 字面量契约）；
 - `profile`（`services/character/profile_text.py`，档案派生层的文本化出口）：作息与
   空间偏好的可读结论与实时提示（见 [hooks-logic.md](hooks-logic.md) 的 `profile` 组）。
   scope 同样是与文件位置无关的字面量契约——以后新域按此模式扩展。
@@ -25,14 +25,14 @@
   `services/exploration/report.py` 报告引擎）：车道窗口 / 联合分 /
   近匹配提拔是模块策略；仲裁模型参数与引擎的伤亡 / 耐久参数是
   `report.model.*` 常量钩子。硬闸、物理走查与 stuck 判定不开放；
-  描述选句 `select_quip_with_budget` 已收回为内部函数，不在开放面
+  描述选句 `select_quip_with_budget` 不在开放面
   （见 [hooks-report.md](hooks-report.md) 的 `report` 组）。
 - `chat`（`services/chat/`，聊天提示词与投递节奏）：世界语境、话题候选 /
   措辞、关系与聊天习惯文案、三轴坐标、主动搭话门槛与回复延迟是模块策略，
   节奏数值是 `chat.model.*` 常量钩子。JSON 协议、消息状态机、话题状态机、
   持久化与关系转移图不开放（见 [hooks-chat.md](hooks-chat.md) 的 `chat` 组）。
 
-结算模型参数与空间 / 环境先验的调制**不再是运行时钩子**：它们经
+结算模型参数与空间 / 环境先验的调制**不经运行时钩子**：它们经
 `CreationService.derive_model_tuning` 在创建角色时烙印（出身层，见下文）。
 
 **核心规则**：
@@ -55,7 +55,7 @@
 [hooks-logic.md](hooks-logic.md)（`logic`、`profile`）、[hooks-chat.md](hooks-chat.md)
 （`chat`）。完整示例见 [example-imperial.md](example-imperial.md)。
 
-## 开放边界：三层开放模型与角色身份稳定性
+## 开放边界：三层开放模型
 
 可覆盖目标分三层，这条边界与层级 / 契约元数据并行生效：
 
@@ -65,32 +65,20 @@
 | 角色出身 | 结算参数与空间/环境先验的调制烙印（`ModelTuning`） | `CreationService.derive_model_tuning` 创建时烙印，终身携带 |
 | 角色习性 | rhythm / spatial 演化表学习 | 模型内部，参数封闭（不开放） |
 
-原理一句话：世界包能改「世界如何运转」，不能重写「她是谁」。出身层让
-世界包对角色的影响只发生在创建时（出身论）；习性层让她继续演化
-（潜移默化）；两者相乘——烙印定**包络**（整体活动量、先验偏向），学习定
-**形状**（何时活跃、常去哪里），现有结构（`step_per_hour × rhythm.factor_at`、
-`priors × region_factor`）天然支持。存量角色因此结构性免疫：旧档案无
-tuning 字段 → 读档回退默认 → 任何世界包启停都不再触及其结算/空间调制。
+一句话：世界包能改「世界如何运转」，不能重写「她是谁」（取舍论证见
+`docs/dev/architecture.md` §2.6）。
 
-- **世界规则可以换**（运行时层）。坐标演化（`StateService` 坐标 / 深度原语）
-  服务于资源匹配，世界包自带与演化动态匹配的资源；选取仲裁（`report.*`）
-  配对的是世界内的资源供给；结算（`offline.recover_plan`）是把角色活动换算为世界效果的转换层
-  （收到的 model 即来自角色烙印）。覆盖这些改变
-  「世界如何运转」，角色已学到的东西不被重新解释。
-- **角色出身只在创建时烙印**。角色的结算参数与空间 / 环境先验以
-  `ModelTuning` 烙印在档案里（`CreationService.derive_model_tuning` 派生，
-  内部 sanitize 夹取归一；`origin_world` 记录出身世界包）：世界包对
-  「她是谁」的调制只发生在出身时刻，已有角色的烙印终身携带、不随世界包
-  启停变化。
-- **角色习性不可重写**。作息学习（`RhythmService`）与空间 / 环境 / 偏好学习
+- **世界规则可以换**：坐标演化、选取仲裁（`report.*`）、恢复结算
+  （`offline.recover_plan`，收到的 model 即来自角色烙印）都是「世界如何运转」
+  的算法，覆盖它们不重新解释角色已学到的东西。
+- **角色出身只在创建时烙印**：结算参数与空间 / 环境先验以 `ModelTuning` 烙印在
+  档案里（`CreationService.derive_model_tuning` 派生，内部 sanitize 夹取归一，
+  `origin_world` 记录出身世界包），存量角色读档回退默认，不随世界包启停变化。
+- **角色习性不可重写**：作息学习（`RhythmService`）与空间 / 环境 / 偏好学习
   （`spatial.py` 学习层）的参数——半衰期、平滑伪计数、收缩强度、调制夹取、
-  成熟度阻尼等——**不开放**：它们决定「从角色历史里学出什么样的她」，覆盖
-  会让已有角色在加载世界包后性情大变。
-
-聊天域（`chat.*`）已按同一原则开放：世界包可以追加世界语境、改话题候选与
-措辞、调整聊天手感，但不可改写角色的既有身份事实（名字、性格、学到的习惯、
-达成的经历）；详见 [hooks-chat.md](hooks-chat.md)。后续开放的新域同样遵守
-「只追加语境，不改写身份」。
+  成熟度阻尼等——不开放。
+- 聊天域（`chat.*`）按同一原则开放：可追加世界语境、改话题候选与措辞、调整
+  聊天手感，不可改写角色的既有身份事实；见 [hooks-chat.md](hooks-chat.md)。
 
 ## 开发流程
 
@@ -210,11 +198,7 @@ data/worlds/<world_id>/
 | `content/data` | 数据表、文案、阈值 | `logic.PREDEFINED_TAGS` |
 | 核心不变式 | 不开放，不进入目录 | 坐标夹取、AP 上限、JSON 协议、消息状态机、持久化、习性学习参数 |
 
-> 全目录 `since` 以 **2.0** 为基线（出身烙印基线在 2.0 alpha 窗口重定了整个
-> 开放面）；已删 / 改名 key 不回潮：`offline.model.*`、`spatial.TAG_*`、
-> `StateService.recover_evolution`（恢复入口已收敛为 `offline.recover_plan`
-> 与 `OfflineService` 直连）、`select.*`（域整体更名 `report`，更名时点无
-> 外部使用者）。
+> 全目录 `since` 以 **2.0** 为基线。
 
 ## 注意事项
 

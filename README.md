@@ -163,7 +163,7 @@ data/
 | 行为包 | 世界包可选携带的 Python 代码包，激活期间覆盖核心算法 | [行为包开发指南](docs/designs/behaviors/dev-guide.md) |
 | 副本小游戏 | `mini_game` 触发器的运行时与作者 API | [小游戏框架](docs/designs/dungeon/minigame.md) |
 | 挑战包 | 角色与资源打成秘钥保护的 `.chal`，玩家在挑战模式里达成结局 | 「挑战模式」 |
-| 世界地址 | 为你的世界申领注册表地址，供地标 / 描述风格跨世界引用 | [地址系统作者指南](docs/designs/address-system/authoring.md) |
+| 世界地址 | 为你的世界申领注册表地址，供地标 / 描述风格跨世界引用 | [地址系统作者指南](docs/designs/address_system.md) |
 
 ## 平台支持
 

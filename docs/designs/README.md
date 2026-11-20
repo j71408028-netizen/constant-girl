@@ -10,7 +10,7 @@
 
 | 机制 | 入口 | 主要读者 |
 |---|---|---|
-| 地址系统 | [address-system/](address-system/README.md) | 玩家 + 资源开发者（地标 / 描述风格作者） |
+| 地址系统 | [address_system.md](address_system.md) | 玩家 + 资源开发者（地标 / 描述风格作者） |
 | 报告生成 | [report_selection.md](report_selection.md) | 玩家 + 资源开发者（地标 / 描述风格作者） |
 | 副本设计机制 | [dungeon/](dungeon/README.md) | 核心开发者 + 副本方案作者（章节与触发器 / 人物 / 语音 / 准入 / 地点） |
 | 角色演化 | [character_evolution.md](character_evolution.md) | 核心开发者 + 行为包作者 |
@@ -25,7 +25,7 @@
 | 想做什么 | 从哪读 |
 |---|---|
 | 理解或调整**报告里地标与描述的选取 / 配对** | [report_selection.md](report_selection.md) |
-| 给**地标 / 描述风格**申领、注册地址 | [authoring.md](address-system/authoring.md)（地址格式与距离规则见 [matching.md](address-system/matching.md)） |
+| 给**地标 / 描述风格**申领、注册地址 | [address_system.md](address_system.md)（§2 操作规程、§3 格式与组合、§4 配对与距离） |
 | 给**副本章节**写地点地址、给副本写参照物地标（尺寸换算用） | [dungeon/scene.md](dungeon/scene.md) |
 | 写**副本方案**（章节 / 触发器字段、条件与动作、校验） | 从 [dungeon/README.md](dungeon/README.md) 进，正文在 [dungeon/script.md](dungeon/script.md) |
 | 理解或调整**副本里的人物表 / 临时称呼 / 在场与简报** | [dungeon/characters.md](dungeon/characters.md)（含字段说明） |
