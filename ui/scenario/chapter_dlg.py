@@ -145,6 +145,9 @@ class ChapterEditDialog(BaseDialog):
         common = ctk.CTkFrame(form, fg_color="transparent")
         common.pack(side='top', fill='x', padx=6, pady=(0, 6))
         self._build_basic_info(common)
+        # 「章节角色」确定是否结束章节，结束结算与出口地址都跟着它显隐
+        if hasattr(self, "role_combo"):
+            self.role_combo.configure(command=self._toggle_ending_ui)
 
         # ---------- 结束章节结算（仅结束章节时展开）----------
         # 展开时按 side='top' 占位，排在章节环境之前
@@ -157,6 +160,7 @@ class ChapterEditDialog(BaseDialog):
         self.env_area = ctk.CTkFrame(form, fg_color="transparent")
         self.env_area.pack(side='top', fill='x', padx=6, pady=(0, 6))
         self._build_env_sections()
+        # 全部控件就位后再定一次显隐：地点卡片构建期间出口行只做了兜底隐藏
         self._toggle_ending_ui()
 
         self.bind("<Escape>", lambda _e: self._cancel())
@@ -291,7 +295,14 @@ class ChapterEditDialog(BaseDialog):
         return self.ROLE_NORMAL
 
     def _is_ending(self) -> bool:
-        return self.role_var.get() == self.ROLE_ENDING
+        """当前是否编辑成结束章节；角色下拉尚未建好时按章节自身配置判断。
+
+        地点与取景的构建早于结束结算区，其间也会调到这里（出口地址显隐）。
+        """
+        role_var = getattr(self, "role_var", None)
+        if role_var is None:
+            return bool(self.chapter.get("ending"))
+        return role_var.get() == self.ROLE_ENDING
 
     # ---------- 章节环境（卡片内分组）----------
     def _build_env_sections(self):
@@ -1151,6 +1162,11 @@ class ChapterEditDialog(BaseDialog):
 
     def _toggle_ending_ui(self, *_a):
         """结束章节时展开固定结算区（排在环境卡片之前，挤压其纵向空间）。"""
+        role_var = getattr(self, "role_var", None)
+        if role_var is None:
+            # 构建期间角色下拉还没建：只同步出口地址行的显隐
+            self._sync_exit_row()
+            return
         if self._is_ending():
             self.ending_frame.pack(side='top', fill='x', pady=(6, 0),
                                    before=self.env_head)

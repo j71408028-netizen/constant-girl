@@ -117,17 +117,40 @@ class DungeonPromptBuilder:
         title = str(getattr(self.context, "protagonist_title", "") or "").strip()
         return title or "主角"
 
+    def protagonist_height(self) -> float:
+        """主角身高（米），取自角色快照；没有快照时为 0。
+
+        先认 ``body_parts["身高"]``（角色身材数据），再退到 ``height``
+        （窗口传入的当前身高，探索中会变；开局两者相同）。
+        """
+        parts = getattr(self.context, "body_parts", None) or {}
+        try:
+            value = float(parts.get("身高") or 0.0)
+        except (TypeError, ValueError, AttributeError):
+            value = 0.0
+        if value > 0:
+            return value
+        try:
+            return max(float(getattr(self.context, "height", 0.0) or 0.0), 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
     def _protagonist_block(self) -> str:
-        """主角的身份背景（故事开始时的样子）。
+        """主角的身份背景（故事开始时的样子）+ 身高。
 
         主角是视角人物，「他是谁」与她的性格描述同级，所以随系统提示词每段都在；
         文案必须点明这是起点，否则 AI 会把它当成每段都要维持的现状。
+        身高只认角色快照，方案文案里不写死：写死会和她实际的身材数据打架。
+        没有主角设定时整块不出现（身高行只作正文的附属说明）。
         """
         background = str(
             getattr(self.context, "protagonist_background", "") or "").strip()
         if not background:
             return ""
+        height = self.protagonist_height()
+        height_line = f"身高：{format_size(height)}\n" if height > 0 else ""
         return (f"【主角】{self.protagonist_title()}\n"
+                f"{height_line}"
                 f"故事开始时：{background}\n"
                 "（以上是起点不是现状，不必每段重述。）\n")
 
