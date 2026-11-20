@@ -16,6 +16,8 @@
 | 角色演化 | [character_evolution.md](character_evolution.md) | 核心开发者 + 行为包作者 |
 | 角色聊天 | [chat/](chat/README.md) | 玩家 + 资源开发者（话题类型 / 世界态势作者）；信息视角细节在 [lens.md](chat/lens.md) |
 | 行为包 | [behaviors/](behaviors/README.md) | 玩家 + 世界包 / 行为包作者 |
+| 资源与包体系 | [resources.md](resources.md)（挑战包另见 [challenges.md](challenges.md)） | 资源作者 |
+| 世界包 | [world_packs.md](world_packs.md) | 玩家 + 资源作者 |
 
 跨机制的界面用词（副本、观测等级、耦合等级、性格、资源与行动）见
 `docs/terminology.md`；写界面文案、提示词或玩家文档前先查这一页。
@@ -35,6 +37,9 @@
 | 调整**角色聊天**的话题类型、好感/紧张度/状态的手感 | [chat/README.md](chat/README.md)（实现细节在 `docs/dev/chat_delivery.md`） |
 | 调整**某类话题下 AI 知道什么 / 不知道什么** | [chat/lens.md](chat/lens.md)（改完用 `python developer_tools/lens_preview.py` 静态看账，或 `chat_session_preview.py` 边聊边看） |
 | **扩展程序行为**而不改主程序 | [behaviors/README.md](behaviors/README.md)（玩家向）→ [behaviors/dev-guide.md](behaviors/dev-guide.md) |
+| 理解**资源类型 / 信封 / 索引 / 同步**，或新增一类资源 | [resources.md](resources.md) |
+| 做**挑战包**（加密、秘钥、创建 / 导入 / 启动） | [challenges.md](challenges.md) |
+| 打包 / 分享**世界包**，理解激活期间的资源接管与命名空间 | [world_packs.md](world_packs.md) |
 | 做**小游戏**（副本触发器 + 作者 API） | [dungeon/minigame.md](dungeon/minigame.md) |
 
 ## 本组文档的写法：机制 = 目录

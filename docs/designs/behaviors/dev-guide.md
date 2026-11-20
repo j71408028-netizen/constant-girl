@@ -157,8 +157,9 @@ data/worlds/<world_id>/
 
 ### 打包与分发
 
-- 使用「设置 → 世界包」的导出功能，或手动把整个 `<world_id>` 目录打包为
-  `<world_id>.world.zip`；
+- 分发：把 `data/worlds/<world_id>/` 目录打包为 `<world_id>.world.zip`
+  （服务层 `WorldManager.export_pack`；清单、激活与命名空间的完整机制见
+  [../world_packs.md](../world_packs.md)）；
 - 解散世界包时，行为包会自动转存回 `data/static/behaviors/`（目录名冲突则
   追加世界包名与版本号）。
 
