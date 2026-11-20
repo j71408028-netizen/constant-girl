@@ -2,7 +2,7 @@
 
 副本里没有移动与寻路，章节发生在哪儿由作者写死，所以地址只承担声明职责：
 展示地点、结局传送（写回位置）。尺寸换算的候选池（见
-``docs/designs/dungeon_scene.md`` §4）两类地标两条路：
+``docs/designs/dungeon/scene.md`` §4）两类地标两条路：
 
 - 独特地标由章节内联配置（``scene_landmarks``，编辑器像演化修正一样逐行添加）；
   「同时在场」的对比触发见 ``dungeon/prompts.py``；

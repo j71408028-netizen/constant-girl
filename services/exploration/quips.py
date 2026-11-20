@@ -1,7 +1,7 @@
 """报告侧的描述（quip）机制：预定义标签、标记替换、预算选句、解锁描述与对比行文案。
 
 描述（quip）原是基础能力，副本移除描述注入后（见
-``docs/designs/dungeon_scene.md`` §5 的校准块）只剩报告管线消费，
+``docs/designs/dungeon/scene.md`` §5 的校准块）只剩报告管线消费，
 自 ``core/logic`` 迁入本模块。
 
 ``@behavior_hook`` 的 scope ``"logic"`` 是已部署行为包的公开契约，与文件位置无关，

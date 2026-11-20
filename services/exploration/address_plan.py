@@ -73,7 +73,7 @@ class AddressPlanner:
 
         副本会话在子进程里跑，那里没有地标仓库也没有风格注册表，``Landmark.address``
         的相对后缀解析不出来，所以地址必须在父进程组合好再进载荷（见
-        ``docs/designs/dungeon_scene.md`` §6）。解析不了的地标照样导出（名字与
+        ``docs/designs/dungeon/scene.md`` §6）。解析不了的地标照样导出（名字与
         尺寸不变），只是标成 ``portable``——不参与副本内的地址相配。
 
         常见地标默认不参与地址规则（``address_index.address_mode_of`` 的缺省

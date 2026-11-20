@@ -77,61 +77,17 @@
 - `chapter_view_edges()` 把图投影到**章节层**：`goto` 边折算成「触发器所在章节 → 目标
   章节」，用于「章节编排」视图（章与章之间的流程图）。
 - `same_position_groups()` 把 `ACTION_POSITIONS` 同位、同作用域、且**不止一条**的触发器
-  分好组（`PositionGroup`），供编辑器呈现同位置竞争（§3.2）。它只分组，不下结论。
+  分好组（`PositionGroup`），供编辑器呈现同位置竞争（不进校验器，判据见
+  [数据模型 §9.1](../designs/dungeon/script.md)）。它只分组，不下结论。
 
 ## 3. 图校验（`dungeon/graph_lint.py`）
 
-```python
-lint_graph(graph) -> list[tuple[str, str, str]]   # (level, path, message)
-```
-
-这个模块**不 import `validate`**：它只产出三元组，由 `validate.py` 侧包成
-`Diagnostic`。这样避免 `validate → graph_lint → validate.Diagnostic` 的循环 import，
-也不用在函数体里写延迟 import。
-
-### 3.1 五条规则
-
-| # | 规则 | 级别 | `path` | 判据 |
-|---|---|---|---|---|
-| R1 | 章节走不到 | `warning` | `chapters[i].name` | 章节可达性 |
-| R2 | 走不到任何结束章节 | `warning` | `chapters` | 结束章节存在，但一个都不可达 |
-| R3 | 前置永远无法成立 | `warning` | `triggers[i].precondition_names` | 前置所在章节不可达，或前置自身处于死锁分量 |
-| R4 | 自跳转 | `warning` | `triggers[i].action_data.chapter` | `goto` 目标 == 自身所在章节 |
-| R5 | 循环依赖 | `warning` | `triggers[i].precondition_names` | 前置分量无种子成员 |
-
-### 3.2 四条口径要说清
-
-**走不到的章节只报 warning，不阻止进入副本。** 创作方案时短接一段重排、把实验性
-章节先写出来暂不接入，都是正常工作方式——走不到意味着「这段暂时没接上」，不等于
-「配置写错了」。会真正出问题的是「一局收不了尾」，那由 R2 表达。
-
-**可达性规则只在方案真的会在章节间移动时才生效。** R1 / R2 都要求「至少有
-一个起始章节」且「至少有一条跳进章节的边」（`goto`，或指向章节的 `overflow_target`；
-空 `overflow_target` 是「超限后离开章节」，不算接线）。理由：一节都没接线的方案
-——多半就是从 `empty_scenario_config()` 改出来的骨架——除起始章节外全部不可达，
-逐章刷一遍只是噪音；没有起始章节时顶层已有一条 error，重复报更没有意义。
-
-**没有可达的结束章节时，结束章节不再逐条报 R1。** 那种情况下 R2 的措辞更准确
-（「这一局收不了尾」）；两条都报等于同一个原因刷两遍。反过来，只要**有一个**结束章节
-可达，其余走不到的结束章节照旧按 R1 报——那是实实在在「这段内容播不到」。
-
-**同位置动作竞争不进校验器。** 运行时 `ACTION_POSITIONS` 同位置至多生效一个
-（同位置内按配置顺序取第一个满足条件且配置有效的），所以同位置同作用域的两条触发器
-确实会互相挡。但严格判断「两条的条件会不会撞车」需要求解器、不可行；连「两边都恒真」
-这一种也不报——`{"name": "ok", ...}` 与 `{"name": "clear", ...}` 这种一设一清的写法
-在参考方案与门禁用例里都出现过，报红等于把正常写法当缺陷（本仓一贯的降噪口径）。
-`same_position_groups()` 因此只把成员分好组，由关系图对话框按位呈现（§4.3）：
-作者点一下就能看见谁和谁在争同一个位次，无争议的那几条还会写明「永远轮不到」。
-
-**R2 与现有的 info 不重复。** `validate.py` 原有的规则是「方案里根本没有结束章节」，
-报 `info`；R2 说的是「结束章节存在、但一个都走不到」，两者不是一回事。
-
-### 3.3 接入点
-
-管线不新增：`validate_scenario_config()` 在 `_validate_triggers` 之后调用
-`lint_graph(build_graph(config))`，把三元组 `add` 进同一个诊断列表。因此保存方案、
-启动副本前、离线批量校验三处**自动**都覆盖到了，`format_diagnostics` / `has_errors`
-直接复用——`error` 级照旧阻止进入副本。
+五条规则（R1 章节走不到 / R2 走不到任何结束章节 / R3 前置永远无法成立 /
+R4 自跳转 / R5 循环依赖）的级别、`path` 与判据，两个可达性口径、抑制与去重、
+同位置动作竞争不进校验器的边界，以及 `validate_scenario_config()` 的接入点——
+统一收在 [数据模型 §9.1](../designs/dungeon/script.md)。本篇保留图模型（§2）与
+编辑器呈现（§4）；`lint_graph(graph)` 只产出 `(level, path, message)` 三元组、
+不 import `validate`，由 validate 侧包成 `Diagnostic`。
 
 ## 4. 编辑器编排图（`ui/scenario/graph_view.py`）
 
@@ -229,7 +185,8 @@ GUI 侧没有独立的守卫脚本：画布只做呈现，逻辑全在领域层�
 ## 6. 边界（明确不做什么）
 
 - **不写盘**：全程只读方案配置，产出的是诊断与图形。
-- **不做条件求解**：只见「条件是否为空」，不判断两个非空条件是否重叠（见 §3.2）。
+- **不做条件求解**：只见「条件是否为空」，不判断两个非空条件是否重叠（判据与
+  口径见 [数据模型 §9.1](../designs/dungeon/script.md)）。
 - **不替代既有规则**：图校验是**追加**的五条，`validate.py` 原有的字段级、资产存在性、
   旧版字段等规则一条不动。
 - **不再依赖 `networkx` / `graphviz`**：两者已从 `requirements.txt` 移除，打包也不再

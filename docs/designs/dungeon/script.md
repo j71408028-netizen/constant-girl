@@ -293,6 +293,33 @@ AI 生成**（`normalize_fixed_text` 把缺路径的配置归一成空 dict，�
 兼容保留，触发时只打印一行提示、当作没触发（不记入已触发集合）；编辑器把存量条目显示为
 「结局（旧版·已失效）」且不再提供新建入口，校验器按 `LEGACY_ACTIONS` 报专项 warning。
 
+### 3.3 结局生成与演化修正（`window/ending.py`）
+
+**演化修正汇总** `_apply_sensitivity_mods`：把当前生效的章节 `sensitivity[]` 效果按
+属性累加成「属性 → 倍率改变量」，每步演化与触发器结算都带着它进引擎（`engine.py`
+的步进调用、`triggers.py` 的结算）。章节默认效果被「章节效果短暂覆盖」（§7
+`effect`）改写时以覆盖为准（`triggers.py::_effective_sensitivity_effects` 现算），
+离开章节即失效。
+
+**结局生成**（`EndingHandler`）：结束章节达到上限后由 `_terminate_from_ending_chapter`
+按章节结算字段组装 `pending_ending`（§3.2），`_start_ending_generation` 起后台线程
+流式生成（`temperature=0.9`）：
+
+- 提示按耦合等级取用（`coupling_prompts` 的 `ending_system` / `ending_user`）；
+- 上下文 `_build_story_summary`：状态行（介入度 / 破坏性 / 总伤亡 / 自定义属性）+
+  剧情概要（`StorySummarizer.summary_only()` 优先，缺失回退最近步进片段）+ 性格
+  描述；生成前先 `flush_chapter` 压完本章余量（§9.4）；
+- AI 客户端不可用时只显示「结局：{名字}」，不拖垮收尾。
+
+**收尾链**：正文剥高亮标记 → `_record_ending` 写 `kind:"ending"` 回放记录（只记
+一次，带 `icon_path`——配置了图标才算重要结局）→ `_finalize(completed=True)`
+（`window/persistence.py`）：`_apply_ending_effects` 结算结局增量——
+`intrusion_delta` / `destruction_delta` / `custom_deltas` 直接叠加（坐标统一夹取
+0.5~4.5）、`casualty_step` 过伤亡公式、`action_points_refund` 走
+`refund_action_points`（无上限）、`exit_address` 结局传送（改写主世界位置的唯一
+入口，空 / 解不出的地址一律不动，见 [scene.md](scene.md) §8）——角色记一行
+`source="_apply_ending_effects"` 的完整演化，再记重要结局索引、自动保存回放（§9.3）。
+
 ## 4. 触发器字段索引
 
 来源：`schema.TRIGGER_FIELDS`。
@@ -508,25 +535,45 @@ AI 生成**（`normalize_fixed_text` 把缺路径的配置归一成空 dict，�
 
 上面三行是**字段级**规则（某个键写错了、某个文件不存在）。**结构级**的检查——章节与
 触发器之间的依赖、可达性、跳转闭合、循环依赖——由五条**图校验**规则承担
-（`dungeon/scenario_graph.py` + `dungeon/graph_lint.py`）：
+（建图 `dungeon/scenario_graph.py::build_graph`，判据 `dungeon/graph_lint.py::lint_graph`）：
 
-| 规则 | 级别 | 例子 |
-|---|---|---|
-| 章节走不到 | `error` | 某章节没有任何 `goto` / `overflow_target` 指向它，永远不会进入 |
-| 走不到任何结束章节 | `warning` | 结束章节存在，但一个都走不到：这一局收不了尾 |
-| 前置永远无法成立 | `warning` | 前置触发器所在章节不可达，或前置自身处于死锁环 |
-| 自跳转 | `warning` | `goto` 目标等于自身所在章节，运行时跳过 |
-| 循环依赖 | `warning` | 前置成环（含互锁），永远无法触发第一个 |
+| # | 规则 | 级别 | `path` | 判据 |
+|---|---|---|---|---|
+| R1 | 章节走不到 | `warning` | `chapters[i].name` | 该章节不在**章节可达性**集合里（从根沿进入 / 跳转 / 超限 / 归属边前向可达，忽略一切条件与前置） |
+| R2 | 走不到任何结束章节 | `warning` | `chapters` | 结束章节存在，但一个都不在可达集合里 |
+| R3 | 前置永远无法成立 | `warning` | `triggers[i].precondition_names` | 前置所在章节不可达，或前置自身处于死锁分量 |
+| R4 | 自跳转 | `warning` | `triggers[i].action_data.chapter` | `goto` 目标等于自身所在章节（运行时会跳过） |
+| R5 | 循环依赖 | `warning` | `triggers[i].precondition_names` | 前置分量没有「种子」成员——强连通分量内每个成员都有分量内前置，整环互锁永远激活不了 |
 
-**可达性的两条抑制**：方案里一条跳进章节的边都没有（还没接线的骨架）、或者没有
-起始章节时，不报前两条。
+可达性口径：
 
-**同位置动作竞争**（`ACTION_POSITIONS` 同位 + 同作用域）**不进校验器**
-（严格判断需要求解器）。编辑器关系图按位分组呈现，详见
-Dungeon 关系图文档 `scenario_graph.md` §3.2、§4.3。
+- **章节可达性**（`ScenarioGraph.chapter_reachability`）：只走结构边，忽略条件与
+  前置——乐观估计，不因条件写错而误报；讲「走不到」的规则一律只用这一条。
+- **触发器可达性**：在前者基础上加入前置 AND 语义——前置边收缩成强连通分量后在
+  DAG 上迭代到不动点，分量要有「无分量内前置的种子成员」才可能激活；R5 的判据就
+  是无种子的分量。
+- `选择:` 条件引用（`EDGE_CHOICE`）两条口径都**不参与**：被引用触发器没触发只是
+  计数为 0，是可以被比较的合法值，不是「到不了」。
 
-它们产出同一套 `Diagnostic`，走同一份 `format_diagnostics`，接入点不变；口径与判据见
-Dungeon 关系图文档 `scenario_graph.md` §3。
+**抑制与去重**：
+
+- R1 / R2 都要求「至少一个起始章节」且「至少有一条跳进章节的边」（`goto`，或指向
+  章节的 `overflow_target`；空 `overflow_target` 是「超限后离开章节」，不算接线）。
+  还没接线的骨架方案不刷可达性诊断；没有起始章节时顶层已有一条 error，不重复报。
+- 没有可达的结束章节时，结束章节不再逐条报 R1（R2 的措辞更准确，同一个原因不刷
+  两遍）；只要**有一个**结束章节可达，其余走不到的结束章节照旧按 R1 报。
+- R2 与既有的「方案里根本没有结束章节」info 不是一回事：前者结束章节存在但走不到，
+  后者直接没有。
+
+**同位置动作竞争**（`ACTION_POSITIONS` 同位 + 同作用域）**不进校验器**——严格判断
+「两条的条件会不会撞车」需要求解器；`same_position_groups()` 只按位分组，由编辑器
+编排图呈现（见 [../scenario_editor.md](../scenario_editor.md) §3）。
+
+接入：`validate_scenario_config()` 在 `_validate_triggers` 之后调用
+`lint_graph(build_graph(config))`，三元组并入同一份诊断列表（`graph_lint` 不
+import `validate`，由本模块包成 `Diagnostic`），保存方案 / 启动副本前 / 离线批量
+校验三处自动覆盖。图模型与两个可达性口径的实现见
+`docs/Dungeon/scenario_graph.md` §2。
 
 ### 9.2 迁移与兼容
 
@@ -597,6 +644,16 @@ Dungeon 关系图文档 `scenario_graph.md` §3。
 `{name, background, bgm, voice_fx}`、`TriggerRecord` 还原成
 `{name, action_type, action_data}`（只写规范动作键，见 §4），供「回放 → 配置」的
 回溯改写使用；步进 / 账本快照 / 结局正文 / 身份记录在配置里没有对应字段，返回 `None`。
+
+**落盘与保存时机**（`window/persistence.py`，统一收尾 `_finalize`）：
+
+| 项 | 行为 |
+|---|---|
+| 文件位置 | 探索模式写角色档案 `data/archives/<角色id>/回放/<角色名>_回放_<时间戳>.replay.json`，同时落一份报告 `<角色名>_副本报告_<时间戳>.txt`；挑战模式 / 无角色写 `data/user/replays/<方案id>_回放_<时间戳>.replay.json`，不创建 / 更新角色 |
+| 载荷 | 身份记录（`kind:"meta"`）→ 人物账本快照（`kind:"characters"`）→ 记录本体（`_replay_payload`）；原子写（覆盖不留备份） |
+| 自动保存 | 结局触发即保存（`auto_save_replay` 开时，成功后不弹框）；开关默认关 |
+| 手动保存 | 玩家在收尾确认「保存」或点面板「立即保存」，完成后弹「保存成功」；探索模式无角色时先询问是否创建角色（拒绝即本次不保存） |
+| 未完成退出 | **不落盘**：不结算结局增量、不写 `data/user/endings.json`、不记挑战达成、不保存回放与报告 |
 
 ### 9.4 剧情压缩（提示词上下文）
 

@@ -544,7 +544,7 @@ class ChapterEditDialog(BaseDialog):
     def _build_place_section(self, parent):
         """地点 / 取景地址 / 本章独特地标 / 常见地标私有名 / 结局出口。
 
-        字段语义见 ``docs/designs/dungeon_scene.md`` §3：地点与取景地址只影响
+        字段语义见 ``docs/designs/dungeon/scene.md`` §3：地点与取景地址只影响
         展示与提示词；独特地标逐行内联配置，在场时提示词给出她的身高与该地标
         的对比（靠左占满卡片宽度，行内设置项较多）；常见地标按私有名过滤
         （空 = 不使用；* = 不指定世界，收地址没点名私有名的常见地标）；出口

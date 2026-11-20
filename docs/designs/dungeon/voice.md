@@ -72,12 +72,36 @@
 | 合成代理 | `settings["net_proxy"]` → `core/netproxy`（**语音与 AI 共用**）→ `app/shell.py` 与 `window/base.py` 各设一次（子进程独立）；失败原因见 `speech.last_synth_error()` |
 | 触发朗读 | `window/ui.py::_speak_item`（显示单元定稿时，叙述句无 `speaker` 直接返回） |
 
-## 4. 玩家侧音量总线
+## 4. 音量总线（`dungeon/audio/buses.py`）
 
-> 设置页的四条总线滑条（副本独占设置 `audio_levels`，存
-> `data/user/dungeon_settings.json`；总音量 / 音乐 / 语音 / 音效）在方案档位之外
-> 再乘一次，装进混音层见 `dungeon/audio/buses.py::set_bus_levels`（副本窗口开局时
-> 按副本设置装配）。于是「她说什么」的响度 = **方案档位 × 总线电平 × 总控电平**。
+副本所有发声的音量单一真相源：三条内容总线挂一条总控
+（`master ─ music / voice / sfx`），三层各管各的单位：
+
+| 层 | 谁在用 | 单位 | 范围 |
+|---|---|---|---|
+| 作者侧「档位」 | 章节 `bgm.level` / 方案 `voice.level` | 档 | `0-4`（`STEP_LABELS`：静音 / 很轻 / 轻 / 中 / 响） |
+| 玩家侧「滑条」 | 设置页（`audio_levels`，副本独占设置） | 电平 | `0-100`（`to_ratio` 归一） |
+| 内部「增益」 | 播放后端 | dB | `db_gain` 换算，`DB_FLOOR=-80` 以下视为静音 |
+
+**档位怎么变成响度**：`档位 dB（STEP_DB）+ 总线锚点 dB（BUS_ANCHOR_DB）`——
+`STEP_DB` = {0: 静音, 1: −18, 2: −12, 3: −6, 4: 0}（上限 0 dB 是数字满幅，「中」
+天然比满幅低 6 dB）；锚点 {总控 0, 音乐 −6, 语音 0, 音效 −3}——混音分层落在锚点
+一张表上，同样的档位音乐天然比语音轻 6 dB。语音是混音 0 dB 参考，同档位下比音乐
+高 6 dB（§1 `level` 行的出处）。
+
+设置页的四条总线滑条（副本独占设置 `audio_levels`，存
+`data/user/dungeon_settings.json`）在方案档位之外再乘一次，副本窗口开局时经
+`buses.set_bus_levels` 按副本设置装配；播放路径不必逐处传参——`resolve_gain` 缺省
+取实时总线电平（实时值 > 缺省），滑条一改三条内容总线同时跟着变。未接管进程回退
+缺省 `DEFAULT_BUS_LEVELS`（恒 100 = 不衰减）。于是「她说什么」的响度 =
+**方案档位 × 总线电平 × 总控电平**。
+
+> **「不想听语音」就是语音电平拧到 0**——原先独立总开关
+> `settings["dungeon_voice_enabled"]` 已撤掉。这一档是**真静音**：
+> `speech.SpeechDirector._silent()` 在档位 × 语音电平 × 总控归零时直接返回，
+> **连合成都不做**（不联网、不占工作线程、离线也不会刷告警），所以「调到 0」等价于
+> 旧的「关掉开关」。旧设置文件里残留的键在 `persistence/settings_repo.py::load`
+> 迁移：关过的折算成语音电平 0，然后删键。
 >
 > **「不想听语音」就是语音电平拧到 0**——原先独立总开关
 > `settings["dungeon_voice_enabled"]` 已撤掉。这一档是**真静音**：

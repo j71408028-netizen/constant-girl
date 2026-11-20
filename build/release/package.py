@@ -75,8 +75,8 @@ ENTRY_CANDIDATES = ("main.py",)
 
 #: 需要 ``--collect-all`` 的第三方包（按 **import 名** 写）。实际只对**该版本装得上**
 #: 的生效，所以同一份清单能同时适配 v1.0.0（依赖较少）与更新版本。
-#: 不再有 networkx / graphviz：编辑器关系图已改为自绘画布（见
-#: docs/Dungeon/scenario_graph.md §5）。
+#: 不再有 networkx / graphviz：编辑器关系图已改为自绘画布（图校验规则
+#: 与建图见 docs/designs/dungeon/script.md §9.1）。
 COLLECT_ALL_IMPORTS = (
     "customtkinter", "imgui_bundle", "PIL", "openai", "numpy",
 )

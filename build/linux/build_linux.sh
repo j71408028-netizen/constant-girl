@@ -18,7 +18,7 @@
 #   ~/.local/share/constant-girl/data），首启从包内 data/packs、data/static 拷贝；
 #   源码运行仍用仓库内 data/（见 paths.py）。
 # - graphviz 的 dot 不再是依赖：编辑器关系图改为自绘画布（见
-#   docs/Dungeon/scenario_graph.md §5），打包无外部可选依赖。
+#   docs/designs/dungeon/script.md §9.1），打包无外部可选依赖。
 # - --self-check 会把 scripts/dungeon_autopilot.py 也打成一个包（同一套依赖），用它
 #   在**打包态**里真开副本窗口跑几个场景（进副本、文本组件、小游戏触发器），
 #   并顺带验证发布包能启动、能引导 XDG 数据目录。
