@@ -3,6 +3,7 @@
 import threading
 
 from dungeon import process_log
+from dungeon.coupling import coupling_prompts, normalize_coupling_level
 from dungeon.models import PREFIX_ENDING
 from dungeon.splitter import strip_highlight_markers
 
