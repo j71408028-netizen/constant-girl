@@ -100,7 +100,7 @@
 ### 改完怎么立刻看效果
 
 - 行为包 / 演化公式：`python developer_tools/evolution_dump.py`（见
-  [character_evolution.md](character_evolution.md) §6）。
+  [character_evolution.md](character_evolution.md) §8）。
 - 小游戏：`python tests/check_minigame.py`，真渲染见
   `python scripts/dungeon_autopilot.py --scene mini-game-py`。
 - 各类开发者工具的入口见 `developer_tools/README.md`。

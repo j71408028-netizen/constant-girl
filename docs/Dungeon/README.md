@@ -39,9 +39,9 @@
 | 我要改… | 先看 | 然后跑 |
 |---|---|---|
 | 方案配置字段 / 默认值 | `dungeon/schema.py`（单一真相源）+ [数据模型](../designs/dungeon/script.md) §2、§4 | `check_scenario_schema.py` |
-| 人物表字段（`cast[]` / `intro_as`）/ 校验 / 注入位置 | [角色系统](../designs/dungeon/characters.md) §2、[数据模型](../designs/dungeon/script.md) §9 | `check_cast.py` |
+| 人物表字段（`cast[]` / `intro_as`）/ 校验 / 注入位置 | [角色系统](../designs/dungeon/characters.md) §3、[数据模型](../designs/dungeon/script.md) §9 | `check_cast.py` |
 | 角色账本（身份状态机 / 在场观测 / 揭示合并 / 人物简报） | [角色系统](../designs/dungeon/characters.md) | `check_characters.py`、`check_cast.py` |
-| 配角语音分角色（显式音色 / 代词分池 / 稳定哈希键） | [角色系统](../designs/dungeon/characters.md) §5 | `check_audio_chain.py`、`check_characters.py` |
+| 配角语音分角色（显式音色 / 代词分池 / 稳定哈希键） | [角色系统](../designs/dungeon/characters.md) §6 | `check_audio_chain.py`、`check_characters.py` |
 | 校验规则（error / warning / info） | [数据模型](../designs/dungeon/script.md) §9 | `check_scenario_schema.py`、`scripts/scenario_validate.py` |
 | 章节 / 触发器之间的依赖与可达性（图校验五条规则） | [编排图与图校验](scenario_graph.md) §3 | `check_scenario_graph.py` |
 | 剧情页三标签（章节与触发器 / 章节编排 / 触发器依赖） | [编排图与图校验](scenario_graph.md) §4 | `run_checks.py --smoke` |
@@ -74,7 +74,7 @@
 | `dungeon/settings.py` | 领域层 | 副本独占设置的键名与缺省（单一真相源，供 `persistence` 与 `window` 共用） |
 | `dungeon/admission.py` | 领域层 | 进入准入：入口地址（主世界锚点）距离与身高区间（窗口、挂件、挑战模式共用） |
 | `dungeon/scene.py` | 领域层 | 章节地点与参照物：按章节地址组装尺寸换算候选池（清单 ∪ 地址相配的全局地标）、当前地点的展示取值、结局传送地址判定，见 [副本内地点](../designs/dungeon/scene.md) |
-| `dungeon/cast.py` | 领域层 | 人物表归一化与字段归属：`normalize_cast` / `role_supports` / `render_first_seen`，见 [角色系统](../designs/dungeon/characters.md) §2 |
+| `dungeon/cast.py` | 领域层 | 人物表归一化与字段归属：`normalize_cast` / `role_supports` / `render_first_seen`，见 [角色系统](../designs/dungeon/characters.md) §3 |
 | `dungeon/characters.py` | 领域层 | 运行期角色账本 `CharacterLedger`：身份状态机、在场观测、揭示与合并、人物简报投影，见 [角色系统](../designs/dungeon/characters.md) |
 | `dungeon/window/component_pack/` | 组件包 | 官方显示组件（文本栏三选一 / 属性条 / 过程日志），常驻 Python 包，惰性导入 |
 | `dungeon/window/host.py` | 端口 | `HostPort`：window 层向宿主索取能力的唯一出口 |

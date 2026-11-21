@@ -317,7 +317,7 @@ AI 生成**（`normalize_fixed_text` 把缺路径的配置归一成空 dict，�
 `intrusion_delta` / `destruction_delta` / `custom_deltas` 直接叠加（坐标统一夹取
 0.5~4.5）、`casualty_step` 过伤亡公式、`action_points_refund` 走
 `refund_action_points`（无上限）、`exit_address` 结局传送（改写主世界位置的唯一
-入口，空 / 解不出的地址一律不动，见 [scene.md](scene.md) §8）——角色记一行
+入口，空 / 解不出的地址一律不动，见 [scene.md](scene.md) §6）——角色记一行
 `source="_apply_ending_effects"` 的完整演化，再记重要结局索引、自动保存回放（§9.3）。
 
 ## 4. 触发器字段索引
