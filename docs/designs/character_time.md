@@ -58,7 +58,7 @@
 
 ## 3. 近况新闻：载入后可能弹出的早报
 
-新闻内容来自取材表组里的 `news.csv`（列定义与回落顺序见 [resources.md](resources.md) §6；读取时会去掉空文本行）。
+新闻内容来自取材表组里的 `news.csv`（列定义与回落顺序见 [resources.md](resources.md) §7；读取时会去掉空文本行）。
 
 **什么时候会弹**（载入角色后检查；专业版会弹「早报」窗口，挂件版不会弹）：
 - 早上 **9 点之前**不弹；
@@ -75,7 +75,7 @@
 - `memorial` 会在生日或特定节日（元旦、愚人节、儿童节、万圣节）生效，对不上就跳过这个限制；
 - `intrusion` 和 `destruction` 会在 `0～4` 的档位里找最贴近当前数值的条目；
 - 挑候选时尽量避开跟上次一模一样的正文，实在筛不出来就用杂物新闻（`size_category` 为空的条目）兜底；
-- 拿到正文后，把 `{name}` / `{nick}` 替换成她的名字或昵称，再从 `substitute` 列的选项里随机挑词补进 `{a}` / `{b}`（详见 [resources.md](resources.md) §6）。
+- 拿到正文后，把 `{name}` / `{nick}` 替换成她的名字或昵称，再从 `substitute` 列的选项里随机挑词补进 `{a}` / `{b}`（详见 [resources.md](resources.md) §7）。
 
 </details>
 
@@ -154,12 +154,14 @@
   （[logic](behaviors/hooks-logic.md) / [report](behaviors/hooks-report.md) /
   [character](behaviors/hooks-character.md) / [chat](behaviors/hooks-chat.md)）·
   [example-imperial](behaviors/example-imperial.md)（示例包）
+- **world_packs/**：[README](world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
+  [author](world_packs/author.md)（制作与清单）
 
 **单篇**
 
 [地址系统](address_system.md) · [报告生成](report_selection.md) ·
 [角色演化](character_evolution.md) · [资源与包体系](resources.md) ·
-[挑战包](challenges.md) · [世界包](world_packs.md) ·
+[挑战包](challenges.md) ·
 [剧本编辑器](scenario_editor.md) · [界面双模式与外观](ui_modes.md) ·
 [角色的长期行为](character_time.md)（本页） · [身材剪影](body_preview.md) ·
 [更新检查](update_check.md)

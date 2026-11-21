@@ -159,7 +159,7 @@ data/
 |---|---|---|
 | 地标、描述、副本方案 | 可供探索的资源 | 「文本管理」「剧本编辑」 |
 | 取材表 | 一个目录四张 csv（姓名、身材、性格、新闻），缺的成员自动回落到内置 default 组 | 用 Excel 编辑 `data/static/materials/` |
-| 世界包 | 把资源包与取材表打成 `<world_id>.world.zip`，激活期间接管各数据源，停用即恢复 | 「资源中心」；[世界包机制](docs/designs/world_packs.md) |
+| 世界包 | 把资源包与取材表打成 `<world_id>.world.zip`，激活期间接管各数据源，停用即恢复 | 「资源中心」；[世界包制作](docs/designs/world_packs/author.md) |
 | 行为包 | 世界包可选携带的 Python 代码包，激活期间覆盖核心算法 | [行为包开发指南](docs/designs/behaviors/dev-guide.md) |
 | 副本小游戏 | `mini_game` 触发器的运行时与作者 API | [小游戏框架](docs/designs/dungeon/minigame.md) |
 | 挑战包 | 角色与资源打成秘钥保护的 `.chal`，玩家在挑战模式里达成结局 | 「挑战模式」；[挑战包机制](docs/designs/challenges.md) |

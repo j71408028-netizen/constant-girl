@@ -16,7 +16,7 @@
 顶栏（编辑器主体在 `ui/scenario/sc_frame.py::ScenarioEditor`）自上而下两层：
 
 1. **方案胶囊**：显示名下拉 + `＋ / ✎ / 🗑`（新建 / 重命名 / 删除）。新建弹出
-   `ResourceNameDialog`（id 自动派生，规则见 [resources.md](resources.md) §1）；
+   `ResourceNameDialog`（id 自动派生，规则见 [resources.md](resources.md) §3）；
    重命名只写信封 `title`；默认方案不可删。
 2. **页签轨**：`通用 / 角色 / 剧情 / 组件` 四个互斥页签，第二层右侧是常驻校验条
    （§4）。
@@ -190,7 +190,7 @@ pack_assets / extract_pack_assets`）。挑战包整体流程见 [challenges.md]
   `images/ audio/ texts/ endings/`（容器与命名规则见 [resources.md](resources.md)）。
 - **双根**：世界包声明拥有 `scenarios` 时读根指向包目录（只读），否则与写根相同；
   写根恒为自由根 `data/packs/scenarios`。列方案同时看两根，新建 / 保存 / 删除只写
-  写根。世界包机制见 [world_packs.md](world_packs.md)。
+  写根。世界包机制见 [world_packs/author.md](world_packs/author.md)。
 - **读**：主文件损坏回退 `.bak`，再过迁移补齐 / 归一化字段并迁走旧键
   （`custom_attrs → evolution_attrs`、触发器 `id → name`、
   `precondition_ids → precondition_names`、`action → action_type`、文本组件从
@@ -243,12 +243,14 @@ normalize 归一化结果一致；`tests/check_scenario_graph.py` 无 GUI 覆盖
   （[logic](behaviors/hooks-logic.md) / [report](behaviors/hooks-report.md) /
   [character](behaviors/hooks-character.md) / [chat](behaviors/hooks-chat.md)）·
   [example-imperial](behaviors/example-imperial.md)（示例包）
+- **world_packs/**：[README](world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
+  [author](world_packs/author.md)（制作与清单）
 
 **单篇**
 
 [地址系统](address_system.md) · [报告生成](report_selection.md) ·
 [角色演化](character_evolution.md) · [资源与包体系](resources.md) ·
-[挑战包](challenges.md) · [世界包](world_packs.md) ·
+[挑战包](challenges.md) ·
 [剧本编辑器](scenario_editor.md)（本页） · [界面双模式与外观](ui_modes.md) ·
 [角色的长期行为](character_time.md) · [身材剪影](body_preview.md) ·
 [更新检查](update_check.md)

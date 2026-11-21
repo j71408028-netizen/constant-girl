@@ -17,7 +17,7 @@
 | 角色聊天 | [chat/](chat/README.md) | 玩家 + 资源开发者（话题类型 / 世界态势作者）；信息视角细节在 [lens.md](chat/lens.md) |
 | 行为包 | [behaviors/](behaviors/README.md) | 玩家 + 世界包 / 行为包作者 |
 | 资源与包体系 | [resources.md](resources.md)（挑战包另见 [challenges.md](challenges.md)） | 资源作者 |
-| 世界包 | [world_packs.md](world_packs.md) | 玩家 + 资源作者 |
+| 世界包 | [world_packs/](world_packs/README.md)（制作另见 [author.md](world_packs/author.md)） | 玩家 + 资源作者 |
 | 剧本编辑器 | [scenario_editor.md](scenario_editor.md) | 副本方案作者 + 想懂编排机制的人 |
 | 界面双模式与外观 | [ui_modes.md](ui_modes.md) | 玩家 + 核心开发者 + 界面改造者 |
 | 角色的长期行为 | [character_time.md](character_time.md) | 玩家 + 核心开发者 |
@@ -44,7 +44,8 @@
 | **扩展程序行为**而不改主程序 | [behaviors/README.md](behaviors/README.md)（玩家向）→ [behaviors/dev-guide.md](behaviors/dev-guide.md) |
 | 理解**资源类型 / 信封 / 索引 / 同步**，或新增一类资源 | [resources.md](resources.md) |
 | 做**挑战包**（加密、秘钥、创建 / 导入 / 启动） | [challenges.md](challenges.md) |
-| 打包 / 分享**世界包**，理解激活期间的资源接管与命名空间 | [world_packs.md](world_packs.md) |
+| 拿到 / 启用 / 删除**世界包**，弄懂启用期间素材从哪来 | [world_packs/README.md](world_packs/README.md) |
+| 打包 / 分享**世界包**，写清单或排查「启用后没生效」 | [world_packs/author.md](world_packs/author.md) |
 | 做**小游戏**（副本触发器 + 作者 API） | [dungeon/minigame.md](dungeon/minigame.md) |
 | 用**剧本编辑器**（页签 / 编排图 / 校验条 / 素材导入） | [scenario_editor.md](scenario_editor.md) |
 | 写**副本显示组件**（钩子 / 参数 / slot 代管区） | [dungeon/components.md](dungeon/components.md) |

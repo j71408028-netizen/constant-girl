@@ -142,12 +142,14 @@ class MyGame(MiniGame):
   （[logic](../behaviors/hooks-logic.md) / [report](../behaviors/hooks-report.md) /
   [character](../behaviors/hooks-character.md) / [chat](../behaviors/hooks-chat.md)）·
   [example-imperial](../behaviors/example-imperial.md)（示例包）
+- **world_packs/**：[README](../world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
+  [author](../world_packs/author.md)（制作与清单）
 
 **单篇**
 
 [地址系统](../address_system.md) · [报告生成](../report_selection.md) ·
 [角色演化](../character_evolution.md) · [资源与包体系](../resources.md) ·
-[挑战包](../challenges.md) · [世界包](../world_packs.md) ·
+[挑战包](../challenges.md) ·
 [剧本编辑器](../scenario_editor.md) · [界面双模式与外观](../ui_modes.md) ·
 [角色的长期行为](../character_time.md) · [身材剪影](../body_preview.md) ·
 [更新检查](../update_check.md)
