@@ -4,7 +4,7 @@
 > - **普通玩家**：§1 认全她身上的几层数，§2～§3 看性格怎样决定走向，§4～§5 是边界与行动点。
 > - **想调数值的作者**：§8 的公式折叠表、§9 的内置性格表、§10 的开放面，按需进。
 >
-> 相关页面：关掉游戏那段时间怎么结账 [character_time.md](character_time.md) · 报告里挑了什么地标 [report_selection.md](report_selection.md) · 章节触发器的演化修正 [dungeon/script.md](dungeon/script.md)。
+> 相关页面：关掉游戏那段时间怎么结账 [time.md](time.md) · 报告里挑了什么地标 [report_selection.md](../report_selection.md) · 章节触发器的演化修正 [dungeon/script.md](../dungeon/script.md)。
 
 > **三层术语**：**潜质**是她巨大化后可能暴露的底色（档案里的初始值），**深度**是潜质展开的速度（每单位步进深入多少），**介入度 / 破坏性**是她此刻表现出来的状态。三层不同层、不同写法，别互相代称。
 
@@ -50,7 +50,7 @@
 
 **④ 闲置回落**。角色面板开着时，每分钟介入度与破坏性朝**潜质**回落一点（fraction `0.1`）：只有越过潜质时才回落，回落量是 `fraction × 初始深度`，不越过潜质，方向由初始深度的符号决定。没有设定潜质的角色不回落，停在原地。
 
-**⑤ 载入时结账**。重新载入角色时按离开的时长批量推进介入度、破坏性与伤亡（含作息调制、72 小时明细），行动点也在这时补齐。这套结算的完整口径在 [character_time.md](character_time.md) §1，这里只说它同样受上面这些参数控制。
+**⑤ 载入时结账**。重新载入角色时按离开的时长批量推进介入度、破坏性与伤亡（含作息调制、72 小时明细），行动点也在这时补齐。这套结算的完整口径在 [time.md](time.md) §1，这里只说它同样受上面这些参数控制。
 
 **负向演化**是藏在每条路径里的一步自检：行动点低于 **50** 时，每步额外推进一次，介入深度步进取 `-1 - 0.5 × 敏感值`、破坏深度步进取 `-1 - 0.5 × 重力`，介入度与破坏性按当前深度乘以这个步进平移，有变化就在演化表里追加一行。它也是唯一一处**敏感值直接决定步进**的地方。
 
@@ -67,7 +67,7 @@
 | 负向演化 | 介入深度步进 `-1 - 0.5 × 敏感值`，破坏深度步进 `-1 - 0.5 × 重力` |
 | 不适应性衰减 | `深度 ×= 0.4 ^ (|步进| × (1 - 归一个性强度))` |
 
-参数本身（`step_per_hour`、`exit_amp`、`recovery_*` 等）来自角色创建时的出身烙印，默认值与含义见 [character_time.md](character_time.md) §1 的折叠表——那份表是唯一的登记处，这里不重复。
+参数本身（`step_per_hour`、`exit_amp`、`recovery_*` 等）来自角色创建时的出身烙印，默认值与含义见 [time.md](time.md) §1 的折叠表——那份表是唯一的登记处，这里不重复。
 
 </details>
 
@@ -127,11 +127,11 @@ python developer_tools/evolution_dump.py --list-packs          # 有哪些行为
 
 ## 9. 官方资源
 
-内置性格表在 `data/static/personalities/`，`default.csv` 是默认表，模拟工具的 `--group table` 会逐条跑这张表里的真实性格。出身烙印的参数登记在 [character_time.md](character_time.md) §1，两者合起来才是「她为什么这样动」的完整来源。
+内置性格表在 `data/static/personalities/`，`default.csv` 是默认表，模拟工具的 `--group table` 会逐条跑这张表里的真实性格。出身烙印的参数登记在 [time.md](time.md) §1，两者合起来才是「她为什么这样动」的完整来源。
 
 ## 10. 作者须知
 
-- **开放面**：报告路径用到的 `StateService` 深度方法（`evolve_depths` / `decay_depths` / `nudge_depths`）全部可覆盖，清单见 [hooks-character.md](behaviors/hooks-character.md)；副本演化主公式**没有**行为钩子，只通过注入的 `decay_depths` 受影响。
+- **开放面**：报告路径用到的 `StateService` 深度方法（`evolve_depths` / `decay_depths` / `nudge_depths`）全部可覆盖，清单见 [hooks-character.md](../behaviors/hooks-character.md)；副本演化主公式**没有**行为钩子，只通过注入的 `decay_depths` 受影响。
 - **不开放的部分**：0.5~4.5 的夹取、72 小时 / 2 小时窗口、烙印参数的运行时改写。行为包改的是策略与参数值，不改边界与口径。
 - **改完怎么验**：先跑 §8 的模拟对照五条结论，再跑 `python tests/check_report_engine.py`（报告侧推进）与 `python tests/check_model_tuning.py`（烙印派生）；改到公式本身时，同步更新 §8 的结论。
 - **术语对齐**：代码侧字段是 `Personality.depth_intrusion` / `depth_destruction`，状态侧快照读 `current_depth_*`；钩子名随术语改过（`evolve_step_rates` → `evolve_depths`），旧名不再生效。写玩家文案时查 `docs/terminology.md`（潜质 / 深度 / 度 三层，旧称「介入度步长」已停用）。
@@ -143,32 +143,35 @@ python developer_tools/evolution_dump.py --list-packs          # 有哪些行为
 
 **机制目录**
 
-- **dungeon/**：[README](dungeon/README.md)（全景）·
-  [script](dungeon/script.md)（章节与触发器字段）·
-  [prompts](dungeon/prompts.md)（提示词与上下文）·
-  [characters](dungeon/characters.md)（人物表与账本）·
-  [voice](dungeon/voice.md)（对话语音）·
-  [admission](dungeon/admission.md)（进入准入）·
-  [scene](dungeon/scene.md)（地点与参照物）·
-  [minigame](dungeon/minigame.md)（小游戏）·
-  [components](dungeon/components.md)（显示组件）
-- **chat/**：[README](chat/README.md)（话题与好感 / 紧张度）·
+- **dungeon/**：[README](../dungeon/README.md)（全景）·
+  [script](../dungeon/script.md)（章节与触发器字段）·
+  [prompts](../dungeon/prompts.md)（提示词与上下文）·
+  [characters](../dungeon/characters.md)（人物表与账本）·
+  [voice](../dungeon/voice.md)（对话语音）·
+  [admission](../dungeon/admission.md)（进入准入）·
+  [scene](../dungeon/scene.md)（地点与参照物）·
+  [minigame](../dungeon/minigame.md)（小游戏）·
+  [components](../dungeon/components.md)（显示组件）
+- **character/**：[README](README.md)（全景）·
+  [evolution](evolution.md)（本页）·
+  [time](time.md)（恢复结算 / 作息 / 导出）·
+  [chat](chat/README.md)（话题与好感 / 紧张度）·
   [lens](chat/lens.md)（信息视角细节）
-- **behaviors/**：[README](behaviors/README.md)（玩家向）·
-  [dev-guide](behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
-  （[logic](behaviors/hooks-logic.md) / [report](behaviors/hooks-report.md) /
-  [character](behaviors/hooks-character.md) / [chat](behaviors/hooks-chat.md)）·
-  [example-imperial](behaviors/example-imperial.md)（示例包）
-- **world_packs/**：[README](world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
-  [author](world_packs/author.md)（制作与清单）
+- **behaviors/**：[README](../behaviors/README.md)（玩家向）·
+  [dev-guide](../behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
+  （[logic](../behaviors/hooks-logic.md) / [report](../behaviors/hooks-report.md) /
+  [character](../behaviors/hooks-character.md) / [chat](../behaviors/hooks-chat.md)）·
+  [example-imperial](../behaviors/example-imperial.md)（示例包）
+- **world_packs/**：[README](../world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
+  [author](../world_packs/author.md)（制作与清单）
 
 **单篇**
 
-[地址系统](address_system.md) · [报告生成](report_selection.md) ·
-[角色演化](character_evolution.md)（本页） · [资源与包体系](resources.md) ·
-[挑战包](challenges.md) ·
-[剧本编辑器](scenario_editor.md) · [界面双模式与外观](ui_modes.md) ·
-[角色的长期行为](character_time.md) · [身材剪影](body_preview.md) ·
-[更新检查](update_check.md)
+[地址系统](../address_system.md) · [报告生成](../report_selection.md) ·
+[资源与包体系](../resources.md) ·
+[挑战包](../challenges.md) ·
+[剧本编辑器](../scenario_editor.md) · [界面双模式与外观](../ui_modes.md) ·
+[身材剪影](../body_preview.md) ·
+[更新检查](../update_check.md)
 
 </details>

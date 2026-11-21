@@ -11,7 +11,7 @@
 > [hooks-logic.md](hooks-logic.md) / [hooks-chat.md](hooks-chat.md) · 世界包清单与启用
 > [../world_packs/author.md](../world_packs/author.md)。
 >
-> 覆盖 `StateService` 坐标 / 深度方法前，先读 [character_evolution.md](../character_evolution.md)
+> 覆盖 `StateService` 坐标 / 深度方法前，先读 [character/evolution.md](../character/evolution.md)
 > 的演化模型（量、公式、已验证动态特性）。
 
 行为包是世界包的一种资源类型：激活该世界包期间，它可以覆盖核心算法的实现，而无需修改主
@@ -269,8 +269,11 @@ data/worlds/<world_id>/
   [scene](../dungeon/scene.md)（地点与参照物）·
   [minigame](../dungeon/minigame.md)（小游戏）·
   [components](../dungeon/components.md)（显示组件）
-- **chat/**：[README](../chat/README.md)（话题与好感 / 紧张度）·
-  [lens](../chat/lens.md)（信息视角细节）
+- **character/**：[README](../character/README.md)（全景）·
+  [evolution](../character/evolution.md)（介入度 / 深度 / 行动点）·
+  [time](../character/time.md)（恢复结算 / 作息 / 导出）·
+  [chat](../character/chat/README.md)（话题与好感 / 紧张度）·
+  [lens](../character/chat/lens.md)（信息视角细节）
 - **behaviors/**：[README](README.md)（玩家向）·
   [dev-guide](dev-guide.md)（本页）· 钩子契约四篇
   （[logic](hooks-logic.md) / [report](hooks-report.md) /
@@ -282,10 +285,10 @@ data/worlds/<world_id>/
 **单篇**
 
 [地址系统](../address_system.md) · [报告生成](../report_selection.md) ·
-[角色演化](../character_evolution.md) · [资源与包体系](../resources.md) ·
+[资源与包体系](../resources.md) ·
 [挑战包](../challenges.md) ·
 [剧本编辑器](../scenario_editor.md) · [界面双模式与外观](../ui_modes.md) ·
-[角色的长期行为](../character_time.md) · [身材剪影](../body_preview.md) ·
+[身材剪影](../body_preview.md) ·
 [更新检查](../update_check.md)
 
 </details>

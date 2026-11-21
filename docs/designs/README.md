@@ -13,14 +13,12 @@
 | 地址系统 | [address_system.md](address_system.md) | 玩家 + 资源开发者（地标 / 描述风格作者） |
 | 报告生成 | [report_selection.md](report_selection.md) | 玩家 + 资源开发者（地标 / 描述风格作者） |
 | 副本设计机制 | [dungeon/](dungeon/README.md) | 核心开发者 + 副本方案作者（章节与触发器 / 提示词 / 人物 / 语音 / 准入 / 地点） |
-| 角色演化 | [character_evolution.md](character_evolution.md) | 核心开发者 + 行为包作者 |
-| 角色聊天 | [chat/](chat/README.md) | 玩家 + 资源开发者（话题类型 / 世界态势作者）；信息视角细节在 [lens.md](chat/lens.md) |
+| 角色 | [character/](character/README.md) | 玩家 + 核心开发者 + 行为包 / 话题作者（演化 [evolution.md](character/evolution.md) / 长期行为 [time.md](character/time.md) / 聊天 [chat/](character/chat/README.md)；信息视角细节在 [lens.md](character/chat/lens.md)） |
 | 行为包 | [behaviors/](behaviors/README.md) | 玩家 + 世界包 / 行为包作者 |
 | 资源与包体系 | [resources.md](resources.md)（挑战包另见 [challenges.md](challenges.md)） | 资源作者 |
 | 世界包 | [world_packs/](world_packs/README.md)（制作另见 [author.md](world_packs/author.md)） | 玩家 + 资源作者 |
 | 剧本编辑器 | [scenario_editor.md](scenario_editor.md) | 副本方案作者 + 想懂编排机制的人 |
 | 界面双模式与外观 | [ui_modes.md](ui_modes.md) | 玩家 + 核心开发者 + 界面改造者 |
-| 角色的长期行为 | [character_time.md](character_time.md) | 玩家 + 核心开发者 |
 | 身材剪影 | [body_preview.md](body_preview.md) | 玩家 + 核心开发者 |
 | 更新检查 | [update_check.md](update_check.md) | 玩家 |
 
@@ -39,9 +37,9 @@
 | 改**AI 每段看到什么 / 怎么记住前情**（初始提示、章节备注、上下文窗口、细节注入） | [dungeon/prompts.md](dungeon/prompts.md) |
 | 配置或排查**副本对话语音**（音色 / 语速 / 端点与代理） | [dungeon/voice.md](dungeon/voice.md) |
 | 给**副本方案**声明进入条件（入口地址 / 距离 / 身高） | [dungeon/admission.md](dungeon/admission.md) |
-| 改**角色数值演化** | 先读 [character_evolution.md](character_evolution.md)（全景），再看可覆盖的代码入口 [behaviors/dev-guide.md](behaviors/dev-guide.md) |
-| 调整**角色聊天**的话题类型、好感/紧张度/状态的手感 | [chat/README.md](chat/README.md)（实现细节在 `docs/dev/chat_delivery.md`） |
-| 调整**某类话题下 AI 知道什么 / 不知道什么** | [chat/lens.md](chat/lens.md)（改完用 `python developer_tools/lens_preview.py` 静态看账，或 `chat_session_preview.py` 边聊边看） |
+| 改**角色数值演化** | 先读 [character/evolution.md](character/evolution.md)（全景），再看可覆盖的代码入口 [behaviors/dev-guide.md](behaviors/dev-guide.md) |
+| 调整**角色聊天**的话题类型、好感/紧张度/状态的手感 | [character/chat/README.md](character/chat/README.md)（实现细节在 `docs/dev/chat_delivery.md`） |
+| 调整**某类话题下 AI 知道什么 / 不知道什么** | [character/chat/lens.md](character/chat/lens.md)（改完用 `python developer_tools/lens_preview.py` 静态看账，或 `chat_session_preview.py` 边聊边看） |
 | **扩展程序行为**而不改主程序 | [behaviors/README.md](behaviors/README.md)（玩家向）→ [behaviors/dev-guide.md](behaviors/dev-guide.md) |
 | 理解**资源类型 / 信封 / 索引 / 同步**，或新增一类资源 | [resources.md](resources.md) |
 | 做**挑战包**（加密、秘钥、创建 / 导入 / 启动） | [challenges.md](challenges.md) |
@@ -51,7 +49,7 @@
 | 用**剧本编辑器**（页签 / 编排图 / 校验条 / 素材导入） | [scenario_editor.md](scenario_editor.md) |
 | 写**副本显示组件**（钩子 / 参数 / slot 代管区） | [dungeon/components.md](dungeon/components.md) |
 | 理解**专业 / 挂件双界面**、主题配色或字体解析 | [ui_modes.md](ui_modes.md) |
-| 理解**恢复结算 / 作息 / 近况新闻 / 档案与角色卡导出** | [character_time.md](character_time.md) |
+| 理解**恢复结算 / 作息 / 近况新闻 / 档案与角色卡导出** | [character/time.md](character/time.md) |
 | 理解**创建 / 调身材预设时的剪影预览图**（兼作无头像兜底） | [body_preview.md](body_preview.md) |
 | **检查更新**（入口 / 结果窗口 / 会不会自动查） | [update_check.md](update_check.md) |
 
@@ -61,6 +59,9 @@
   → 拆为目录；
 - 目录的 `README.md` 独立成页，保持线性叙事（玩家 / 使用者读到这页为止）；细节页
   才允许查表型，从全景页链接进入；
+- 目录有两种：单一机制长出来的**机制目录**（`chat/`、`world_packs/`、`behaviors/`，
+  README 是该机制的全景页）；一组相关机制的**域目录**（`dungeon/`、`character/`，
+  README 讲这组机制怎么配合、各自从哪进）；
 - 未拆分的机制仍是单篇，按下方「叙述骨架与代码引用」组织（见
   [dungeon/components.md](dungeon/components.md)）；
 - 拆分提交为纯移动（利于 git rename 跟踪），措辞修订另起提交；
@@ -103,7 +104,7 @@
 ### 改完怎么立刻看效果
 
 - 行为包 / 演化公式：`python developer_tools/evolution_dump.py`（见
-  [character_evolution.md](character_evolution.md) §8）。
+  [character/evolution.md](character/evolution.md) §8）。
 - 小游戏：`python tests/check_minigame.py`，真渲染见
   `python scripts/dungeon_autopilot.py --scene mini-game-py`。
 - 各类开发者工具的入口见 `developer_tools/README.md`。

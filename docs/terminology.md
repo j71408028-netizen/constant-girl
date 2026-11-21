@@ -11,7 +11,7 @@
 > - **代码开发者**：标识符对照与命名约定见 §2；改了玩家可见词回写 §1，
 >   改了标识符去 `docs/Dungeon/domain_terms.md`。
 >
-> 相关：[角色演化全景](designs/character_evolution.md)（潜质/深度/敏感值/重力怎么算）、
+> 相关：[角色演化全景](designs/character/evolution.md)（潜质/深度/敏感值/重力怎么算）、
 > [副本数据模型](designs/dungeon/script.md)（章节与触发器）、
 > [行为包开发指南](designs/behaviors/dev-guide.md)（文案可被覆盖的位置）。
 
@@ -155,7 +155,7 @@
 | **大小写不敏感** | 搜索、匹配的技术提示 | 技术语，非领域词，不受本表约束 |
 
 「演化」指角色每一段文本走一步、状态/属性随这一步变化，全系统统一叫法见
-[角色演化全景](designs/character_evolution.md)；修正量正挂在这一步上。
+[角色演化全景](designs/character/evolution.md)；修正量正挂在这一步上。
 
 ### 1.6 三套「尺寸 / 尺度」分档
 

@@ -4,7 +4,7 @@
 > - **普通玩家**：顺着 **§1 → §3** 看就能搞懂「关掉游戏的日子里她做了什么」；想分享或搬运角色看 **§4 → §5**；顺手看看 **§7** 里的隐藏玩法。
 > - **想折腾机制或改代码的开发者**：重点看 **§1～§2** 的规则与 **§6** 的实现说明。
 >
-> 相关页面：演化公式总览 [character_evolution.md](character_evolution.md) · 空间档案与区域 [report_selection.md](report_selection.md) · 新闻数据源 [resources.md](resources.md) · 身材剪影 [body_preview.md](body_preview.md)。
+> 相关页面：演化公式总览 [evolution.md](evolution.md) · 空间档案与区域 [report_selection.md](../report_selection.md) · 新闻数据源 [resources.md](../resources.md) · 身材剪影 [body_preview.md](../body_preview.md)。
 
 > **名词对照说明**：游戏里关掉再回来重新算账的过程，在代码里叫 `offline`（离线），正文里通常说「恢复结算」或「离开这段时间」；界面上你看到的第一句话依然是「离线 {时长}」。
 
@@ -15,14 +15,14 @@
 重新载入时，会一次性结清三件事：
 
 1. **行动点回血**：按你离开的分钟数慢慢涨回来，最高补到 **100**（自然回复的上限）。
-2. **坐标往回走**：她的介入度 / 破坏性会向自己的**性格初始倾向**（`init_intrusion` / `init_destruction`）靠拢，而不是停在正中间。离开越久靠得越多，但每次按比例走、不会冲过头，最后限制在 **0.5～4.5** 之间（细则见 [character_evolution.md](character_evolution.md) §3 的闲置回落）。如果没有设定性格，坐标就不会自己回落。
+2. **坐标往回走**：她的介入度 / 破坏性会向自己的**性格初始倾向**（`init_intrusion` / `init_destruction`）靠拢，而不是停在正中间。离开越久靠得越多，但每次按比例走、不会冲过头，最后限制在 **0.5～4.5** 之间（细则见 [evolution.md](evolution.md) §3 的闲置回落）。如果没有设定性格，坐标就不会自己回落。
 3. **步进与伤亡变化**：你不在的时候她也不是完全静止，结算时会按离开的时间长短分两段算：
-   - **最近 72 小时：每 2 小时记一小段**（在界面的离线明细里能看到每一段的记录）。每一小段有多活跃，取决于她的个性强度、作息规律（§2），再加上刚关游戏那阵子还没完全安静下来的「余温」（随时间很快退去），最后乘上她从空间档案里积累的环境影响（范围在 `0.1～1.5`，见 [report_selection.md](report_selection.md)）。伤亡则会结合她的身材和步进一起算。
+   - **最近 72 小时：每 2 小时记一小段**（在界面的离线明细里能看到每一段的记录）。每一小段有多活跃，取决于她的个性强度、作息规律（§2），再加上刚关游戏那阵子还没完全安静下来的「余温」（随时间很快退去），最后乘上她从空间档案里积累的环境影响（范围在 `0.1～1.5`，见 [report_selection.md](../report_selection.md)）。伤亡则会结合她的身材和步进一起算。
    - **超过 72 小时的更早时间：按天打包算一大段**（没有逐 2 小时的明细），作息按当天的平均水平来算。
 
 算完账之后，界面的离线明细会换成**这一次**的数据，累计伤亡会加上新产生的部分；只要有变化，就会记一条恢复记录。界面首段「离线 {时长}」在离开满 90 分钟后会按小时显示，依次列出时长、恢复的行动点、步进和新增伤亡。
 
-> **在线时是另一套节奏**：只要角色开着，角色面板每 60 秒会自动回一点行动点，每分钟坐标也会小幅回落一点（详见 [character_evolution.md](character_evolution.md) §3 的闲置回落、§5 的行动点）。刚载入算完离线账后，还会紧接着判定负向演化（行动点在 50 及以上时会跳过，见 §3 的负向演化）。
+> **在线时是另一套节奏**：只要角色开着，角色面板每 60 秒会自动回一点行动点，每分钟坐标也会小幅回落一点（详见 [evolution.md](evolution.md) §3 的闲置回落、§5 的行动点）。刚载入算完离线账后，还会紧接着判定负向演化（行动点在 50 及以上时会跳过，见 §3 的负向演化）。
 
 <details>
 <summary>参数默认值与计算公式（想微调手感或排查数值异常时展开）</summary>
@@ -58,7 +58,7 @@
 
 ## 3. 近况新闻：载入后可能弹出的早报
 
-新闻内容来自取材表组里的 `news.csv`（列定义与回落顺序见 [resources.md](resources.md) §7；读取时会去掉空文本行）。
+新闻内容来自取材表组里的 `news.csv`（列定义与回落顺序见 [resources.md](../resources.md) §7；读取时会去掉空文本行）。
 
 **什么时候会弹**（载入角色后检查；专业版会弹「早报」窗口，挂件版不会弹）：
 - 早上 **9 点之前**不弹；
@@ -75,7 +75,7 @@
 - `memorial` 会在生日或特定节日（元旦、愚人节、儿童节、万圣节）生效，对不上就跳过这个限制；
 - `intrusion` 和 `destruction` 会在 `0～4` 的档位里找最贴近当前数值的条目；
 - 挑候选时尽量避开跟上次一模一样的正文，实在筛不出来就用杂物新闻（`size_category` 为空的条目）兜底；
-- 拿到正文后，把 `{name}` / `{nick}` 替换成她的名字或昵称，再从 `substitute` 列的选项里随机挑词补进 `{a}` / `{b}`（详见 [resources.md](resources.md) §7）。
+- 拿到正文后，把 `{name}` / `{nick}` 替换成她的名字或昵称，再从 `substitute` 列的选项里随机挑词补进 `{a}` / `{b}`（详见 [resources.md](../resources.md) §7）。
 
 </details>
 
@@ -139,32 +139,35 @@
 
 **机制目录**
 
-- **dungeon/**：[README](dungeon/README.md)（全景）·
-  [script](dungeon/script.md)（章节与触发器字段）·
-  [prompts](dungeon/prompts.md)（提示词与上下文）·
-  [characters](dungeon/characters.md)（人物表与账本）·
-  [voice](dungeon/voice.md)（对话语音）·
-  [admission](dungeon/admission.md)（进入准入）·
-  [scene](dungeon/scene.md)（地点与参照物）·
-  [minigame](dungeon/minigame.md)（小游戏）·
-  [components](dungeon/components.md)（显示组件）
-- **chat/**：[README](chat/README.md)（话题与好感 / 紧张度）·
+- **dungeon/**：[README](../dungeon/README.md)（全景）·
+  [script](../dungeon/script.md)（章节与触发器字段）·
+  [prompts](../dungeon/prompts.md)（提示词与上下文）·
+  [characters](../dungeon/characters.md)（人物表与账本）·
+  [voice](../dungeon/voice.md)（对话语音）·
+  [admission](../dungeon/admission.md)（进入准入）·
+  [scene](../dungeon/scene.md)（地点与参照物）·
+  [minigame](../dungeon/minigame.md)（小游戏）·
+  [components](../dungeon/components.md)（显示组件）
+- **character/**：[README](README.md)（全景）·
+  [evolution](evolution.md)（介入度 / 深度 / 行动点）·
+  [time](time.md)（本页）·
+  [chat](chat/README.md)（话题与好感 / 紧张度）·
   [lens](chat/lens.md)（信息视角细节）
-- **behaviors/**：[README](behaviors/README.md)（玩家向）·
-  [dev-guide](behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
-  （[logic](behaviors/hooks-logic.md) / [report](behaviors/hooks-report.md) /
-  [character](behaviors/hooks-character.md) / [chat](behaviors/hooks-chat.md)）·
-  [example-imperial](behaviors/example-imperial.md)（示例包）
-- **world_packs/**：[README](world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
-  [author](world_packs/author.md)（制作与清单）
+- **behaviors/**：[README](../behaviors/README.md)（玩家向）·
+  [dev-guide](../behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
+  （[logic](../behaviors/hooks-logic.md) / [report](../behaviors/hooks-report.md) /
+  [character](../behaviors/hooks-character.md) / [chat](../behaviors/hooks-chat.md)）·
+  [example-imperial](../behaviors/example-imperial.md)（示例包）
+- **world_packs/**：[README](../world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
+  [author](../world_packs/author.md)（制作与清单）
 
 **单篇**
 
-[地址系统](address_system.md) · [报告生成](report_selection.md) ·
-[角色演化](character_evolution.md) · [资源与包体系](resources.md) ·
-[挑战包](challenges.md) ·
-[剧本编辑器](scenario_editor.md) · [界面双模式与外观](ui_modes.md) ·
-[角色的长期行为](character_time.md)（本页） · [身材剪影](body_preview.md) ·
-[更新检查](update_check.md)
+[地址系统](../address_system.md) · [报告生成](../report_selection.md) ·
+[资源与包体系](../resources.md) ·
+[挑战包](../challenges.md) ·
+[剧本编辑器](../scenario_editor.md) · [界面双模式与外观](../ui_modes.md) ·
+[身材剪影](../body_preview.md) ·
+[更新检查](../update_check.md)
 
 </details>

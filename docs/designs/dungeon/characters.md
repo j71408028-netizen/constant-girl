@@ -2,7 +2,7 @@
 
 > **这一篇回答什么问题**：方案里怎么写「这个故事里有谁」——主角、配角、群像各填哪些字段；以及一局跑起来之后，程序怎么记住「谁在场、这个称呼是谁、他什么时候露了真名」。**写方案的作者**看 §1～§3；**想知道 AI 为什么这么写人**的看 §4～§6；**想知道在哪看人、在哪改代码**的看 §7 界面与 §8 内部实现。
 >
-> 相关页面：章节与触发器的完整字段索引 [script.md](script.md) · AI 每段看到什么（在场行与简报怎么拼进提示词）[prompts.md](prompts.md) · 谁用什么嗓子朗读 [voice.md](voice.md) · 编辑器里的「角色」页 [../scenario_editor.md](../scenario_editor.md) · 人物带来的演化量 [../character_evolution.md](../character_evolution.md)。
+> 相关页面：章节与触发器的完整字段索引 [script.md](script.md) · AI 每段看到什么（在场行与简报怎么拼进提示词）[prompts.md](prompts.md) · 谁用什么嗓子朗读 [voice.md](voice.md) · 编辑器里的「角色」页 [../scenario_editor.md](../scenario_editor.md) · 人物带来的演化量 [../character/evolution.md](../character/evolution.md)。
 >
 > 字段声明的单一真相源是方案的 schema；本篇是字段与机制的权威说明，改代码时两边要同步。
 
@@ -12,7 +12,7 @@
 
 | 角色 | 存在哪 | 说明 |
 |---|---|---|
-| 她 | 本局角色档案 | 名字 / 性格 / 身高 / 部位；跨方案复用，不属于方案 |
+| 她 | 本局角色档案 | 名字 / 性格 / 身高 / 部位；跨方案复用，不属于方案（她的演化 / 聊天 / 长期行为见 [../character/README.md](../character/README.md)） |
 | 主角 | `protagonist_title` + `protagonist_background` | 唯一、视角固定，**不进人物表** |
 | 配角 | `cast[]` | `key` 有完整身份背景，`extra` 只有三条线索 |
 | 环境 | 无实体 | 只是演化量的一个归属档（`owner`） |
@@ -202,8 +202,11 @@ AI 定的线索**不回写配置**：方案要跨局复用，写回会让下一�
   [characters](characters.md)（人物表与账本，本页）· [voice](voice.md)（对话语音）·
   [admission](admission.md)（进入准入）· [scene](scene.md)（地点与参照物）·
   [minigame](minigame.md)（小游戏）· [components](components.md)（显示组件）
-- **chat/**：[README](../chat/README.md)（话题与好感 / 紧张度）·
-  [lens](../chat/lens.md)（信息视角细节）
+- **character/**：[README](../character/README.md)（全景）·
+  [evolution](../character/evolution.md)（介入度 / 深度 / 行动点）·
+  [time](../character/time.md)（恢复结算 / 作息 / 导出）·
+  [chat](../character/chat/README.md)（话题与好感 / 紧张度）·
+  [lens](../character/chat/lens.md)（信息视角细节）
 - **behaviors/**：[README](../behaviors/README.md)（玩家向）·
   [dev-guide](../behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
   （[logic](../behaviors/hooks-logic.md) / [report](../behaviors/hooks-report.md) /
@@ -215,10 +218,10 @@ AI 定的线索**不回写配置**：方案要跨局复用，写回会让下一�
 **单篇**
 
 [地址系统](../address_system.md) · [报告生成](../report_selection.md) ·
-[角色演化](../character_evolution.md) · [资源与包体系](../resources.md) ·
+[资源与包体系](../resources.md) ·
 [挑战包](../challenges.md) ·
 [剧本编辑器](../scenario_editor.md) · [界面双模式与外观](../ui_modes.md) ·
-[角色的长期行为](../character_time.md) · [身材剪影](../body_preview.md) ·
+[身材剪影](../body_preview.md) ·
 [更新检查](../update_check.md)
 
 </details>

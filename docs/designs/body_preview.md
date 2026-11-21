@@ -6,7 +6,7 @@
 > - **想改绘制效果的开发者**：看 **§3** 的实现说明。
 >
 > 相关页面：界面双模式与外观 [ui_modes.md](ui_modes.md)（挂件参数面板） ·
-> 档案与角色卡导出 [character_time.md](character_time.md)。
+> 档案与角色卡导出 [character/time.md](character/time.md)。
 
 ## 1. 剪影是什么、什么时候出现
 
@@ -82,8 +82,11 @@
   [scene](dungeon/scene.md)（地点与参照物）·
   [minigame](dungeon/minigame.md)（小游戏）·
   [components](dungeon/components.md)（显示组件）
-- **chat/**：[README](chat/README.md)（话题与好感 / 紧张度）·
-  [lens](chat/lens.md)（信息视角细节）
+- **character/**：[README](character/README.md)（全景）·
+  [evolution](character/evolution.md)（介入度 / 深度 / 行动点）·
+  [time](character/time.md)（恢复结算 / 作息 / 导出）·
+  [chat](character/chat/README.md)（话题与好感 / 紧张度）·
+  [lens](character/chat/lens.md)（信息视角细节）
 - **behaviors/**：[README](behaviors/README.md)（玩家向）·
   [dev-guide](behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
   （[logic](behaviors/hooks-logic.md) / [report](behaviors/hooks-report.md) /
@@ -95,10 +98,10 @@
 **单篇**
 
 [地址系统](address_system.md) · [报告生成](report_selection.md) ·
-[角色演化](character_evolution.md) · [资源与包体系](resources.md) ·
+[资源与包体系](resources.md) ·
 [挑战包](challenges.md) ·
 [剧本编辑器](scenario_editor.md) · [界面双模式与外观](ui_modes.md) ·
-[角色的长期行为](character_time.md) · [身材剪影](body_preview.md)（本页） ·
+[身材剪影](body_preview.md)（本页） ·
 [更新检查](update_check.md)
 
 </details>

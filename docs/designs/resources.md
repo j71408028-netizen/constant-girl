@@ -255,7 +255,7 @@ data/packs/minigames/<id>/manifest.json
 - **给挑战包加封面**：在 `.chal` 旁边放一张同名 `.png`（`<id>.png`），列表里就用它当图标。
   信封不管这张图，画坏了删掉即可。
 - **手写一张话题表**：`data/packs/topics/<id>` 放一个 JSON 数组（形状与内置表相同，见
-  [chat/lens.md](chat/lens.md) §10），资源中心就能选它打包；内置表导出的条目能原样
+  [character/chat/lens.md](character/chat/lens.md) §10），资源中心就能选它打包；内置表导出的条目能原样
   导回。注意主文件不带后缀。
 
 ## 13. 参数表
@@ -360,8 +360,11 @@ data/packs/minigames/<id>/manifest.json
   [scene](dungeon/scene.md)（地点与参照物）·
   [minigame](dungeon/minigame.md)（小游戏）·
   [components](dungeon/components.md)（显示组件）
-- **chat/**：[README](chat/README.md)（话题与好感 / 紧张度）·
-  [lens](chat/lens.md)（信息视角细节）
+- **character/**：[README](character/README.md)（全景）·
+  [evolution](character/evolution.md)（介入度 / 深度 / 行动点）·
+  [time](character/time.md)（恢复结算 / 作息 / 导出）·
+  [chat](character/chat/README.md)（话题与好感 / 紧张度）·
+  [lens](character/chat/lens.md)（信息视角细节）
 - **behaviors/**：[README](behaviors/README.md)（玩家向）·
   [dev-guide](behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
   （[logic](behaviors/hooks-logic.md) / [report](behaviors/hooks-report.md) /
@@ -373,10 +376,10 @@ data/packs/minigames/<id>/manifest.json
 **单篇**
 
 [地址系统](address_system.md) · [报告生成](report_selection.md) ·
-[角色演化](character_evolution.md) · [资源与包体系](resources.md)（本页） ·
+[资源与包体系](resources.md)（本页） ·
 [挑战包](challenges.md) ·
 [剧本编辑器](scenario_editor.md) · [界面双模式与外观](ui_modes.md) ·
-[角色的长期行为](character_time.md) · [身材剪影](body_preview.md) ·
+[身材剪影](body_preview.md) ·
 [更新检查](update_check.md)
 
 </details>

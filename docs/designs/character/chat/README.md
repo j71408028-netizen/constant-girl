@@ -9,7 +9,7 @@
 > - **想调手感或改代码**：**§3～§4** 的规则与 **§8** 的实现说明。
 >
 > 相关页面：某类话题下 AI 知道什么 [lens.md](lens.md) · 演化坐标与深度
-> [character_evolution.md](../character_evolution.md) · 消息协议与投递节奏
+> [evolution.md](../evolution.md) · 消息协议与投递节奏
 > `docs/dev/chat_delivery.md`。
 
 一句话：聊天按**玩家身份**拆成互不相通的线程；每条线程用**好感、紧张度、状态**三轴筛选
@@ -265,31 +265,35 @@ AI 只能输出「用哪个工具 + 参数」，服务层校验、夹取、执�
 
 **机制目录**
 
-- **dungeon/**：[README](../dungeon/README.md)（全景）·
-  [script](../dungeon/script.md)（章节与触发器字段）·
-  [prompts](../dungeon/prompts.md)（提示词与上下文）·
-  [characters](../dungeon/characters.md)（人物表与账本）·
-  [voice](../dungeon/voice.md)（对话语音）·
-  [admission](../dungeon/admission.md)（进入准入）·
-  [scene](../dungeon/scene.md)（地点与参照物）·
-  [minigame](../dungeon/minigame.md)（小游戏）·
-  [components](../dungeon/components.md)（显示组件）
-- **chat/**：[README](README.md)（本页）· [lens](lens.md)（信息视角细节）
-- **behaviors/**：[README](../behaviors/README.md)（玩家向）·
-  [dev-guide](../behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
-  （[logic](../behaviors/hooks-logic.md) / [report](../behaviors/hooks-report.md) /
-  [character](../behaviors/hooks-character.md) / [chat](../behaviors/hooks-chat.md)）·
-  [example-imperial](../behaviors/example-imperial.md)（示例包）
-- **world_packs/**：[README](../world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
-  [author](../world_packs/author.md)（制作与清单）
+- **dungeon/**：[README](../../dungeon/README.md)（全景）·
+  [script](../../dungeon/script.md)（章节与触发器字段）·
+  [prompts](../../dungeon/prompts.md)（提示词与上下文）·
+  [characters](../../dungeon/characters.md)（人物表与账本）·
+  [voice](../../dungeon/voice.md)（对话语音）·
+  [admission](../../dungeon/admission.md)（进入准入）·
+  [scene](../../dungeon/scene.md)（地点与参照物）·
+  [minigame](../../dungeon/minigame.md)（小游戏）·
+  [components](../../dungeon/components.md)（显示组件）
+- **character/**：[README](../README.md)（全景）·
+  [evolution](../evolution.md)（介入度 / 深度 / 行动点）·
+  [time](../time.md)（恢复结算 / 作息 / 导出）·
+  [chat](README.md)（本页）·
+  [lens](lens.md)（信息视角细节）
+- **behaviors/**：[README](../../behaviors/README.md)（玩家向）·
+  [dev-guide](../../behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
+  （[logic](../../behaviors/hooks-logic.md) / [report](../../behaviors/hooks-report.md) /
+  [character](../../behaviors/hooks-character.md) / [chat](../../behaviors/hooks-chat.md)）·
+  [example-imperial](../../behaviors/example-imperial.md)（示例包）
+- **world_packs/**：[README](../../world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
+  [author](../../world_packs/author.md)（制作与清单）
 
 **单篇**
 
-[地址系统](../address_system.md) · [报告生成](../report_selection.md) ·
-[角色演化](../character_evolution.md) · [资源与包体系](../resources.md) ·
-[挑战包](../challenges.md) ·
-[剧本编辑器](../scenario_editor.md) · [界面双模式与外观](../ui_modes.md) ·
-[角色的长期行为](../character_time.md) · [身材剪影](../body_preview.md) ·
-[更新检查](../update_check.md)
+[地址系统](../../address_system.md) · [报告生成](../../report_selection.md) ·
+[资源与包体系](../../resources.md) ·
+[挑战包](../../challenges.md) ·
+[剧本编辑器](../../scenario_editor.md) · [界面双模式与外观](../../ui_modes.md) ·
+[身材剪影](../../body_preview.md) ·
+[更新检查](../../update_check.md)
 
 </details>
