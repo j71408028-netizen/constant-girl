@@ -28,10 +28,14 @@
 | 剧情 | 章节与触发器列表 + 两张只读编排图（§3） | 对话框编辑、列表保存 |
 | 组件 | 文本主组件三选一 + 组件卡片（§5） | 防抖自动保存 |
 
+> 「通用」页里的提示词字段各怎么进 AI，见 [dungeon/prompts.md](dungeon/prompts.md)：
+> 初始提示进系统提示的最后一段；五类段落分类提示目前只保存、不参与生成（运行时的段落
+> 写法取自耦合等级）。
+
 剧情页用分段切换三个标签，三者互斥替代同一块内容区：
 
 - **章节与触发器**：合并列表，章节行加粗着色、其下缩进行是本章触发器；增删改序都
-  在这里，逐项字段细节见 [dungeon/script.md](dungeon/script.md) §8；
+  在这里，逐项字段细节见 [dungeon/script.md](dungeon/script.md) §2（章节）与 §4（触发器）；
 - **章节编排** / **触发器依赖**：两张只读画布（§3），共用
   `ui/scenario/graph_view.py::ScenarioGraphPanel`，靠 `set_data(view=...)` 决定
   画哪张。
@@ -230,6 +234,7 @@ normalize 归一化结果一致；`tests/check_scenario_graph.py` 无 GUI 覆盖
 
 - **dungeon/**：[README](dungeon/README.md)（全景）·
   [script](dungeon/script.md)（章节与触发器字段）·
+  [prompts](dungeon/prompts.md)（提示词与上下文）·
   [characters](dungeon/characters.md)（人物表与账本）·
   [voice](dungeon/voice.md)（对话语音）·
   [admission](dungeon/admission.md)（进入准入）·

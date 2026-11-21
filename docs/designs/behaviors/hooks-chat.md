@@ -1,7 +1,12 @@
-# 行为包钩子：聊天（`chat`）
+# 行为包钩子：聊天（面向作者）
 
-> 所属机制：[行为包](README.md)（玩家向）· [开发指南](dev-guide.md)。注册方式、
-> 签名一致性与层级约定见开发指南的「注册 API」「Hook 目录与层级」。
+> **这一篇回答什么问题**：世界包能给聊天加什么（媒介、世界背景、候选措辞、节奏）、哪些属于
+> 核心不变式不能改（协议、状态机、身份事实）。
+> - **想加一段世界背景 / 换传讯媒介**：看「提示词内容」。
+> - **想调回复延迟与主动搭话间隔**：看「节奏与坐标」的常量表。
+>
+> 所属机制：[行为包](README.md)（玩家向）· [开发指南](dev-guide.md)。注册方式、签名一致性
+> 与层级约定见开发指南的「注册 API」「钩子目录与层级」。
 
 聊天域的开放原则与世界包一致：**可以追加世界语境、改措辞与手感，不可重写
 角色是谁**。世界包能改通讯媒介、世界背景、话题候选与回复节奏；不能改角色
@@ -84,3 +89,40 @@ def lens(ctx):
 
 第一批与第二批的 key 均为 `since="2.0"`、`behavior_api` 仍为 `2`；旧程序
 遇到未知的 `chat.*` key 只会拒绝该条注册并记入启用诊断，不会整包失效。
+
+## designs 目录
+
+<details>
+<summary>designs/ 全目录（wiki 地图）</summary>
+
+**机制目录**
+
+- **dungeon/**：[README](../dungeon/README.md)（全景）·
+  [script](../dungeon/script.md)（章节与触发器字段）·
+  [prompts](../dungeon/prompts.md)（提示词与上下文）·
+  [characters](../dungeon/characters.md)（人物表与账本）·
+  [voice](../dungeon/voice.md)（对话语音）·
+  [admission](../dungeon/admission.md)（进入准入）·
+  [scene](../dungeon/scene.md)（地点与参照物）·
+  [minigame](../dungeon/minigame.md)（小游戏）·
+  [components](../dungeon/components.md)（显示组件）
+- **chat/**：[README](../chat/README.md)（话题与好感 / 紧张度）·
+  [lens](../chat/lens.md)（信息视角细节）
+- **behaviors/**：[README](../behaviors/README.md)（玩家向）·
+  [dev-guide](../behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
+  （[logic](../behaviors/hooks-logic.md) / [report](../behaviors/hooks-report.md) /
+  [character](../behaviors/hooks-character.md) / [chat](../behaviors/hooks-chat.md)（本页））·
+  [example-imperial](../behaviors/example-imperial.md)（示例包）
+- **world_packs/**：[README](../world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
+  [author](../world_packs/author.md)（制作与清单）
+
+**单篇**
+
+[地址系统](../address_system.md) · [报告生成](../report_selection.md) ·
+[角色演化](../character_evolution.md) · [资源与包体系](../resources.md) ·
+[挑战包](../challenges.md) ·
+[剧本编辑器](../scenario_editor.md) · [界面双模式与外观](../ui_modes.md) ·
+[角色的长期行为](../character_time.md) · [身材剪影](../body_preview.md) ·
+[更新检查](../update_check.md)
+
+</details>

@@ -10,7 +10,7 @@
 >
 > 直接相关：资源类型与信封 [../resources.md](../resources.md) · 注册地址与维度命名
 > [../address_system.md](../address_system.md) · 话题表整表替换
-> [../chat/lens.md](../chat/lens.md) §6.1。
+> [../chat/lens.md](../chat/lens.md) §10。
 
 ## 1. 声明即接管
 
@@ -171,7 +171,7 @@ icon.png                                       # 封面，随目录打包自动�
 打包时的 `worlds` 来自风格的注册地址，而地址是申领来的，所以顺带说清注册这件事。
 
 注册表是 GitHub Gist 上的 `registry.json`（树形结构、申领规则见
-[../address_system.md](../address_system.md) §5），客户端负责下载、缓存与查询：
+[../address_system.md](../address_system.md) §10），客户端负责下载、缓存与查询：
 
 - 本地缓存 `data/user/address_registry.json`，形状 `{data, fetched_at, gist_updated_at}`；
 - **会下载的时机**：打开地址选择对话框时试一次（失败就用缓存）；地标编辑器展开子地址
@@ -294,6 +294,7 @@ icon.png                                       # 封面，随目录打包自动�
 
 - **dungeon/**：[README](../dungeon/README.md)（全景）·
   [script](../dungeon/script.md)（章节与触发器字段）·
+  [prompts](../dungeon/prompts.md)（提示词与上下文）·
   [characters](../dungeon/characters.md)（人物表与账本）·
   [voice](../dungeon/voice.md)（对话语音）·
   [admission](../dungeon/admission.md)（进入准入）·

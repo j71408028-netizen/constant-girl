@@ -1,13 +1,22 @@
-# 行为包开发指南
+# 行为包开发指南（面向作者）
 
-> 面向行为包作者与维护者；玩家向说明见 [README.md](README.md)。
+> **这一篇回答什么问题**：怎么写一个行为包、能覆盖哪些目标、注册 API 长什么样、怎么把
+> 它塞进世界包发出去、哪些东西故意不开放。
+> - **第一次写**：按 **开发流程** 三步走，第一步的示例代码可以直接抄。
+> - **查某个目标能不能覆盖**：看 **可覆盖范围** 与 **开放边界**。
+> - **排查注册被拒 / 诊断异常**：看 **内部实现** 与 **作者须知**。
 >
-> 角色演化模型的完整设计（量、公式、已验证动态特性）见
-> [character_evolution.md](../character_evolution.md)；
-> 覆盖 `StateService` 坐标/深度方法前建议先阅读该文档。
+> 相关页面：玩家向说明 [README.md](README.md) · 四个域的钩子清单
+> [hooks-character.md](hooks-character.md) / [hooks-report.md](hooks-report.md) /
+> [hooks-logic.md](hooks-logic.md) / [hooks-chat.md](hooks-chat.md) · 世界包清单与启用
+> [../world_packs/author.md](../world_packs/author.md)。
+>
+> 覆盖 `StateService` 坐标 / 深度方法前，先读 [character_evolution.md](../character_evolution.md)
+> 的演化模型（量、公式、已验证动态特性）。
 
-行为包（Behavior Pack）是世界包中的一种资源类型，允许世界包作者在激活该世界包期间
-覆盖核心算法的实现，而无需修改主程序代码。可覆盖范围包括：
+行为包是世界包的一种资源类型：激活该世界包期间，它可以覆盖核心算法的实现，而无需修改主
+程序代码。它解决的是「同一个程序，不同世界该有不同的规则」这件事，所以开放面是**算法策略**
+与**模型参数**，不是任意改写。
 
 - `CreationService` / `StateService` 的部分静态方法；
 - `core/logic/`（`sizing` / `quips` / `simulation` / `text` 四个子模块，
@@ -163,7 +172,9 @@ data/worlds/<world_id>/
 - 解散世界包时，行为包会自动转存回 `data/static/behaviors/`（目录名冲突则
   追加世界包名与版本号）。
 
-## 注册 API
+## 内部实现：注册 API 与钩子目录
+
+### 注册 API
 
 | 方法 | 说明 |
 |------|------|
@@ -173,7 +184,7 @@ data/worlds/<world_id>/
 | `runtime.reset()` | 清空全部覆盖（一般由程序自动调用，模块内无需使用）。 |
 | `runtime.catalog()` | 返回全部可覆盖目标的元数据（见下节），供开发工具与行为包作者查询。 |
 
-## Hook 目录与层级
+### 钩子目录与层级
 
 `runtime.catalog()` 返回按 key 排序的元数据列表：
 
@@ -201,7 +212,20 @@ data/worlds/<world_id>/
 
 > 全目录 `since` 以 **2.0** 为基线。
 
-## 注意事项
+## 拓展用法
+
+- **一个模块只改一个小目标**：行为包内每个 `.py` 都会被加载，不必把所有覆盖塞进一个文件；
+  按域拆成 `height_rules.py` / `report_tuning.py` / `chat_rules.py`，排查时能直接停用其中
+  一个文件再看诊断。
+- **先包一层再改**：覆盖函数里用 `runtime.default(target)` 拿到原实现，只在其返回值上做
+  微调，比整段重写更不容易破坏约定（示例见 [hooks-chat.md](hooks-chat.md) 的视角覆盖）。
+- **`runtime.catalog()` 当清单用**：写之前先打印一遍，确认目标 key、层级与参数名，比翻
+  文档快；它返回的就是注册时校验用的那份元数据。
+- **开发副本与随包副本分开**：在 `data/static/behaviors/<pack>/` 里改，再复制进
+  `data/worlds/<world_id>/behaviors/<pack>/` 激活验证——`data/static/` 里的那一份不会被
+  世界包启停影响。
+
+## 作者须知
 
 - **任意代码执行**：行为包本质是 Python 代码，会在激活时于本机执行。只应加载来自可信
   来源的世界包，如同对待一般软件一样。
@@ -228,3 +252,40 @@ data/worlds/<world_id>/
   没有行为钩子——副本路径只通过注入的 `StateService.decay_depths` 受行为包
   影响；段步进、转移矩阵与章节演化修正属于方案配置，不应由行为包重复表达。
   副本子进程会随激活世界包加载同一个行为包，父进程已有的钩子在副本内同样生效。
+
+## designs 目录
+
+<details>
+<summary>designs/ 全目录（wiki 地图）</summary>
+
+**机制目录**
+
+- **dungeon/**：[README](../dungeon/README.md)（全景）·
+  [script](../dungeon/script.md)（章节与触发器字段）·
+  [prompts](../dungeon/prompts.md)（提示词与上下文）·
+  [characters](../dungeon/characters.md)（人物表与账本）·
+  [voice](../dungeon/voice.md)（对话语音）·
+  [admission](../dungeon/admission.md)（进入准入）·
+  [scene](../dungeon/scene.md)（地点与参照物）·
+  [minigame](../dungeon/minigame.md)（小游戏）·
+  [components](../dungeon/components.md)（显示组件）
+- **chat/**：[README](../chat/README.md)（话题与好感 / 紧张度）·
+  [lens](../chat/lens.md)（信息视角细节）
+- **behaviors/**：[README](README.md)（玩家向）·
+  [dev-guide](dev-guide.md)（本页）· 钩子契约四篇
+  （[logic](hooks-logic.md) / [report](hooks-report.md) /
+  [character](hooks-character.md) / [chat](hooks-chat.md)）·
+  [example-imperial](example-imperial.md)（示例包）
+- **world_packs/**：[README](../world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
+  [author](../world_packs/author.md)（制作与清单）
+
+**单篇**
+
+[地址系统](../address_system.md) · [报告生成](../report_selection.md) ·
+[角色演化](../character_evolution.md) · [资源与包体系](../resources.md) ·
+[挑战包](../challenges.md) ·
+[剧本编辑器](../scenario_editor.md) · [界面双模式与外观](../ui_modes.md) ·
+[角色的长期行为](../character_time.md) · [身材剪影](../body_preview.md) ·
+[更新检查](../update_check.md)
+
+</details>

@@ -255,7 +255,7 @@ data/packs/minigames/<id>/manifest.json
 - **给挑战包加封面**：在 `.chal` 旁边放一张同名 `.png`（`<id>.png`），列表里就用它当图标。
   信封不管这张图，画坏了删掉即可。
 - **手写一张话题表**：`data/packs/topics/<id>` 放一个 JSON 数组（形状与内置表相同，见
-  [chat/lens.md](chat/lens.md) §6.1），资源中心就能选它打包；内置表导出的条目能原样
+  [chat/lens.md](chat/lens.md) §10），资源中心就能选它打包；内置表导出的条目能原样
   导回。注意主文件不带后缀。
 
 ## 13. 参数表
@@ -353,6 +353,7 @@ data/packs/minigames/<id>/manifest.json
 
 - **dungeon/**：[README](dungeon/README.md)（全景）·
   [script](dungeon/script.md)（章节与触发器字段）·
+  [prompts](dungeon/prompts.md)（提示词与上下文）·
   [characters](dungeon/characters.md)（人物表与账本）·
   [voice](dungeon/voice.md)（对话语音）·
   [admission](dungeon/admission.md)（进入准入）·

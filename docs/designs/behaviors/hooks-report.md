@@ -1,7 +1,12 @@
-# 行为包钩子：report（报告选取与引擎参数）
+# 行为包钩子：报告选取（面向作者）
 
-> 所属机制：[行为包](README.md)（玩家向）· [开发指南](dev-guide.md)。注册方式、
-> 签名一致性与层级约定见开发指南的「注册 API」「Hook 目录与层级」。
+> **这一篇回答什么问题**：报告里地标与描述怎么配对、哪些排序与数值可以调、哪些属于硬闸
+> 不能碰。
+> - **想改配对口味**：看三个函数（车道表 / 联合分 / 提拔）与 `report.model.*` 常量。
+> - **想知道某处改动为什么不生效**：先确认它不是硬闸（可达 / 私有名 / 维度 / 耐久）。
+>
+> 所属机制：[行为包](README.md)（玩家向）· [开发指南](dev-guide.md)。注册方式、签名一致性
+> 与层级约定见开发指南的「注册 API」「钩子目录与层级」。
 
 `SelectionArbiter` 在地标候选与描述风格供给之间做配对仲裁：车道资格窗口与
 近匹配提拔是裁定级输出，联合分是建议级（报告引擎的预算走步与坐标演化可
@@ -38,3 +43,53 @@
 | `report.model.worn_threshold` | 常量 float | `0.5` | 耐久残破标注阈值（低于即标注「（残破的）」）。 |
 | `report.model.step_fallback` | 常量 float | `0.05` | 无有效步进事件时的伤亡估算兜底步长。 |
 | `report.model.env_factor_fallback` | 常量 float | `0.3` | 无事件文本时的伤亡环境系数兜底。 |
+
+## 覆盖示例
+
+只调数值、不改配对语义：把可达范围收紧，并让地标更早显示残破。
+
+```python
+def register(runtime):
+    runtime.override("report.model.reach_multiplier", 6.0)
+    runtime.override("report.model.worn_threshold", 0.35)
+```
+
+要改配对口味才动函数（`report.lanes` / `report.joint_score` / `report.promotions`），
+并且记得 `report.lanes` 是**裁定级**：它决定「谁有资格进窗口」，写错会直接让某些地标消失。
+
+## designs 目录
+
+<details>
+<summary>designs/ 全目录（wiki 地图）</summary>
+
+**机制目录**
+
+- **dungeon/**：[README](../dungeon/README.md)（全景）·
+  [script](../dungeon/script.md)（章节与触发器字段）·
+  [prompts](../dungeon/prompts.md)（提示词与上下文）·
+  [characters](../dungeon/characters.md)（人物表与账本）·
+  [voice](../dungeon/voice.md)（对话语音）·
+  [admission](../dungeon/admission.md)（进入准入）·
+  [scene](../dungeon/scene.md)（地点与参照物）·
+  [minigame](../dungeon/minigame.md)（小游戏）·
+  [components](../dungeon/components.md)（显示组件）
+- **chat/**：[README](../chat/README.md)（话题与好感 / 紧张度）·
+  [lens](../chat/lens.md)（信息视角细节）
+- **behaviors/**：[README](../behaviors/README.md)（玩家向）·
+  [dev-guide](../behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
+  （[logic](../behaviors/hooks-logic.md) / [report](../behaviors/hooks-report.md)（本页） /
+  [character](../behaviors/hooks-character.md) / [chat](../behaviors/hooks-chat.md)）·
+  [example-imperial](../behaviors/example-imperial.md)（示例包）
+- **world_packs/**：[README](../world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
+  [author](../world_packs/author.md)（制作与清单）
+
+**单篇**
+
+[地址系统](../address_system.md) · [报告生成](../report_selection.md) ·
+[角色演化](../character_evolution.md) · [资源与包体系](../resources.md) ·
+[挑战包](../challenges.md) ·
+[剧本编辑器](../scenario_editor.md) · [界面双模式与外观](../ui_modes.md) ·
+[角色的长期行为](../character_time.md) · [身材剪影](../body_preview.md) ·
+[更新检查](../update_check.md)
+
+</details>

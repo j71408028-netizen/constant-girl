@@ -12,7 +12,7 @@
 |---|---|---|
 | 地址系统 | [address_system.md](address_system.md) | 玩家 + 资源开发者（地标 / 描述风格作者） |
 | 报告生成 | [report_selection.md](report_selection.md) | 玩家 + 资源开发者（地标 / 描述风格作者） |
-| 副本设计机制 | [dungeon/](dungeon/README.md) | 核心开发者 + 副本方案作者（章节与触发器 / 人物 / 语音 / 准入 / 地点） |
+| 副本设计机制 | [dungeon/](dungeon/README.md) | 核心开发者 + 副本方案作者（章节与触发器 / 提示词 / 人物 / 语音 / 准入 / 地点） |
 | 角色演化 | [character_evolution.md](character_evolution.md) | 核心开发者 + 行为包作者 |
 | 角色聊天 | [chat/](chat/README.md) | 玩家 + 资源开发者（话题类型 / 世界态势作者）；信息视角细节在 [lens.md](chat/lens.md) |
 | 行为包 | [behaviors/](behaviors/README.md) | 玩家 + 世界包 / 行为包作者 |
@@ -32,10 +32,11 @@
 | 想做什么 | 从哪读 |
 |---|---|
 | 理解或调整**报告里地标与描述的选取 / 配对** | [report_selection.md](report_selection.md) |
-| 给**地标 / 描述风格**申领、注册地址 | [address_system.md](address_system.md)（§2 操作规程、§3 格式与组合、§4 配对与距离） |
+| 给**地标 / 描述风格**申领、注册地址 | [address_system.md](address_system.md)（§6 注册、§7 申领、§10 格式与组合、§3 配对与距离） |
 | 给**副本章节**写地点地址、给副本写参照物地标（尺寸换算用） | [dungeon/scene.md](dungeon/scene.md) |
 | 写**副本方案**（章节 / 触发器字段、条件与动作、校验） | 从 [dungeon/README.md](dungeon/README.md) 进，正文在 [dungeon/script.md](dungeon/script.md) |
 | 理解或调整**副本里的人物表 / 临时称呼 / 在场与简报** | [dungeon/characters.md](dungeon/characters.md)（含字段说明） |
+| 改**AI 每段看到什么 / 怎么记住前情**（初始提示、章节备注、上下文窗口、细节注入） | [dungeon/prompts.md](dungeon/prompts.md) |
 | 配置或排查**副本对话语音**（音色 / 语速 / 端点与代理） | [dungeon/voice.md](dungeon/voice.md) |
 | 给**副本方案**声明进入条件（入口地址 / 距离 / 身高） | [dungeon/admission.md](dungeon/admission.md) |
 | 改**角色数值演化** | 先读 [character_evolution.md](character_evolution.md)（全景），再看可覆盖的代码入口 [behaviors/dev-guide.md](behaviors/dev-guide.md) |
@@ -68,7 +69,8 @@
 ### 叙述骨架与代码引用
 
 机制叙述页按统一骨架组织，页面之间结构可预期；「清单即产品」的页（字段索引、
-钩子契约）允许合并标注，不强行拆节。骨架自上而下：
+钩子契约）允许合并标注，不强行拆节——但**简介路由与 designs 目录尾节照旧要有**，
+只是把「参数表 / 作者须知」并进字段表本身，不再另起空节。骨架自上而下：
 
 > **这一篇回答什么问题**（简介：各类读者从哪节进 + 顶部直接挂 2-3 个最重要相关页，
 > 行内链接）→ 机制各节 → 内部实现（生命周期 / 容错 / 进程级事实等主线外细节集中

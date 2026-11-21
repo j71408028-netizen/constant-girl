@@ -1,7 +1,15 @@
-# 行为包钩子：角色（`CreationService` / `StateService` / `offline` / `spatial`）
+# 行为包钩子：角色与结算（面向作者）
 
-> 所属机制：[行为包](README.md)（玩家向）· [开发指南](dev-guide.md)。注册方式、
-> 签名一致性与层级约定见开发指南的「注册 API」「Hook 目录与层级」。
+> **这一篇回答什么问题**：想改身高怎么抽、坐标怎么推进、恢复结算怎么算，该覆盖哪个目标、
+> 签名长什么样、哪些目标故意不开放。
+> - **查某个方法能不能覆盖**：直接看各节表格。
+> - **想知道为什么某个目标不开放**：看每节末尾的说明，或 [dev-guide.md](dev-guide.md) 的
+>   「开放边界」。
+>
+> 所属机制：[行为包](README.md)（玩家向）· [开发指南](dev-guide.md)。注册方式、签名一致性
+> 与层级约定见开发指南的「注册 API」「钩子目录与层级」。本节覆盖四个域：
+> `CreationService`（创建期算法与出身烙印）、`StateService`（坐标与行动点）、
+> `offline`（恢复计划）、`spatial`（空间先验的调制入口）。
 
 ## `CreationService`
 
@@ -70,3 +78,62 @@
 学习层参数（EWMA 半衰期、平滑伪计数、调制夹取、成熟度阻尼等）不开放——
 它们重新解释角色的到访与沉淀历史，见 [dev-guide.md](dev-guide.md) 的
 「开放边界：三层开放模型与角色身份稳定性」。
+
+## 覆盖示例
+
+把抽到的高度封顶，其余逻辑仍用默认实现：
+
+```python
+# data/static/behaviors/my_pack/height_rules.py
+from core.behavior_runtime import get_runtime
+from services.creation_service import CreationService
+
+
+def capped_height(option, custom_val, min_slide, max_slide,
+                  use_will, greed, rng, personality=None):
+    default = get_runtime().default("CreationService.calculate_height")
+    height, status = default(option, custom_val, min_slide, max_slide,
+                             use_will, greed, rng, personality)
+    return min(height, 20.0), status
+
+
+def register(runtime):
+    runtime.override(CreationService.calculate_height, capped_height)
+```
+
+## designs 目录
+
+<details>
+<summary>designs/ 全目录（wiki 地图）</summary>
+
+**机制目录**
+
+- **dungeon/**：[README](../dungeon/README.md)（全景）·
+  [script](../dungeon/script.md)（章节与触发器字段）·
+  [prompts](../dungeon/prompts.md)（提示词与上下文）·
+  [characters](../dungeon/characters.md)（人物表与账本）·
+  [voice](../dungeon/voice.md)（对话语音）·
+  [admission](../dungeon/admission.md)（进入准入）·
+  [scene](../dungeon/scene.md)（地点与参照物）·
+  [minigame](../dungeon/minigame.md)（小游戏）·
+  [components](../dungeon/components.md)（显示组件）
+- **chat/**：[README](../chat/README.md)（话题与好感 / 紧张度）·
+  [lens](../chat/lens.md)（信息视角细节）
+- **behaviors/**：[README](../behaviors/README.md)（玩家向）·
+  [dev-guide](../behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
+  （[logic](../behaviors/hooks-logic.md) / [report](../behaviors/hooks-report.md) /
+  [character](../behaviors/hooks-character.md)（本页） / [chat](../behaviors/hooks-chat.md)）·
+  [example-imperial](../behaviors/example-imperial.md)（示例包）
+- **world_packs/**：[README](../world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
+  [author](../world_packs/author.md)（制作与清单）
+
+**单篇**
+
+[地址系统](../address_system.md) · [报告生成](../report_selection.md) ·
+[角色演化](../character_evolution.md) · [资源与包体系](../resources.md) ·
+[挑战包](../challenges.md) ·
+[剧本编辑器](../scenario_editor.md) · [界面双模式与外观](../ui_modes.md) ·
+[角色的长期行为](../character_time.md) · [身材剪影](../body_preview.md) ·
+[更新检查](../update_check.md)
+
+</details>

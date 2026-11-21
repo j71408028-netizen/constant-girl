@@ -1,73 +1,255 @@
-# 挑战包
+# 挑战包（面向作者）
 
-> **这一篇回答什么问题**：`.chal` 里有什么、秘钥怎么管、创建 / 导入 / 启动的流程，
-> 以及启动时地标与素材怎么从包里还原。类型声明与信封见 [resources.md](resources.md)；
-> 副本准入与方案的素材解析见 [dungeon/admission.md](dungeon/admission.md) 与
-> [dungeon/script.md](dungeon/script.md)。
+> **这一篇回答什么问题**：`.chal` 到底是什么、凭什么只有拿秘钥的人能打开、怎么做一局
+> 发出去、别人拿到以后怎么进入、包里的地标与素材在对方机器上会发生什么。
+> - **只想玩别人的挑战包**：看 **§2**（秘钥）与 **§3**（放进资源中心、进入）。
+> - **想自己做一个发出去**：看 **§4**（创建）与 **§9**（发出去之前要检查的契约）。
+> - **排查打不开 / 素材丢失 / 地标地址不对**：看 **§5** 与 **§6**。
+>
+> 相关页面：信封、索引与资源同步 [resources.md](resources.md) · 方案的素材路径
+> [dungeon/script.md](dungeon/script.md) · 进入条件 [dungeon/admission.md](dungeon/admission.md)。
 
-## 1. 包内有什么
+挑战包是「一局做好的冒险」：把**一个角色、一组地标风格、一个剧本方案**连同方案要用的
+文本、图片、音频一起封进单个 `.chal` 文件，再用一把随机秘钥加密。它不依赖你的存档，
+也不依赖对方的资源库——对方只要有文件和秘钥，就能在你设计的那一局里、以你调好的那个
+角色重新开始。
 
-`.chal` 是一个 zip，两部分：
+由此带来两条贯穿全篇的规矩：
 
-- `challenge_data.bin`：加密后的 JSON（`pack_data`）——`version`（`"2.0"`）、`intro`、
-  `character_id`、`character_data`、`landmark_styles`、`landmark_data`、`scenario_id`、
-  `scenario_config`、`asset_paths`、`created_at`（描述不进包）；
-- `assets/…`：方案引用的明文素材，只收 `texts` / `images` / `audio` / `endings`
-  四类目录下、配置引用到且磁盘真实存在的文件（`collect_asset_paths` 扫
-  `fixed_text.path` / `background.image_path` / `bgm.path` / `icon_path` 与
-  `chapters[].endings[].icon_path`；方案目录外的绝对路径一律不收）。
+- **秘钥就是全部**：包里没有明文，秘钥丢了这局就永久打不开，程序也没有找回手段；
+- **包是别人给的**：所以包内数据一律当作不可信输入处理——越界素材条目跳过、尺寸无效的
+  地标丢弃，坏数据不该让整局进不去。
 
-加密：JSON 经 PBKDF2-HMAC-SHA256（10 万轮，盐 = 16 字节 IV）派生密钥，
-HMAC-SHA256 分块密钥流异或；文件头 `MAGIC_V2` 校验（兼容旧逐字节格式）。
+## 1. 一个挑战包里有什么
 
-## 2. 秘钥
+`.chal` 是一个普通 zip，里面只有两类东西：
 
-- 本地注册表 `data/user/challenge_keys.json`：`{包基名(不含 .chal): 64 位 hex}`，
-  全仓唯一不可再生数据，原子写 + `.bak`；并同步到环境变量
-  `GIANTESS_CHALLENGE_KEYS`。
-- 世界包附带挑战包时，秘钥随包记录在包内 `challenges/keys.json`（同形状）。
-- 能解 = 持有秘钥者；`try_open_with_keys` 用全部已注册秘钥逐个试开。秘钥不对或
-  数据损坏报「秘钥不正确或数据损坏」；没有注册秘钥报「未找到秘钥，请先创建或
-  导入」。
-- 读元数据（`get_challenge_meta`：intro / 角色名 / scenario_id）不需要区分哪个秘钥
-  属于哪个包，试开成功即取。
-
-## 3. 创建
-
-挑战页填显示名 → 资源 id（`registry.suggest_id` 派生或手填，`valid_id_of` 校验）→
-选角色 + 地标风格组 + 剧本 + 简介 → `create_challenge(...)`：
-
-- 同名 `.chal` **拒绝覆盖**（秘钥注册后旧包无法再生）；
-- 写临时 zip 后 `os.replace` 原子落盘到 `data/packs/challenges/<id>.chal`，注册秘钥，
-  显示名写兄弟信封；
-- **秘钥只返回给作者一次**：分享 = `.chal` 文件 + 秘钥两者都给。
-
-## 4. 导入与启动
-
-- **导入**（`import_pack(source_path, key)`）：先用秘钥试开验证，通过后复制到存储
-  目录并注册秘钥；秘钥不对直接报「导入失败，秘钥不正确」。
-- **启动**：`resolve_pack_path` 解析位置（世界包附带目录优先，其次自由目录）→
-  `_extract_assets` 把素材解到**临时目录**（不落进方案目录，会话结束删除；解出的
-  目录结构与方案目录一致，直接顶替方案目录参与相对路径解析；`assets/../../x` 类
-  越界条目跳过不抛错）→ 地标不走本机仓库重载，`landmarks_from_pack` 直接从包内
-  `landmark_data` 还原：`address_mode=="exact"` 且带地址的原样用；缺地址的按
-  「同风格同名本机地标 → 本机地址索引 → 都没有则标 `portable`」补齐。
-- **包内容回灌本机仓库**：`import_landmark_challenge_pack` /
-  `import_quip_challenge_pack` 把包内资源写回自由层（尺寸无效的地标条目在导入时
-  丢弃）。
-
-## 5. 界面与守卫
-
-- 玩家入口是主界面的「挑战模式」；作者入口在挑战页（创建）。
-- 索引与校验：`opaque` 容器纳入索引时必须外加兄弟 `<id>.meta.json`
-  （`registry.validate_resource` 报 `missing_envelope`）；可选同名 `.png` 封面。
-
-## 6. 文件 / 函数索引
-
-| 要点 | 位置 |
+| 条目 | 内容 |
 |---|---|
-| 创建 / 打开 / 秘钥注册 / 加解密 | `services/challenges/service.py::create_challenge` / `open_challenge` / `try_open_with_keys` / `_register_key` / `_encrypt` / `_decrypt` |
-| 素材收集 / 打包 / 解压 | `services/challenges/pack.py::collect_asset_paths` / `pack_assets` / `extract_pack_assets` |
-| 包内地标重建（exact / portable） | `services/challenges/landmarks.py::landmarks_from_pack` |
-| 包内容回灌 | `services/challenges/imports.py::import_landmark_challenge_pack` / `import_quip_challenge_pack` |
-| 秘钥落盘 | `data/user/challenge_keys.json`（`service.py::_keys_file_path`） |
+| `challenge_data.bin` | 加密后的整份配置：角色数据、地标数据、方案配置、简介、素材清单、创建时间 |
+| `assets/…` | 方案引用的明文素材，目录结构与方案目录一致 |
+
+配置解密后是一份 JSON（`pack_data`），字段见 §8。**描述风格不进包**：新包的
+`landmark_styles` 只列地标风格组，副本提示词也不再读描述数据，所以没有必要把别人的
+描述库带在身上（旧包里的 `quip_styles` 字段仍能读，见 §9）。
+
+素材只收四类目录下的文件——`texts/`、`images/`、`audio/`、`endings/`，而且必须同时满足
+「配置里引用到」和「磁盘上真的存在」。配置里写的绝对路径一律不收，`..` 越界路径也不收：
+前者等于把发送方磁盘上的任意文件打出去，后者会把包变成任意路径写入器。
+
+> 素材清单以**实际打进包的文件**为准。配置里写了但磁盘上没有的引用不会出现在清单里，
+> 对方那边也就只会在该处显示为空或报错，而不会以为「包里应该有」。
+
+## 2. 秘钥：能不能打开只看它
+
+创建时程序随机生成一把 **64 位十六进制**（32 字节）秘钥，加密与解密都从它派生。秘钥
+登记在 `data/user/challenge_keys.json`，形状是「包基名（不含 `.chal`）→ 秘钥」：
+
+```json
+{
+  "my_challenge": "9f2c…（64 位十六进制）"
+}
+```
+
+- **包基名是身份，不是显示名**：改名只动兄弟信封里的标题，秘钥按包基名对齐，不会错位。
+- 这张表是全程序唯一不可再生的数据（丢了所有 `.chal` 都打不开），所以写入用原子写并在
+  覆盖前留 `.bak`；同时同步到环境变量 `GIANTESS_CHALLENGE_KEYS`，供副本子进程等读取。
+- 打开一个包时，秘钥按**包基名**查：世界包附带的先查包内 `keys.json`，其余查本机这张表；
+  列表与元数据这类「还不知道该用哪把钥匙」的地方，则拿全部已登记秘钥逐个试开兜底。所以你
+  不必记住哪把钥匙开哪个包，也不需要先选包再输秘钥。
+- 反过来说，**`.chal` 的文件名不能随便改**：改名等于换了一把表里不存在的钥匙。要改展示
+  用的名字请改信封里的标题（§4）。
+- 世界包可以附带挑战包，秘钥随包放在世界包内的 `challenges/keys.json`（同形状）；读取时
+  附带目录优先，其次才是本机的自由目录。
+
+打不开时程序给的是两类明确说法，可以据此判断问题：
+
+| 提示 | 含义 |
+|---|---|
+| 未找到秘钥，请先创建或导入 | 这个包在秘钥表里没有对应条目（多半是别人只发了 `.chal`） |
+| 秘钥不正确或数据损坏 | 试过了但校验头对不上：秘钥错、文件被截断或被改过 |
+
+> 加密本身不防篡改也不防复制：能解开的人可以原样转发文件和秘钥。它挡住的是「随手双击
+> 就看内容」，不是「有意的逆向」。
+
+## 3. 收到一局：放进资源中心，然后进入
+
+`.chal` 对程序来说就是一种**资源**，所以进入方式是资源的那一套：
+
+1. 把 `.chal` 放进资源中心（导入资源），它会出现在挑战包分组里；
+2. 秘钥要么随资源包一起带来（`challenges/keys.json`），要么已经在你的
+   `challenge_keys.json` 里；两者都没有时，卡片会列出但打不开；
+3. 打开「🎯 挑战模式」，点卡片进入。
+
+挑战模式页按「世界包附带的包在前、自由包在后」列出卡片；世界包启用期间，不属于当前
+世界包的挑战包会在标题后标「非本世界场景」，提醒你这一局的方案与当前世界不是一套。
+封面的约定是 `.chal` 同目录同名的 `.png`，没有就用内置图标。
+
+点进一局时程序做三件事：解出包内素材到**临时目录**、用包内地标数据重建地标、再启动副本
+子进程。素材不落进任何方案目录，会话结束即删除——所以玩别人的包不会污染你的资源库。
+
+挑战包进入时不检查地址：挑战模式没有「角色当前站在哪里」这个概念，进入准入只按身高
+判断（见 [dungeon/admission.md](dungeon/admission.md)）。
+
+## 4. 做一局：创建流程
+
+创建入口在**挑战模式页顶部的「▶ 创建挑战包」折叠块**，不在资源中心。填完点「创建」，
+程序当场打包并弹出秘钥：
+
+| 填写项 | 说明 |
+|---|---|
+| 挑战包名称 | 界面显示名，可随时改（改名不动文件名） |
+| 高级：指定 ID | 默认按名称派生；勾选后可手填，用于固定文件名，便于版本迭代时对得上 |
+| 选择角色 | 有性格与身材数据的角色才能打包（缺性格会被拒绝） |
+| 地标风格组 | 可多选；同一维度只能选一组，避免两套地图混进同一局 |
+| 剧本 | 选一个方案；方案用到的素材会一起进包 |
+| 简介 | 卡片上给玩家看的那段话，可用 `/` 分隔背景与目标 |
+
+几条当场就会遇到的规则：
+
+- **同名 `.chal` 拒绝覆盖**，提示「已存在，请先删除或换一个包名」。这不是谨慎过度：
+  同名包被覆盖后，旧包连同它登记过的秘钥就再也无法重建了。想迭代就换 ID，或先删旧包。
+- **世界包加载期间不能创建**：折叠块会变成「创建挑战包（世界包加载期间不可用）」，
+  因为这时地标风格与剧本的下拉都来自一个正在装载的世界，打包结果不可预期。
+- **秘钥只完整显示这一次**：弹窗里给出后即写进秘钥表与环境变量，界面不提供「再看一次」。
+  分享时要把 `.chal` 与秘钥**两样都给**，只给文件等于给了一个打不开的盒子。
+- 打包先写临时 zip、成功后原子替换到 `data/packs/challenges/<id>.chal`，中途崩溃不会留下
+  半截包；显示名写在兄弟信封 `<id>.meta.json` 里，所以改名不会碰到加密内容。
+
+## 5. 包里的地标：地址怎么跟着走
+
+地标是挑战包里最容易在对方机器上「变味」的部分：你的地标带着你世界的地址，对方不一定
+有同名风格、更不一定有同一张地图。重建时按两种情况处理：
+
+- **自带完整地址**（`address_mode == "exact"`）：原样使用。你在自己世界里规划好的方位、
+  距离关系，在对方那里照样成立。
+- **只有风格与名字**：先找对方本机「同风格同名」的地标，取其地址；找不到再查本机的地址
+  索引；都没有就把这条标成 **portable**——尺寸与名字照常参与报告里的对比，只是不参与
+  地址相配，也就不会因为「地址不存在」被整条丢掉。
+
+所以同一份包在不同机器上玩法可能略有差别：有这套地标的人会得到「同一张地图」的接续感，
+没有的人得到的是尺寸与名称正确、方位自由的版本。这是设计上的取舍，不是丢数据。
+
+想把包里的地标搬回自己机器长期使用：在地标管理页的风格下拉末尾有「从挑战包导入」一项，
+选中后会把该包的地标写进对应风格（尺寸无效的条目在导入时丢弃）。新包的描述数据不存在，
+所以「从挑战包导入描述」只对旧包有效。
+
+## 6. 内部实现
+
+- **加密**：JSON 序列化后经 PBKDF2-HMAC-SHA256（10 万轮，盐取 16 字节 IV）派生 32 字节
+  密钥，用 HMAC-SHA256 分块密钥流异或；密文前挂 `MAGIC_V2` 校验头。旧包是逐字节密钥流
+  格式（`MAGIC` 头），解密时先试新格式、再回退旧格式，所以老包仍能打开
+  （`services/challenges/service.py::_decrypt`）。
+- **素材解包**：`assets/` 前缀条目才处理，解出后必须仍在目标目录内，构造出来的
+  `assets/../../x` 直接跳过而不抛错（`services/challenges/pack.py::extract_pack_assets`）；
+  解出的目录结构与方案目录一致，直接顶替方案目录参与相对路径解析。
+- **地标重建**：`services/challenges/landmarks.py::landmarks_from_pack` 只产出 `exact` 或
+  `portable` 两种条目，与「导出地标」的契约一致，下游不需要为挑战包单独写分支。
+- **列表与元数据**：卡片标题读兄弟信封、不打开包；简介 / 角色名 / 场景 id 需要试开一次，
+  所以进入挑战模式时会逐个解密一遍（`get_all_metas`）。
+- **现状澄清**：服务层有一个「校验秘钥后复制进存储目录」的导入函数，但界面没有「输入秘钥
+  导入」的对话框——实际导入走资源中心，秘钥靠 `keys.json` 提供。
+
+## 7. 拓展用法
+
+界面上没有明说、但可以这么用的：
+
+- **把 `.chal` 直接丢进 `data/packs/challenges/`**：不经过资源中心导入，挑战模式照样列出
+  它（列表会扫这个目录）。
+- **手写 `data/user/challenge_keys.json`**：别人只单独发来文件和秘钥时，按 §2 的形状补一条
+  就能打开，不必重新导入一次。
+- **随包分享秘钥用 `challenges/keys.json`**：资源打包对话框不会替你放这个文件，需要手动
+  把秘钥表复制进资源包（或世界包）的 `challenges/` 目录。
+- **放一张同名 `.png` 当封面**：与 `.chal` 同目录同名即可，列表优先用它。
+- **手改 `<id>.meta.json` 换显示名**：改名只影响列表与卡片标题，不触碰加密内容。
+- **一个包反复发不同版本**：固定 ID、每次加版本后缀（如 `my_challenge_1.1`）建新包，
+  旧包与旧秘钥都留在秘钥表里，玩家想回旧版还有得选。
+
+## 8. 参数表
+
+<details>
+<summary>包里 JSON 的字段、素材收集范围与秘钥文件格式（排查包内容或手写清单时展开）</summary>
+
+`challenge_data.bin` 解密后的字段：
+
+| 字段 | 内容 |
+|---|---|
+| `version` | 包格式版本，当前 `"2.0"` |
+| `intro` | 简介（卡片上的那段话） |
+| `character_id` / `character_data` | 角色 id 与整份角色数据 |
+| `landmark_styles` / `landmark_data` | 地标风格组名单，以及 `{风格: [地标…]}` |
+| `scenario_id` / `scenario_config` | 方案 id 与整份方案配置 |
+| `asset_paths` | 实际进包的素材相对路径清单（空表 = 无素材） |
+| `created_at` | 创建时间（ISO 8601） |
+
+素材收集范围（章节与触发器用同一套字段名）：
+
+| 字段 | 素材类别 |
+|---|---|
+| `fixed_text.path` | `texts/` |
+| `background.image_path` | `images/` |
+| `bgm.path` | `audio/` |
+| `icon_path`、`endings[].icon_path` | `endings/` |
+
+秘钥文件 `challenge_keys.json`：`{"包基名": "64 位十六进制"}`；环境变量
+`GIANTESS_CHALLENGE_KEYS` 存同一份 JSON 文本。
+
+</details>
+
+## 9. 官方资源与作者须知
+
+程序**不带内置挑战包**，挑战模式里的包要么是你自己创建的，要么来自资源包或世界包。
+
+<details>
+<summary>发出去之前要守的契约（做包、排错或接手别人的包时展开）</summary>
+
+- **秘钥不可再生**：秘钥只在创建时生成一次，表里没有第二份。删掉秘钥条目等于宣告该包
+  作废；换秘钥只能重新打包。
+- **同名不覆盖**：同 ID 再次创建会被拒绝，必须换名或先删旧包。
+- **素材必须放在四类目录里、用相对路径引用**：放在方案目录之外的文件不会进包，玩家那边
+  就是空背景 / 无声 / 固定文本报错。
+- **描述不进新包**：`quip_styles` / `quip_data` 只对旧包有意义，别再往新流程里加。
+- **挑战包是 `opaque` 容器**：进资源中心索引时要有兄弟信封 `<id>.meta.json`，否则资源
+  校验报 `missing_envelope`；要放进世界包发出去时，还要确认 `challenges/keys.json` 一起带上。
+- **世界包附带的挑战包不可删除**：界面会明确拦住，避免删掉一个由世界包重建同名文件的条目。
+- **包内数据按不可信处理**：越界素材条目、尺寸无效的地标在导入/解包时丢弃，作者侧应在
+  自己的机器上先用剧本编辑器校验一遍，不要把错误留到对方那边才发现。
+
+</details>
+
+## designs 目录
+
+<details>
+<summary>designs/ 全目录（wiki 地图）</summary>
+
+**机制目录**
+
+- **dungeon/**：[README](dungeon/README.md)（全景）·
+  [script](dungeon/script.md)（章节与触发器字段）·
+  [prompts](dungeon/prompts.md)（提示词与上下文）·
+  [characters](dungeon/characters.md)（人物表与账本）·
+  [voice](dungeon/voice.md)（对话语音）·
+  [admission](dungeon/admission.md)（进入准入）·
+  [scene](dungeon/scene.md)（地点与参照物）·
+  [minigame](dungeon/minigame.md)（小游戏）·
+  [components](dungeon/components.md)（显示组件）
+- **chat/**：[README](chat/README.md)（话题与好感 / 紧张度）·
+  [lens](chat/lens.md)（信息视角细节）
+- **behaviors/**：[README](behaviors/README.md)（玩家向）·
+  [dev-guide](behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
+  （[logic](behaviors/hooks-logic.md) / [report](behaviors/hooks-report.md) /
+  [character](behaviors/hooks-character.md) / [chat](behaviors/hooks-chat.md)）·
+  [example-imperial](behaviors/example-imperial.md)（示例包）
+- **world_packs/**：[README](world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
+  [author](world_packs/author.md)（制作与清单）
+
+**单篇**
+
+[地址系统](address_system.md) · [报告生成](report_selection.md) ·
+[角色演化](character_evolution.md) · [资源与包体系](resources.md) ·
+[挑战包](challenges.md)（本页） ·
+[剧本编辑器](scenario_editor.md) · [界面双模式与外观](ui_modes.md) ·
+[角色的长期行为](character_time.md) · [身材剪影](body_preview.md) ·
+[更新检查](update_check.md)
+
+</details>

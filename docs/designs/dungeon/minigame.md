@@ -132,6 +132,7 @@ class MyGame(MiniGame):
 **机制目录**
 
 - **dungeon/**：[README](README.md)（全景）· [script](script.md)（章节与触发器字段）·
+  [prompts](prompts.md)（提示词与上下文）·
   [characters](characters.md)（人物表与账本）· [voice](voice.md)（对话语音）·
   [admission](admission.md)（进入准入）· [scene](scene.md)（地点与参照物）·
   [minigame](minigame.md)（小游戏，本页）· [components](components.md)（显示组件）

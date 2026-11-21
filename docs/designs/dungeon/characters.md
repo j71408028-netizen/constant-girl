@@ -2,7 +2,7 @@
 
 > **这一篇回答什么问题**：方案里怎么写「这个故事里有谁」——主角、配角、群像各填哪些字段；以及一局跑起来之后，程序怎么记住「谁在场、这个称呼是谁、他什么时候露了真名」。**写方案的作者**看 §1～§3；**想知道 AI 为什么这么写人**的看 §4～§6；**想知道在哪看人、在哪改代码**的看 §7 界面与 §8 内部实现。
 >
-> 相关页面：章节与触发器的完整字段索引 [script.md](script.md) · 谁用什么嗓子朗读 [voice.md](voice.md) · 编辑器里的「角色」页 [../scenario_editor.md](../scenario_editor.md) · 人物带来的演化量 [../character_evolution.md](../character_evolution.md)。
+> 相关页面：章节与触发器的完整字段索引 [script.md](script.md) · AI 每段看到什么（在场行与简报怎么拼进提示词）[prompts.md](prompts.md) · 谁用什么嗓子朗读 [voice.md](voice.md) · 编辑器里的「角色」页 [../scenario_editor.md](../scenario_editor.md) · 人物带来的演化量 [../character_evolution.md](../character_evolution.md)。
 >
 > 字段声明的单一真相源是方案的 schema；本篇是字段与机制的权威说明，改代码时两边要同步。
 
@@ -198,6 +198,7 @@ AI 定的线索**不回写配置**：方案要跨局复用，写回会让下一�
 **机制目录**
 
 - **dungeon/**：[README](README.md)（全景）· [script](script.md)（章节与触发器字段）·
+  [prompts](prompts.md)（提示词与上下文）·
   [characters](characters.md)（人物表与账本，本页）· [voice](voice.md)（对话语音）·
   [admission](admission.md)（进入准入）· [scene](scene.md)（地点与参照物）·
   [minigame](minigame.md)（小游戏）· [components](components.md)（显示组件）

@@ -201,6 +201,7 @@ CJK SC。你在设置里选的 Windows 独有字体（宋体 / 仿宋 / 楷体�
 
 - **dungeon/**：[README](dungeon/README.md)（全景）·
   [script](dungeon/script.md)（章节与触发器字段）·
+  [prompts](dungeon/prompts.md)（提示词与上下文）·
   [characters](dungeon/characters.md)（人物表与账本）·
   [voice](dungeon/voice.md)（对话语音）·
   [admission](dungeon/admission.md)（进入准入）·

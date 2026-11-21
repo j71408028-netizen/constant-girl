@@ -5,7 +5,7 @@
 > - **写完没出现换算句**：先看 §4 的两条触发条件，再看 §9 的校验表。
 > - **改代码的人**：§7 内部实现、§10 验收。
 >
-> 相关页面：地址怎么写、怎么注册 [../address_system.md](../address_system.md) · 章节与触发器字段 [script.md](script.md) · 主世界里的地标配对 [../report_selection.md](../report_selection.md)。
+> 相关页面：地址怎么写、怎么注册 [../address_system.md](../address_system.md) · 章节与触发器字段 [script.md](script.md) · 换算句怎么进提示词 [prompts.md](prompts.md) · 主世界里的地标配对 [../report_selection.md](../report_selection.md)。
 
 ## 1. 地点是写死的，地址只负责声明
 
@@ -185,6 +185,7 @@
 **机制目录**
 
 - **dungeon/**：[README](README.md)（全景）· [script](script.md)（章节与触发器字段）·
+  [prompts](prompts.md)（提示词与上下文）·
   [characters](characters.md)（人物表与账本）· [voice](voice.md)（对话语音）·
   [admission](admission.md)（进入准入）· [scene](scene.md)（地点与参照物，本页）·
   [minigame](minigame.md)（小游戏）· [components](components.md)（显示组件）

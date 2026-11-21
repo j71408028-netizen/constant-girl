@@ -1,11 +1,20 @@
-# 副本数据模型索引：章节与触发器
+# 副本数据模型：章节与触发器（面向作者）
 
-> **定位**：方案配置（`data/packs/scenarios/<id>/config.json`）里**章节与触发器**的
-> 字段索引——script 只是这两者的非正式统称。分层与运行时数据流见 Dungeon
-> 架构说明（`docs/Dungeon/architecture.md`），窗口侧见 Dungeon 窗口文档。
-> 字段声明的单一真相源是 `dungeon/schema.py`（`CHAPTER_FIELDS` / `TRIGGER_FIELDS` / `SCENARIO_FIELDS`）。
-> 方案级配置里不属于章节 / 触发器的内容（对话语音、角色设定、进入准入）各有
-> 自己的机制文档，本篇只留指针（§10–§12），不再展开。
+> **这一篇回答什么问题**：方案配置里「章节」和「触发器」能写哪些字段、默认值是什么、条件
+> 怎么判、动作怎么执行、写错了校验器会说什么。script 只是这两者的非正式统称。
+> - **正在写第一个方案**：先看 §1 分清章节与触发器，再照 §2 / §4 的字段表填。
+> - **查某个条件键 / 动作的行为**：§5、§6、§7。
+> - **保存被拦住、或副本起不来**：§9 的诊断表。
+>
+> 相关页面：编辑器界面怎么用 [scenario_editor.md](../scenario_editor.md) · 在场人物与人物表
+> [characters.md](characters.md) · AI 每段看到什么（章节备注 / 地点 / 在场行怎么进提示词）
+> [prompts.md](prompts.md) · 对话语音 [voice.md](voice.md) · 进入准入
+> [admission.md](admission.md) · 地点与参照物 [scene.md](scene.md) · 小游戏
+> [minigame.md](minigame.md)。
+
+方案级配置里不属于章节 / 触发器的内容（对话语音、角色设定、进入准入）各有自己的机制文档，
+本篇只留指针（§10–§12），不再展开。字段声明的单一真相源是 `dungeon/schema.py`；分层与运行时
+数据流见 `docs/Dungeon/architecture.md`。
 
 ## 目录
 
@@ -18,12 +27,15 @@
 | §5 | 条件键索引 |
 | §6 | 动作注册表 |
 | §7 | 章节效果短暂覆盖 |
-| §8 | 编辑器文件索引 |
+| §8 | 内部实现：编辑器由哪些窗口组成 |
 | §9 | 校验、迁移与持久化 |
 | §10 | 指针 → [对话语音](voice.md) |
 | §11 | 指针 → [角色设定](characters.md) |
 | §12 | 指针 → [进入准入](admission.md) |
 | §13 | 场景地标清单（章节级，细则在 [副本内地点](scene.md)） |
+| §14 | 拓展用法（手写配置能做什么编辑器不提供的事） |
+| §15 | 官方资源（唯一入库的方案） |
+| §16 | 作者须知（改写、迁移与自检） |
 
 ---
 
@@ -46,9 +58,9 @@
 | `color` | color | — | 编辑器自定义配色 `#RRGGBB`（浅色模式基准） |
 | `start` | bool | `false` | 起始章节：开副本时自动进入，全局最多一个 |
 | `ending` | bool | `false` | 结束章节，见 §3.2 |
-| `note` | str | `""` | 备注；提示词里会带一行「当前章节：X（备注）」 |
+| `note` | str | `""` | 备注；会以「当前章节：X（备注）」进提示词（怎么用见 [prompts.md](prompts.md) §10） |
 | `cast` | list | — | 本章在场的人物（人物表的 id / 称呼 / 别称）；空 = 不写在场行，见 §11.3 |
-| `place` | str | `""` | 地点展示名：提示词与窗口使用，留空不显示 |
+| `place` | str | `""` | 地点展示名：窗口与提示词共用，留空不显示 |
 | `address` | str | `""` | 取景地址（完整地址）：地点行与展示用，不参与结算 |
 | `scene_landmarks` | list | `[]` | 本章在场的独特地标（名称 / 尺寸 / 维度），建议 ≤5 |
 | `common_private_name` | str | `""` | 常见地标过滤私有名；空 = 不使用常见地标 |
@@ -305,7 +317,8 @@ AI 生成**（`normalize_fixed_text` 把缺路径的配置归一成空 dict，�
 按章节结算字段组装 `pending_ending`（§3.2），`_start_ending_generation` 起后台线程
 流式生成（`temperature=0.9`）：
 
-- 提示按耦合等级取用（`coupling_prompts` 的 `ending_system` / `ending_user`）；
+- 提示按耦合等级取用（`coupling_prompts` 的 `ending_system` / `ending_user`，见
+  [prompts.md](prompts.md) §8）；
 - 上下文 `_build_story_summary`：状态行（介入度 / 破坏性 / 总伤亡 / 自定义属性）+
   剧情概要（`StorySummarizer.summary_only()` 优先，缺失回退最近步进片段）+ 性格
   描述；生成前先 `flush_chapter` 压完本章余量（§9.4）；
@@ -386,7 +399,7 @@ AI 生成**（`normalize_fixed_text` 把缺路径的配置归一成空 dict，�
 
 1. 编辑器「角色」页按归属把量归到角色卡片下（`ui/scenario/character_page.py`）；
 2. 系统提示词：自定义属性写了 `owner` 时，`custom_directions` 的说明会带上归属
-   （「狂气（归属：她）」），AI 才知道这一路变化是谁身上的；
+   （「狂气（归属：她）」），AI 才知道这一路变化是谁身上的（见 [prompts.md](prompts.md) §2）；
 3. 日后组件可按归属取用（属性条现在只认 `display_state`）。
 
 未写 `owner` 的旧方案按类型取缺省（`schema.DEFAULT_OWNER_BY_TYPE`：介入度 / 破坏性 /
@@ -485,7 +498,10 @@ AI 生成**（`normalize_fixed_text` 把缺路径的配置归一成空 dict，�
 | 抓帧失败 | 反色 / 色差分离退回处理当前背景图；连背景都没有则放弃本次视效（打印提示） |
 | 回放 | 回放记录原样重放一次（不判定条件，按时长重演） |
 
-## 8. 编辑器文件索引
+## 8. 内部实现：编辑器由哪些窗口组成
+
+> 这一节是给维护编辑器的人看的：哪个窗口负责哪一页、哪些操作会自动保存。**只写方案配置的
+> 作者可以整段跳过**——上面的字段表已经覆盖了你需要知道的一切。
 
 | 文件 | 职责                                                                                                                                                                              |
 |---|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -657,16 +673,9 @@ import `validate`，由本模块包成 `Diagnostic`），保存方案 / 启动�
 
 ### 9.4 剧情压缩（提示词上下文）
 
-`summary.StorySummarizer` 把冗长段落历史压成可注入提示词的「剧情概要」，由
-`DungeonWindowBase._init_session` / `_init_replay` 创建（`story_summary`），`engine` 每步（含回放）调用
-`_record_story_summary` 登记段落。
-
-| 项 | 行为 |
-|---|---|
-| 压缩时机 | 缓冲达到 `block_size`（默认 20 段）压一个块；`_enter_chapter` 离开章节时 `flush_chapter` 强制压本章余量；结局生成前再 flush 一次 |
-| 压缩方式 | 优先用 AI 生成不超过 100 字的第三人称概要；AI 不可用 / 失败时回退内部算法（首句 + 高频词 + 末句）；回放模式无 AI，走内部算法 |
-| 提示词内容 | `build_turn` 注入 `prompt_block()`：**截至此刻的全部压缩概要** + **最近 N 段原文**；N = 副本独占设置 `story_recent_count`（`dungeon_settings.json`），默认 20，设置项「剧情概要保留段数」（1~200） |
-| 存放 | 只存内存（`summaries`），不写入回放文件；回放按同样的块大小重新累计，不依赖保存时的概要内容 |
+段落历史怎么压成「剧情概要」、多久压一块、概要 / 事实卡 / 关键事件各占多少预算，属于
+提示词的上下文管理，整节移到 [副本提示词](prompts.md) §4——连同「对话历史窗口 + 概要」
+怎么一起拼成 AI 的记忆。
 
 ---
 
@@ -701,3 +710,81 @@ import `validate`，由本模块包成 `Diagnostic`），保存方案 / 启动�
 - 方案级 `scene_landmarks` 与章节级 `landmarks` 白名单已退役，读到即忽略
   （校验器报 warning 提示迁移）；
 - 清单只喂尺寸换算句，不参与章节推进与结局判定。
+
+## 14. 拓展用法
+
+界面上没有明说、但配置本身支持的用法：
+
+- **用「超限即离开」做过场章节**：把 `max_paragraphs` 设小、`overflow_target` 留空，章节
+  走满段落数就自动离开（不是跳去别处，而是回到「无章节」），适合做完一段独白 / 演出就收。
+- **复制方案目录做并行版本**：把 `data/packs/scenarios/<id>/` 整个复制成新 id 再改，两条线
+  互不影响；比在同一份配置上反复覆盖安全，也便于对比两版差异。
+- **手写 `config.json` 批量改**：编辑器存盘会补齐缺失字段、保留不认识的键，所以可以先用
+  脚本统一改一批（比如给所有触发器加同一个条件），再回编辑器里检查校验条。
+
+提示词层面的玩法（把 `note` 当持续提示、长期禁令写进初始提示、手写
+`section_prompts.global`）见 [副本提示词](prompts.md) §10。
+
+## 15. 官方资源
+
+官方入库的方案目前只有一个：**回稳会志**（`default`，资源信封 `stable`、署名 XiaoCui、
+版本 1.0），随发行版提供，可直接开局，也可当模板复制改：
+
+| 方案 | 规模 | 用途 |
+|---|---|---|
+| 回稳会志（`default`） | 6 章节 / 26 触发器 | 官方示例，章节、选项分支、结局与固定文本都有用到 |
+
+仓库代码树里另有 `huiwen_huizhi_ai`（5 章节 / 26 触发器）与 `juying_lincheng`
+（12 章节 / 54 触发器）两个开发草稿，信封为 `draft`、未署名、`0.0.0`，**未入库、不随
+发行版发布**。本地调试时可以拿它们看更大规模的编排（后者触发器依赖最密），但它们不是
+官方样本，文档里的默认行为一律以回稳会志为准。
+
+## 16. 作者须知
+
+- **旧动作不再执行**：`background` / `sensitivity` 类动作在运行时已停用（配置不会被自动
+  改写，需要清理请在编辑器里删）；旧 `ending` 动作只保留回放兼容，新结局请用「结束章节」。
+- **迁移不猜你的意图**：旧配置迁移后所有触发器都是「任意章节」，也不会自动创建章节。
+- **改名会连带改引用**：章节改名时，指向它的触发器作用域与 `跳转章节` 目标一起改；删除章节
+  则只会给悬空跳转一条警告，不会替你改写目标。
+- **未知键保留但不保证生效**：手写字段不会被存盘删除，是否被读取取决于当前 schema——写完
+  请让校验条跑一遍。
+- **交付前自检**：`python tests/run_checks.py check_scenario_schema check_scenario_graph
+  check_scenario_admission`，或离线批量跑 `python scripts/scenario_validate.py`（error
+  退出码 1）；编排图上的可达性结论由 `check_scenario_graph` 守卫。
+
+## designs 目录
+
+<details>
+<summary>designs/ 全目录（wiki 地图）</summary>
+
+**机制目录**
+
+- **dungeon/**：[README](README.md)（全景）·
+  [script](script.md)（本页）·
+  [prompts](prompts.md)（提示词与上下文）·
+  [characters](characters.md)（人物表与账本）·
+  [voice](voice.md)（对话语音）·
+  [admission](admission.md)（进入准入）·
+  [scene](scene.md)（地点与参照物）·
+  [minigame](minigame.md)（小游戏）·
+  [components](components.md)（显示组件）
+- **chat/**：[README](../chat/README.md)（话题与好感 / 紧张度）·
+  [lens](../chat/lens.md)（信息视角细节）
+- **behaviors/**：[README](../behaviors/README.md)（玩家向）·
+  [dev-guide](../behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
+  （[logic](../behaviors/hooks-logic.md) / [report](../behaviors/hooks-report.md) /
+  [character](../behaviors/hooks-character.md) / [chat](../behaviors/hooks-chat.md)）·
+  [example-imperial](../behaviors/example-imperial.md)（示例包）
+- **world_packs/**：[README](../world_packs/README.md)（玩家向：启用 / 切换 / 删除）·
+  [author](../world_packs/author.md)（制作与清单）
+
+**单篇**
+
+[地址系统](../address_system.md) · [报告生成](../report_selection.md) ·
+[角色演化](../character_evolution.md) · [资源与包体系](../resources.md) ·
+[挑战包](../challenges.md) ·
+[剧本编辑器](../scenario_editor.md) · [界面双模式与外观](../ui_modes.md) ·
+[角色的长期行为](../character_time.md) · [身材剪影](../body_preview.md) ·
+[更新检查](../update_check.md)
+
+</details>
