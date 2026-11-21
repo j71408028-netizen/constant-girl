@@ -1,209 +1,167 @@
-# 角色的时间维度
+# 角色的长期行为
 
-> **这一篇回答什么问题**：程序未运行期间发生了什么（恢复结算：行动点 / 坐标 /
-> 伤亡）、作息节律怎么从行为数据学习、近况新闻怎么选、剪影预览怎么画、档案与
-> 角色卡两种导出各包含什么。演化量本身的公式全景在
-> [character_evolution.md](character_evolution.md)，空间档案（环境因子 / 区域）在
-> [report_selection.md](report_selection.md)。
+> **这一篇回答什么问题**：你关掉程序的那段时间里她做了什么（下次载入时一次性结清：行动点、坐标、伤亡）、她的作息节律怎么形成、近况新闻什么时候弹，以及两种导出各自能带走什么。
+> - **普通玩家**：顺着 **§1 → §3** 看就能搞懂「关掉游戏的日子里她做了什么」；想分享或搬运角色看 **§4 → §5**；顺手看看 **§7** 里的隐藏玩法。
+> - **想折腾机制或改代码的开发者**：重点看 **§1～§2** 的规则与 **§6** 的实现说明。
+>
+> 相关页面：演化公式总览 [character_evolution.md](character_evolution.md) · 空间档案与区域 [report_selection.md](report_selection.md) · 新闻数据源 [resources.md](resources.md) · 身材剪影 [body_preview.md](body_preview.md)。
 
-术语现状：代码符号保留 `offline` 原名（模块 `services/character/offline.py`、
-类 `OfflineService`、钩子 key `"offline.*"`、存档字段 `offline_details`），叙述
-用「恢复结算 / 间隔时长」；用户可见文案首段仍写作「离线 {时长}」。
+> **名词对照说明**：游戏里关掉再回来重新算账的过程，在代码里叫 `offline`（离线），正文里通常说「恢复结算」或「离开这段时间」；界面上你看到的第一句话依然是「离线 {时长}」。
 
-## 1. 恢复结算（`services/character/offline.py`）
+## 1. 恢复结算：载入那一刻结一次账
 
-**触发时机**：只在**加载角色**时发生一次——
-`services/exploration/context.py::load_character_state` 调
-`OfflineService.recover_offline`，随后依次负向演化、头像兜底、保存。两个界面的
-加载入口（`app/window_manager.py::load_character_by_id` 与
-`ui/mini/app.py::load_character`）都走这条链；没有应用启动时的全局结算，未载入
-的角色不结算。
+**什么时候算账**：只有当你**点开/载入这个角色**的那一刻才会算一次——不管从哪个界面进都一样，先算完这段时间发生的事，再处理后续变化和保存。没载入的角色不会提前算账，哪怕放好几天也等载入时再一起算。
 
-**计划 / 执行分离**：`build_recover_plan(state)` 是纯函数（只读状态，返回
-`OfflineRecoveryPlan`），行为包钩子 `offline.recover_plan` 可整体替换；
-`apply_recover_plan` 写回与记演化表仍由服务层负责；文案生成挂
-`offline.report_text` 钩子。
+重新载入时，会一次性结清三件事：
 
-**固定契约**：明细窗口 72h、明细精度 2h（`_OFFLINE_WINDOW_HOURS / _OFFLINE_BIN_HOURS`，
-是导出图表、演化表与 UI 的跨模块契约）。参数默认值来自
-`core/models.py::ModelTuning`（**出身烙印**：创建期派生、终身携带，世界包启停不
-触及已有角色）：
+1. **行动点回血**：按你离开的分钟数慢慢涨回来，最高补到 **100**（自然回复的上限）。
+2. **坐标往回走**：她的介入度 / 破坏性会向自己的**性格初始倾向**（`init_intrusion` / `init_destruction`）靠拢，而不是停在正中间。离开越久靠得越多，但每次按比例走、不会冲过头，最后限制在 **0.5～4.5** 之间（细则见 [character_evolution.md](character_evolution.md) §3.4）。如果没有设定性格，坐标就不会自己回落。
+3. **步进与伤亡变化**：你不在的时候她也不是完全静止，结算时会按离开的时间长短分两段算：
+   - **最近 72 小时：每 2 小时记一小段**（在界面的离线明细里能看到每一段的记录）。每一小段有多活跃，取决于她的个性强度、作息规律（§2），再加上刚关游戏那阵子还没完全安静下来的「余温」（随时间很快退去），最后乘上她从空间档案里积累的环境影响（范围在 `0.1～1.5`，见 [report_selection.md](report_selection.md)）。伤亡则会结合她的身材和步进一起算。
+   - **超过 72 小时的更早时间：按天打包算一大段**（没有逐 2 小时的明细），作息按当天的平均水平来算。
 
-| 参数 | 默认 | 含义 |
+算完账之后，界面的离线明细会换成**这一次**的数据，累计伤亡会加上新产生的部分；只要有变化，就会记一条恢复记录。界面首段「离线 {时长}」在离开满 90 分钟后会按小时显示，依次列出时长、恢复的行动点、步进和新增伤亡。
+
+> **在线时是另一套节奏**：只要角色开着，角色面板每 60 秒会自动回一点行动点，每分钟坐标也会小幅回落一点（详见 [character_evolution.md](character_evolution.md) §3.4 / §3.6）。刚载入算完离线账后，还会紧接着判定负向演化（行动点在 50 及以上时会跳过，见 §3.5）。
+
+<details>
+<summary>参数默认值与计算公式（想微调手感或排查数值异常时展开）</summary>
+
+这些参数来自角色创建时带上的「出身烙印」（`core/models.py::ModelTuning`），伴随角色终身，切换世界包不会改动已有角色；生效优先级为：**单次指定 > 角色烙印 > 系统默认**。
+
+| 参数 | 默认值 | 作用说明 |
 |---|---|---|
 | `step_per_hour` | 0.01 | 基础步进率（步/小时） |
-| `exit_amp` / `exit_tau` | 0.05 / 0.9h | 退出残留活动的幅度与衰减时间常数 |
-| `recovery_points_per_minute` | 0.5 | 行动点恢复速率（点/分钟） |
-| `recovery_decay_per_minute` | 0.01 | 坐标回落速率（深度/分钟） |
-| `noise_scale` | 0.1 | 环境噪声系数 |
-| `old_step_divisor` | π | >72h 汇总段的步进除数 |
-| `rhythm_swing` | 1.0 | 作息调制放大倍率（夹取 0~3） |
+| `exit_amp` / `exit_tau` | 0.05 / 0.9h | 退出后残留活跃度的初始幅度与衰减时间常数 |
+| `recovery_points_per_minute` | 0.5 | 行动点恢复速度（点/分钟） |
+| `recovery_decay_per_minute` | 0.01 | 坐标回落速度（深度/分钟） |
+| `noise_scale` | 0.1 | 环境随机波动系数 |
+| `old_step_divisor` | π | 超过 72 小时汇总段的步进除数 |
+| `rhythm_swing` | 1.0 | 作息波动放大倍数（限制在 `0～3`） |
 
-覆盖优先级「实例显式参数 > 角色烙印 > 默认」（`OfflineService._model`）。
+- **最近 72 小时（每 2 小时一格，按偶数整点对齐）**：瞬时步进率 ≈ 活动基线 × `step_per_hour` × 作息系数 + 退出残留。其中活动基线由个性强度归一化（默认 0.5）；作息系数为 `1.0 + swing × (rhythm.factor_at(时段中点) - 1.0)`；退出残留为 `基线 × exit_amp × exp(-离开小时数 / exit_tau)`。每段伤亡按 `0.01 × 身高² × 步进 × 破坏性 × 环境因子 × log10(身高)` 计算（`core/logic/simulation.py::compute_casualty`），环境因子则结合空间档案与随机波动生成（`services/character/spatial.py::EnvironmentProfile`）。
+- **超过 72 小时的部分**：按天汇总，步进约为 `基线 × step_per_hour × 24 / π × 当天作息均值 × 天数`，伤亡使用同一套计算公式。
 
-**三项结算内容**：
+</details>
 
-1. **行动点恢复**：`int(间隔分钟 × 速率)`，写回经
-   `StateService.receive_action_points` 夹取 0~100（100 是自然回复上限）。
-2. **坐标回落**：回落目标是**性格初始坐标**（`init_intrusion / init_destruction`），
-   不是固定中点——每单位回落量走 `fraction × 深度`、不越过边界，随后夹取
-   0.5~4.5（`StateService.decayed_coordinates / clamp_coordinates`，规则详见
-   [character_evolution.md](character_evolution.md) §3.4）。无性格则不改坐标。
-3. **伤亡步进**，粒度分两段：
-   - **最近 72h：2 小时明细**。间隔切桶（偶数整点对齐，`_detail_bins`），每桶
-     瞬时步进率 = 活动基线 × `step_per_hour` × 作息调制 + 退出残留：
-     基线由个性强度归一（缺省 0.5）；作息调制
-     `1.0 + swing × (rhythm.factor_at(桶中点) − 1.0)`（§2）；退出残留是
-     `基线 × exit_amp × exp(−退出小时数 / exit_tau)` 的指数快衰减。环境因子从
-     角色空间档案学习（值域 [0.1, 1.5]，叠加高斯噪声，
-     `services/character/spatial.py::EnvironmentProfile`）。每桶伤亡
-     `0.01 × 身高² × 步进 × 破坏性 × 环境因子 × log10(身高)`
-     （`core/logic/simulation.py::compute_casualty`），逐桶记
-     `OfflineDetail(start_at, end_at, step, casualties, env_factor)`。
-   - **>72h 的部分：按天汇总一段**（无明细）：基线 × `step_per_hour` × 24 / π ×
-     作息均值 × 天数，伤亡同公式但环境因子取按天平均步进率。
+## 2. 作息节律：从平时的经历里慢慢学出来
 
-**写回**（`apply_recover_plan`）：`state.offline_details` **整表替换**为最近一次
-结算的明细；累计伤亡累加；有变化时追加演化行
-（`source="recover_evolution"`）。文案 `build_offline_report`：间隔 ≥90 分钟按
-小时显示，片段依次为时长、行动点恢复、步进、新增伤亡；间隔无效返回空串。
+她的作息不是提前写死的配置，而是**从她平时的演化记录里现学出来的**：只要某条演化记录步进大于 0 且时间有效，就会算作一次活动样本，按「星期几 × 一天 12 个 2 小时时段」整理成一张 `7×12` 的作息表（同样按偶数整点对齐）。这套作息表不会单独存成新文件，每次用到时直接从演化记录里现场统计（`services/character/rhythm.py`）。
 
-**在线时的对照路径**（不是结算）：两界面的角色面板每 60s 执行
-`StateService.recover_action_points`（恢复量 `int(1 + 0.3 × 个性强度)`）与
-`apply_step_decay(state, 0.1)`（每分钟向性格边界回落 0.1 个深度，见
-[character_evolution.md](character_evolution.md) §3.4 / §3.6）。负向演化在加载
-结算后紧随（行动点 ≥50 跳过，§3.5）。
+- **样本少的时候会往稳妥处靠**：某个时段记录还很少时，会向整体平均值收缩（权重为 `6 / (6 + 样本数)`），再乘上**昼夜基础曲线**（白天偏高、傍晚回落、凌晨保底 `0.6`），最后卡在 `0.15～2.5` 之间——既不会变成完全不动，也不会爆出离谱数值；完全没有记录时，就直接使用昼夜基础曲线。
+- **你在游戏里会在三个地方感受到**：
+  1. 载入时的恢复结算（§1），决定不同时段有多活跃；
+  2. 角色档案简介里的「作息观察」段落（样本不到 24 条时，语气会更保守）；
+  3. 聊天时的实时状态提示（样本不到 6 条时不提示；活跃度高时提示偏活跃，低时提示在歇息）。
+  *注：作息只影响表现和活跃度，不会卡任何准入条件。*
+- 程序里已经写好了未来 72 小时的作息预测能力（按星期循环推算，没有衰减），目前主界面主要用的是当前时刻的查表和作息网格。
 
-## 2. 作息学习与外推（`services/character/rhythm.py`）
+## 3. 近况新闻：载入后可能弹出的早报
 
-- **样本**：演化表中 `step > 0` 且时间可解析的行，每行一次活动样本；累进
-  **7×12 网格**（星期 × 一天 12 个 2 小时桶，偶数整点对齐，与结算明细同规则），
-  只累样本数与步进和。
-- **权重**（`_learned_weights`）：每桶均值按 `K=6/(6+样本数)` 向全局均值收缩；
-  相对全局的比值再乘**昼夜先验** `_default_day_night`（白天正弦隆起、傍晚下斜、
-  凌晨 0.6 下限），夹取 [0.15, 2.5]——作息不归零、单桶不爆炸。无样本时整表
-  退化为纯昼夜先验。
-- **不持久化**：每次消费都从演化表现场学习（`RhythmService` 无写盘路径）；模型
-  的持久化事实来源就是演化表本身。
-- **查询与外推**：`factor_at(dt)` 单时刻查表；`forecast(now, horizon_hours=72)`
-  产出未来 72h 的 2 小时桶序列（星期维度循环外推，无衰减项）——外推能力已实现，
-  当前主程序消费的是 `factor_at` 与权重网格。
-- **消费方**：恢复结算逐明细桶取中点调制（§1）；档案简介的「作息观察」段
-  （`profile_text.py::describe_rhythm`，样本 <24 措辞降级）；聊天的实时提示
-  （`rhythm_now_hint`：样本 <6 静默，因子 ≥1.3 活跃 / ≤0.7 歇息）。作息不参与
-  任何准入判定。
+新闻内容来自取材表组里的 `news.csv`（列定义与回落顺序见 [resources.md](resources.md) §6；读取时会去掉空文本行）。
 
-## 3. 近况新闻（`services/news/`）
+**什么时候会弹**（载入角色后检查；专业版会弹「早报」窗口，挂件版不会弹）：
+- 早上 **9 点之前**不弹；
+- **今天已经弹过**就不弹；
+- 如果距离上次看新闻已经过了 **7 天或更久**，会改成弹「杂物新闻」（时间算作本次载入前她的更新时间）；
+- 其余情况按你的设置概率 `info_update_rate` 掷骰子（可选 `0.25 / 0.5 / 0.75 / 1.0`，默认 `0.5`），没抽中也会走杂物新闻。
 
-数据源是取材表组的 `news.csv` 成员（列与回落链见 [resources.md](resources.md)
-§6），utf-8-sig 读入、`text` 为空的行丢弃，实例级缓存（换组才失效）。
+**挑哪一条来弹**（每次最多 1 条）：先按她当前的身高档位筛，再考虑生日 / 节日和介入度 / 破坏性档位；尽量避开跟上次一模一样的正文，实在筛不出来就用杂物新闻兜底。选中后会替换名字 / 昵称，并从 `substitute` 列随机挑词补进模板。
 
-**门控**（`NewsService.choose_for_load`，加载角色后触发，专业版弹「早报」对话框，
-挂件版不弹）：9 点前不弹 → 当日已弹过不弹（`state.news_checked_at`）→ 间隔
-≥7 天强制「杂物新闻」（`saved_at` 取本次加载前的 `updated_at`）→ 掷
-`info_update_rate`（设置档位 0.25 / 0.5 / 0.75 / 1.0，默认 0.5），未中走杂物。
+<details>
+<summary>新闻条目的完整筛选与替换规则（想查某条为什么没弹或调 news.csv 时展开）</summary>
 
-**索引选取**（`_indexed_article`，每次至多 1 条）：按表头顺序逐层收窄——
-`size_category` 必须**精确**命中身高分档（`core/logic/sizing.py::get_size_category`）；
-`memorial` 期望生日或当日节日（元旦 / 愚人节 / 儿童节 / 万圣节），不中则忽略该
-条件；`intrusion / destruction` 取四舍五入 0~4 格上的**最近值**。候选优先选与
-`state.last_news` 正文不同的条目；索引失败回落杂物新闻（`size_category` 为空的
-行）。渲染替换 `{name}` / `{nick}`，`{a}` / `{b}` 从 substitute 列的逗号队列
-随机取一（占位符规则见 [resources.md](resources.md) §6）。
+- `size_category` 必须**严格匹配**她当前的身高档位（`core/logic/sizing.py::get_size_category`）；
+- `memorial` 会在生日或特定节日（元旦、愚人节、儿童节、万圣节）生效，对不上就跳过这个限制；
+- `intrusion` 和 `destruction` 会在 `0～4` 的档位里找最贴近当前数值的条目；
+- 挑候选时尽量避开跟上次一模一样的正文，实在筛不出来就用杂物新闻（`size_category` 为空的条目）兜底；
+- 拿到正文后，把 `{name}` / `{nick}` 替换成她的名字或昵称，再从 `substitute` 列的选项里随机挑词补进 `{a}` / `{b}`（详见 [resources.md](resources.md) §6）。
 
-## 4. 剪影预览（`services/preview/`）
+</details>
 
-「剪影」= 按身材部位参数画出的**正面少女剪影图**（PNG），用于未上传立绘时的
-头像兜底；输入只有 `body_parts` 与 `height`，与作息 / 新闻无数据关系。
+## 4. 档案导出：把她的 wiki 档案页带走
 
-- **部位参数表** `_PART_PARAMS`：14 项比例参数（步长 / 腿长 / 臂长 / 胸宽 /
-  脚长 / 脚踝 / 膝盖 / 大腿与小臂直径 / 手掌 / 食指长与直径 / 指缝 / 指纹），
-  各带 (min, max, step)。
-- **渲染**：绘制配方 `BodyPreviewPainter` 只描述「画什么」，经 6 个图元原语
-  （椭圆 / 多边形 / 线……）输出——不依赖 tkinter；PIL 画布
-  `BodyPreviewPilCanvas` 复刻 Tk 平滑样条的采样规则，线宽按设计宽等比放大。
-  导出常量 450×800、透明底、4 倍超采样后 Lanczos 缩回；暗色模式对亮通道做
-  0.15 亮度衰减（读 `core/appearance.py`）。配色是服务层字面量
-  `VIEW_*`（与主题 token 逐值一致，避免反向依赖 UI）。
-- **入口与消费**：`render_body_preview_image / render_body_preview_to_file /
-  render_preset_preview_image`；创建期与加载期的头像兜底
-  （`ensure_avatar_for_state`，开关 `use_preview_image_as_avatar`），挂件参数
-  面板直接预览预设。专业界面创建对话框里有一份同款画法副本（差异仅暗色衰减）。
+档案导出会把角色整理成**单个独立的 HTML 网页**（`services/character/archive_export.py::export_character_mhtml`）：图片、样式和脚本全都打包进同一个文件里，用浏览器直接双击就能看——发给朋友或放到任何静态网页空间都不会丢图。内容主要从 `data/archives/<角色id>/` 读取，包括 `avatar/`（形象图集，按修改时间从新到旧）、`报告/*.txt` 和 `回放/*.replay.json`。
 
-## 5. 档案导出（`services/character/archive_export.py`）
-
-`export_character_mhtml(state, file_path, show_casualties=True)` 把角色打包成
-**单文件 HTML** wiki 档案页：图片内嵌 data URI、样式 / 脚本同文件，浏览器直接
-打开。模板骨架在 `assets/templates/archive_template.{html,css,js}`，进程内缓存 +
-`string.Template` 占位替换。素材取自 `data/archives/<角色id>/`：`avatar/`（图墙，
-按修改时间新→旧）、`报告/*.txt`、`回放/*.replay.json`。
-
-| 分区 | 内容 |
+| 档案板块 | 包含内容 |
 |---|---|
-| Infobox | 昵称 / 身高 / 生日 / 创建与更新时间 / 标签 / 最新形象图 |
-| 灾害分析 | 介入度 / 破坏性指标条（满刻度 4.5，绿→黄→红；深度趋势 ≥±0.25 判增强 / 收敛）+ 分档解读 + 演化统计图 + 应对指南 |
-| 人物简介 | 可见简介与隐藏折叠卡、性格名与描述、**作息与活动范围观察段**（`profile_text.py::describe_rhythm` + 空间档案 `describe_spatial`）、达成事件、形象图墙 |
-| 物理信息 | wiki 式尺寸表（`ALL_PART_NAMES` ∩ `body_parts`），有解锁情报的部位悬浮显示 |
-| 测量报告 | 双栏阅读器（左时间索引右正文），行分类规则与报告面板同套；`show_casualties=False` 时过滤「本报告总计」行 |
-| 事件记录 | 副本回放逐条渲染：触发器 / 章节 / 结局卡 + 步进段徽章（背景 / 分支 / 对话 / 互动 / 行动） |
+| 顶部信息卡（Infobox） | 昵称、身高、生日、创建与更新时间、标签、最新形象图 |
+| 灾害分析 | 介入度 / 破坏性进度条（满格 `4.5`，绿→黄→红；趋势变化达到 `±0.25` 会标出增强或收敛）+ 分档说明 + 演化统计图 + 应对建议 |
+| 人物简介 | 可见简介与隐藏折叠卡、性格名称与描述、**作息与活动范围观察**（作息文字描述 + 空间档案）、已达成事件、形象图集 |
+| 物理信息 | 尺寸对照表（对应当前生效的部位参数），已解锁情报的部位鼠标悬停可看详情 |
+| 测量报告 | 左右双栏阅读器（左边按时间选报告，右边看正文），分类规则与游戏内报告面板一致；关闭 `show_casualties` 时会隐藏「本报告总计」行 |
+| 事件记录 | 逐条展示副本回放：触发器 / 章节 / 结局卡片，加上步进类型标记（背景、分支、对话、互动、行动） |
 
-- **演化统计图**（`_build_evolution_chart`，内联 SVG）：只统计**最近 72h**、36 个
-  2h 桶（与结算明细同一对齐规则）；恢复结算行优先采用 `state.offline_details`
-  的绝对时间区间并入各桶，无明细的旧档按昼间均摊；左轴累计伤亡（单调三次插值，
-  不出现「伤亡回落」）、右轴单桶步进（Catmull-Rom 平滑）。
-- **应对指南**：疏散范围 = 身高 × 分档系数（<0.5m→2、<1.5→5、<2.5→10、<3.5→18、
-  否则 30），无秩序范围 = 疏散范围 × 介入度 / 10；定位单元边长 > 身高 ×100 时
-  附加「定位可能不精确」警告。
-- **地标悬浮信息**：存档字段 `landmark_durability`（耐久表）与
-  `landmark_addresses` 的键是地标的声明身份（`Ref` 文本
-  `landmarks:<风格id>/<显示名>`，与地址无关——改地址不清零耐久，Ref 身份见
-  [resources.md](resources.md) §5）；导出侧 `Ref.parse` 还原显示名、同名多地址
-  合并，报告正文里的地标名替换为悬浮链接。耐久文案阈值：≤0 已损毁 / <0.5 残破 /
-  <1.0 受损 / 否则完好。
+- **演化统计图**：只看**最近 72 小时**，左轴是累计伤亡，右轴是每段步进。
+- **应对指南**：按身高和档位估算安全疏散范围与无秩序影响范围。
+- **地标悬浮提示**：报告正文里的地标名可以悬停查看当前状态，改地址不会清零耐久。
 
-## 6. 角色卡导出（`services/exploration/export.py`）
+<details>
+<summary>演化图、应对指南与地标状态的完整口径（核对导出数值或排查显示异常时展开）</summary>
 
-角色卡是**机器可读的创建数据搬运格式**（JSON，`version: "2.0"`），供「导入角色
-卡」重建角色，**不含任何时间维度内容**（无演化表 / 坐标 / 伤亡 / 结算明细 /
-报告 / 回放）：
+- **演化统计图**（网页内矢量图）：分成 36 个 2 小时时段（和离线明细对齐）；恢复结算会优先按 `state.offline_details` 的时间段填进去，旧存档没有明细时按白天时段均摊。累计伤亡只增不减，不会出现「伤亡倒退」。
+- **应对指南**：安全疏散范围按 `身高 × 档位系数` 估算（小于 `0.5m` 乘 `2`、小于 `1.5m` 乘 `5`、小于 `2.5m` 乘 `10`、小于 `3.5m` 乘 `18`，其余乘 `30`），无秩序影响范围约为 `疏散范围 × 介入度 / 10`；如果定位单元边长超过 `身高 × 100`，还会额外提示「定位可能不精确」。
+- **地标悬浮提示**：地标耐久（`landmark_durability`）和地址记录（`landmark_addresses`）按地标声明身份（`landmarks:<风格id>/<显示名>`）记账；导出网页时会还原显示名、合并同名多地址，并把报告正文里的地标名变成可悬停查看状态的链接（`≤0` 已损毁 / `<0.5` 残破 / `<1.0` 受损 / 否则完好）。
 
-| 字段 | 内容 |
+</details>
+
+## 5. 角色卡导出：搬运创建数据
+
+角色卡是用来**跨存档/跨设备重建角色**的纯数据文件（JSON 格式，`version: "2.0"`，`services/exploration/export.py`）。它**只带创建设定，不包含任何时间经历**（没有演化记录、当前坐标、伤亡、离线明细、报告或回放）：
+
+| 字段 | 对应内容 |
 |---|---|
-| `name / nick / original_height / birthday / tags` | 身份与外观 |
-| `intro_hidden / intro_visible` | 隐藏与可见简介 |
-| `personality_data / preset_data` | 完整性格对象与身材预设比例（从 `body_parts + height` 反解，预设名「名字的身材」） |
-| `image_b64` | 头像内嵌 base64 |
-| `origin_world` / `world_history` | 出身世界；世界履历仅在开关开启且非空时导出（履历本身始终记录，开关只控制导出） |
+| `name / nick / original_height / birthday / tags` | 名字、昵称、原始身高、生日、标签 |
+| `intro_hidden / intro_visible` | 隐藏简介与公开简介 |
+| `personality_data / preset_data` | 完整性格数据与身材预设比例（由当前 `body_parts` 和 `height` 反算生成，默认预设名为「名字的身材」） |
+| `image_b64` | 头像图片编码 |
+| `origin_world / world_history` | 出身世界；世界履历仅在导出开关打开且有内容时写入（平时履历仍正常记录，开关只控制导出时带不带走） |
 
-从已加载角色导出走 `build_export_card_from_state`（缺性格或身材反解失败抛
-`ValueError`）；落盘为 UTF-8 JSON，挂件版扩展名强制 `.chara.json`。与档案导出
-共用同一个文件对话框，按扩展名分流：`.html` → 档案，`.json` → 角色卡。
+导出已载入的角色时，如果缺少性格或身材参数无法反算，会直接报错拒绝导出（`build_export_card_from_state` 抛出 `ValueError`）。文件保存为 UTF-8 编码的 JSON，挂件版会强制使用 `.chara.json` 后缀。档案导出和角色卡导出用的是同一个保存弹窗，按后缀名自动区分：选 `.html` 导出档案页，选 `.json` 导出角色卡。
 
-## 7. 文件 / 函数索引
+## 6. 内部实现
 
-| 要点 | 位置 |
-|---|---|
-| 结算触发（加载角色时） | `services/exploration/context.py::load_character_state` |
-| 结算计划（纯函数 / 钩子） | `services/character/offline.py::build_recover_plan / apply_recover_plan / build_offline_report` |
-| 结算执行与参数覆盖链 | `services/character/offline.py::OfflineService.recover_offline / _model / _TUNING_FIELDS` |
-| 72h / 2h 固定契约 | `services/character/offline.py::_OFFLINE_WINDOW_HOURS / _OFFLINE_BIN_HOURS / _detail_bins` |
-| 基线 / 退出残留 / 作息调制 / 噪声 | `services/character/offline.py::_activity_baseline / _exit_residual_rate / _swing_factor / _offline_noise_std / _rhythm_mean` |
-| 出身烙印（结算 8 参默认值） | `core/models.py::ModelTuning / sanitize`；派生 `services/creation_service.py::CreationService.derive_model_tuning` |
-| 结算明细与计划数据类 | `core/models.py::OfflineDetail / OfflineRecoveryPlan` |
-| 行动点 / 坐标 / 负向演化 | `services/state_service.py::StateService.receive_action_points / decayed_coordinates / clamp_coordinates / recover_action_points / apply_step_decay / apply_negative_evolution`（公式见 [character_evolution.md](character_evolution.md) §3） |
-| 伤亡公式 | `core/logic/simulation.py::compute_casualty` |
-| 环境因子（结算消费） | `services/character/spatial.py::EnvironmentProfile`（档案见 [report_selection.md](report_selection.md)） |
-| 作息学习 / 权重 / 昼夜先验 | `services/character/rhythm.py::RhythmService.learn_from_evolution / _learned_weights / _default_day_night` |
-| 作息查询与外推 | `services/character/rhythm.py::RhythmService.factor_at / forecast`、`build_rhythm_forecast` |
-| 作息文本化（档案 / 聊天消费） | `services/character/profile_text.py::describe_rhythm / rhythm_now_hint / build_live_context` |
-| 新闻服务（门控 / 索引 / 渲染） | `services/news/__init__.py::NewsService.choose_for_load / _indexed_article / _pick_different / _render` |
-| 新闻弹窗与档位 | `ui/exploration/news_dlg.py::NewsDialog`、`ui/settings/__init__.py::INFO_UPDATE_OPTIONS` |
-| 身高分档（新闻索引用） | `core/logic/sizing.py::get_size_category` |
-| 剪影配方 / PIL 画布 / 入口 | `services/preview/__init__.py::BodyPreviewPainter / BodyPreviewPilCanvas / render_body_preview_image / render_body_preview_to_file` |
-| 剪影头像兜底 | `services/exploration/character.py::ensure_avatar_for_state`、`services/creation_service.py::CreationService._render_body_preview_to_temp` |
-| 档案导出主入口 / 分区 | `services/character/archive_export.py::export_character_mhtml / _build_infobox / _build_analysis_section / _build_bio_section / _build_sizes_section / _build_reports_section / _build_replays_section` |
-| 演化统计图（消费 offline_details） | `services/character/archive_export.py::_build_evolution_chart / _collect_evolution_events / _monotone_points / _catmull_points` |
-| 应对指南 / 地标悬浮 | `services/character/archive_export.py::_build_guide_block / _evacuation_coef / _landmark_popup_info / _link_landmarks / _durability_text` |
-| 地标耐久键生成（报告期写表） | `services/exploration/address_index.py::AddressIndex.durability_key`、`core/resource_ref.py::Ref.scoped / Ref.parse` |
-| 角色卡导出 | `services/exploration/export.py::build_export_card_data / build_export_card_from_state`；落盘 `app/window_manager.py::export_character_card_to_path / export_character_card_from_state`、`ui/mini/app.py::_export_card` |
-| 角色持久化（结算字段落盘） | `persistence/character_repo.py::CharacterRepo.save / load`（`data/archives/<id>/info.json`） |
+- **72 小时 / 2 小时是全局统一约定**（`services/character/offline.py::_OFFLINE_WINDOW_HOURS` 与 `_OFFLINE_BIN_HOURS`）：离线明细、档案演化图和演化表界面都按这两个常量对齐，改其中一个时需同步检查三处。
+- **载入流程与「算账 / 落盘」分离**：两个界面的载入都会走 `services/exploration/context.py::load_character_state`，先调 `OfflineService.recover_offline`，再依次执行负向演化、头像兜底和保存。其中 `build_recover_plan` 是只读纯函数，返回 `OfflineRecoveryPlan`（行为包可通过 `offline.recover_plan` 钩子替换整套计划），实际写回状态和记演化表由 `apply_recover_plan` 完成，文案则走 `offline.report_text` 钩子。
+- **存档位置**：结算结果和离线明细会随角色基础信息一起保存在 `data/archives/<角色id>/info.json`（`persistence/character_repo.py::CharacterRepo`）。
+- **缓存**：新闻表按服务实例缓存，切换取材表组时刷新（§3）；档案模板（`assets/templates/archive_template.{html,css,js}`）在进程内缓存并替换占位符。
+
+## 7. 拓展用法
+
+这里记录一些界面上没明说、但实际能用的玩法：
+
+- **角色卡可以直接用文本编辑器改**：角色卡本质上是普通 JSON，除了在界面里导入导出，你也可以按 §5 的字段手动改完再「导入角色卡」。
+
+## designs 目录
+
+<details>
+<summary>designs/ 全目录（wiki 地图）</summary>
+
+**机制目录**
+
+- **dungeon/**：[README](dungeon/README.md)（全景）·
+  [script](dungeon/script.md)（章节与触发器字段）·
+  [characters](dungeon/characters.md)（人物表与账本）·
+  [voice](dungeon/voice.md)（对话语音）·
+  [admission](dungeon/admission.md)（进入准入）·
+  [scene](dungeon/scene.md)（地点与参照物）·
+  [minigame](dungeon/minigame.md)（小游戏）·
+  [components](dungeon/components.md)（显示组件）
+- **chat/**：[README](chat/README.md)（话题与好感 / 紧张度）·
+  [lens](chat/lens.md)（信息视角细节）
+- **behaviors/**：[README](behaviors/README.md)（玩家向）·
+  [dev-guide](behaviors/dev-guide.md)（行为包开发）· 钩子契约四篇
+  （[logic](behaviors/hooks-logic.md) / [report](behaviors/hooks-report.md) /
+  [character](behaviors/hooks-character.md) / [chat](behaviors/hooks-chat.md)）·
+  [example-imperial](behaviors/example-imperial.md)（示例包）
+
+**单篇**
+
+[地址系统](address_system.md) · [报告生成](report_selection.md) ·
+[角色演化](character_evolution.md) · [资源与包体系](resources.md) ·
+[挑战包](challenges.md) · [世界包](world_packs.md) ·
+[剧本编辑器](scenario_editor.md) · [界面双模式与外观](ui_modes.md) ·
+[角色的长期行为](character_time.md)（本页） · [身材剪影](body_preview.md) ·
+[更新检查](update_check.md)
+
+</details>
