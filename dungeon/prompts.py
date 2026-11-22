@@ -306,11 +306,6 @@ class DungeonPromptBuilder:
             context_parts.append(presence)
         if presence_landmark:
             effects.prompted_presence_landmark = presence_landmark
-        if getattr(session, "option_choice", None):
-            choice = session.option_choice
-            choice_prompt = choice.get("prompt", "")
-            if choice_prompt:
-                context_parts.append(f"她刚才选择了：{choice_prompt}")
         reference = ""
         if context_parts:
             reference = (f"\n{coupling_prompts(level)['reference_intro']}\n"
