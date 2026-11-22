@@ -14,7 +14,7 @@
 
 方案级配置里不属于章节 / 触发器的内容（对话语音、角色设定、进入准入）各有自己的机制文档，
 本篇只留指针（§10–§12），不再展开。字段声明的单一真相源是 `dungeon/schema.py`；分层与运行时
-数据流见 `docs/Dungeon/architecture.md`。
+数据流见 `docs/dungeon_engine.md`。
 
 ## 目录
 
@@ -589,7 +589,7 @@ AI 生成**（`normalize_fixed_text` 把缺路径的配置归一成空 dict，�
 `lint_graph(build_graph(config))`，三元组并入同一份诊断列表（`graph_lint` 不
 import `validate`，由本模块包成 `Diagnostic`），保存方案 / 启动副本前 / 离线批量
 校验三处自动覆盖。图模型与两个可达性口径的实现见
-`docs/Dungeon/scenario_graph.md` §2。
+`docs/designs/dungeon/scenario_graph.md` §2。
 
 ### 9.2 迁移与兼容
 

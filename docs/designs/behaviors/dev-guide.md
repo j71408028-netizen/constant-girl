@@ -75,7 +75,7 @@
 | 角色习性 | rhythm / spatial 演化表学习 | 模型内部，参数封闭（不开放） |
 
 一句话：世界包能改「世界如何运转」，不能重写「她是谁」（取舍论证见
-`docs/dev/architecture.md` §2.6）。
+`docs/architecture.md` §2.6）。
 
 - **世界规则可以换**：坐标演化、选取仲裁（`report.*`）、恢复结算
   （`offline.recover_plan`，收到的 model 即来自角色烙印）都是「世界如何运转」

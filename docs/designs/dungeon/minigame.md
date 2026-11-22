@@ -4,7 +4,7 @@
 >
 > 一句话：**写一个 Python 类就是一个小游戏**。绘制、输入、帧时钟、贴图、结算、回放都由框架承担，作者不接触窗口框架。
 >
-> 相关页面：触发器动作字段（`mini_game` 的 `action_data`）见 [script.md](script.md) §6 · 宿主窗口侧端口见 `docs/Dungeon/window_host.md` §1 · 章节与触发器的整体写法见 [README.md](README.md)。
+> 相关页面：触发器动作字段（`mini_game` 的 `action_data`）见 [script.md](script.md) §6 · 宿主窗口侧端口见 `docs/dungeon_window.md` §6.1 · 章节与触发器的整体写法见 [README.md](README.md)。
 
 ## 1. 玩起来是什么样
 

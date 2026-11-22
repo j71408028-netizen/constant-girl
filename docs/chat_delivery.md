@@ -157,7 +157,7 @@ data/archives/<giantess_id>/
 UI 不再自行模拟节奏。该函数是行为包钩子 `chat.schedule_batch`：覆盖必须
 返回与 `texts` 等长的递增 ISO 时间列表，长度、类型或顺序不符时服务层回退
 默认实现；节奏数值可由 `chat.model.*` 常量覆盖，见
-[hooks-chat.md](../designs/behaviors/hooks-chat.md)。
+[hooks-chat.md](designs/behaviors/hooks-chat.md)。
 
 ## 5. 投递调度器（services/chat/delivery.py）
 
@@ -299,56 +299,32 @@ Topic
 
 ### 三轴坐标与话题类型（services/chat/coordinates.py、topic_kinds.py）
 
-话题选择时按当前事实算一次坐标，作为 `Topic.coord` 快照；一次交流里即使
-`ops` 改了态度或行动点，本轮的 kind 校验与快照仍用 `ops` 生效前的坐标，
-下一轮才按新坐标筛选。坐标分量：
-
-- 好感：`attitude` 归一到 0~1；
-- 紧张度：世界态势 + 关系认知 + 近期事件压力。世界态势读
-  `settings.json` 的 `world_stance`（worship / accept / coexist / alert /
-  hostile，缺省 coexist，可由 `ChatService(..., world_stance_provider=...)`
-  注入覆盖）；关系认知取当前身份的 `Relationship.kind`；事件压力扫描最近
-  50 行演化记录与 7 天窗口，按伤亡增量与坐标位移计权，排除纯闲置衰减行，
-  旧聊天来源的世界事实按低权重计入，已达成结局也作为事件；所有事件再按
-  48 小时半衰期衰减；
-- 状态：演化坐标贴边、行动点不足、个性强度（越高越适应）。
-
-注入提示词的只有定性描述（好感/紧张度/接纳程度）、当前身份认知与类型名，
-不给坐标、半径或原始小数。候选按三轴欧氏距离与类型半径过滤，同分看优先级，
-并对最近用过的类型加重复惩罚；一个候选都没有时回退 `daily` 兜底。AI 给出的
-`topic.kind` 只接受候选集合内的 id，非法/太远回退第一个候选；当前话题
-坐标超出自身类型半径时，提示词会提醒 AI 可以结束或换类型。
+话题选择按**好感 / 紧张度 / 状态**三轴筛选候选类型：公式、权重与衰减在
+`services/chat/coordinates.py`（`TENSION_W_*` 等常量），类型半径 / 重复惩罚 /
+候选上限在 `services/chat/topic_kinds.py`。取值口径、18 个类型的落点表与
+「AI 只看到四档定性描述」的边界见
+`docs/designs/character/chat/README.md` §3–§4 与 §8——那里的公式是唯一口径，
+本文不复述。坐标在话题开始时算一次存进 `Topic.coord` 快照；本轮 `ops` /
+`effect` 生效前的坐标决定本轮的 kind 校验与快照，下一轮才按新坐标筛选。
+`ChatService(..., world_stance_provider=...)` 可注入覆盖世界态势（缺省读
+`settings.json` 的 `world_stance`）。
 
 ### 身份认知更新（ChatState.relationship）
 
-每个线程带一份 `Relationship`（kind / note / since / updated_at），默认
-陌生人。AI 可在协议里给 `identity_update: {kind, note}`，但只在话题
-自然结束（end）或切换（switch）时落地；stale 强制收束、继续当前话题或
-沉默轮都不更新。`kind` 必须沿白名单转移图逐步变化（不允许一轮从陌生人
-跳到恋人/敌人），非法 kind 连同 note 整条丢弃；note 单独也可更新。每个
-身份有 72 小时冷却，冷却期内再次提交会被忽略。
+每条线程带一份 `Relationship`（kind / note / since / updated_at），默认陌生人。
+AI 可在协议里给 `identity_update: {kind, note}`，但只在话题结束或切换时落地；
+档位沿白名单逐级变化、每个身份 72 小时冷却——规则与玩家效果见
+`docs/designs/character/chat/README.md` §6，落盘位置就是本线程存档的
+`relationship` 字段。
 
 ### 世界效果（services/chat/effects.py）
 
-AI 只输出 `effect: {tool, args}`，服务层按注册表校验、夹取、执行并记录。
-每轮最多一个；给成数组视为多个，整条丢弃。v1 只开放：
-
-- `self_view {"text": "..."}`：追加到 `intro_visible`，不改写已有介绍与
-  `intro_hidden`，单条截断到 500 字；重复内容不重复追加。
-- `step_nudge {"axis": "intrusion|destruction", "direction": -1|0|1}`：
-  经 `StateService.nudge_depths` 微调深度（单次约 ±0.02，接近 ±5
-  上限时衰减），不写演化表、不改坐标。
-
-每次执行（含失败）都向 `ChatState.applied_effects` 追加
-`{id, tool, args, applied_at, result}`，保留最近 50 条并随线程落盘；
-未知工具或非法参数只记日志，不重试、不回滚已经生成的回复。
-`move` / `casualty` 后置。
-
-一次交流的落地顺序固定为：ops（attitude / action_points / nick）→
-memory_note → effect → 话题状态机 → identity_update → 保存 chat（线程）
-与 character（行动点或世界效果有改动时）。坐标快照在 ops/effect 之前
-取得，所以效果从下一轮才影响话题选择；沉默轮同样应用 ops / memory /
-effect / 话题状态，只是不排队消息。
+AI 只输出 `effect: {tool, args}`，服务层按注册表校验、夹取、执行并记录，每轮
+最多一个；当前开放 `self_view` 与 `step_nudge` 两个工具，玩家可见效果与
+「为什么没有直接改紧张度的工具」见 `docs/designs/character/chat/README.md`
+§7。每次执行（含失败）都向 `ChatState.applied_effects` 追加
+`{id, tool, args, applied_at, result}`，保留最近 50 条并随线程落盘；未知工具或
+非法参数只记日志，不重试、不回滚已经生成的回复。`move` / `casualty` 后置。
 
 ### 服务层硬约束（粗糙实现，够用为先）
 

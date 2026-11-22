@@ -10,7 +10,7 @@
 >
 > 相关页面：某类话题下 AI 知道什么 [lens.md](lens.md) · 演化坐标与深度
 > [evolution.md](../evolution.md) · 消息协议与投递节奏
-> `docs/dev/chat_delivery.md`。
+> `docs/chat_delivery.md`。
 
 一句话：聊天按**玩家身份**拆成互不相通的线程；每条线程用**好感、紧张度、状态**三轴筛选
 **话题类型**；AI 在候选类型里决定聊什么，并在回复后最多执行**一个世界效果**。

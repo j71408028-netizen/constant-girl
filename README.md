@@ -175,17 +175,17 @@ data/
 | Linux · Wayland + XWayland | ⚠️ 可用 | 副本窗口经 XWayland 显示，窗口置顶依赖窗口管理器的 EWMH 支持 |
 | Linux · 纯 Wayland | ❌ 不支持 | 副本窗口（GLFW）无法创建 |
 
-平台细节与已知限制见 [Linux 支持说明](docs/users/platforms/linux.md)。
+平台细节与已知限制见 [平台支持（Linux / macOS）](docs/platforms.md)。
 
 ## 欢迎加入
 
 项目还在快速迭代阶段，欢迎任何形式的参与——写一套地标 / 描述风格、做一个副本方案、报一个 bug，都算。
 
-- 改代码前先读[架构说明](docs/dev/architecture.md)，分层与命名由离线守卫强制
+- 改代码前先读[架构说明](docs/architecture.md)，分层与命名由离线守卫强制
 - 提交前跑 `python tests/run_checks.py`（离线，不需要显示器）；改动涉及窗口的再追加 `--smoke`
 - 提交信息用约定式提交：`<type>(<scope>): <subject>`，正文用中文
 
-想读更多：[文档总入口](docs/README.md) 按读者分流；演化公式见[角色演化模型](docs/designs/character/evolution.md)；发版流程见[发布与打包](docs/ops/release.md)。
+想读更多：[文档总入口](docs/README.md) 按读者分流；演化公式见[角色演化模型](docs/designs/character/evolution.md)；发版流程见[发布与打包](docs/release.md)。
 
 ## 许可证与声明
 

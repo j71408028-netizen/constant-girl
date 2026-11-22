@@ -2,9 +2,9 @@
 
 > 这一目录收编副本侧的**设计机制**文档：方案怎么写、运行期怎么保证「谁是谁、谁在场、
 > 怎么不变」。读者是核心开发者 + 副本方案作者。
-> 副本子项目的**开发文档**（架构分层、窗口运行时、宿主边界、历史档案）在
-> `docs/Dungeon/`（入口 `README.md`）——按本组「不外指」的约定，那边只以
-> 纯文本路径出现，不放链接。
+> 副本子项目的**开发文档**（架构分层、术语、窗口运行时与宿主边界）在
+> `docs/dungeon_engine.md` 与 `docs/dungeon_window.md`——按本组「不外指」的约定，
+> 那边只以纯文本路径出现，不放链接。
 
 | 文档 | 回答什么问题 |
 |---|---|
@@ -16,6 +16,7 @@
 | [scene.md](scene.md) | 副本内地点与参照物：章节地址、地标候选池、尺寸换算与出口传送 |
 | [minigame.md](minigame.md) | 小游戏触发器：运行时、包格式与作者 API（小游戏作者） |
 | [components.md](components.md) | 显示组件：钩子契约、参数声明与夹取、注册与加载链、slot 代管区、窗口级浮层（组件作者） |
+| [scenario_graph.md](scenario_graph.md) | 编排图：章节与触发器之间的四类关系、图模型与两个可达性口径（校验规则的家在 script.md §9.1） |
 
 ## 玩法结构的一条主线
 
@@ -47,7 +48,8 @@
   [admission](admission.md)（进入准入）·
   [scene](scene.md)（地点与参照物）·
   [minigame](minigame.md)（小游戏）·
-  [components](components.md)（显示组件）
+  [components](components.md)（显示组件）·
+  [scenario_graph](scenario_graph.md)（编排图模型）
 - **character/**：[README](../character/README.md)（全景）·
   [evolution](../character/evolution.md)（介入度 / 深度 / 行动点）·
   [time](../character/time.md)（恢复结算 / 作息 / 导出）·

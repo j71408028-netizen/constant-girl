@@ -38,7 +38,7 @@
 | 配置或排查**副本对话语音**（音色 / 语速 / 端点与代理） | [dungeon/voice.md](dungeon/voice.md) |
 | 给**副本方案**声明进入条件（入口地址 / 距离 / 身高） | [dungeon/admission.md](dungeon/admission.md) |
 | 改**角色数值演化** | 先读 [character/evolution.md](character/evolution.md)（全景），再看可覆盖的代码入口 [behaviors/dev-guide.md](behaviors/dev-guide.md) |
-| 调整**角色聊天**的话题类型、好感/紧张度/状态的手感 | [character/chat/README.md](character/chat/README.md)（实现细节在 `docs/dev/chat_delivery.md`） |
+| 调整**角色聊天**的话题类型、好感/紧张度/状态的手感 | [character/chat/README.md](character/chat/README.md)（实现细节在 `docs/chat_delivery.md`） |
 | 调整**某类话题下 AI 知道什么 / 不知道什么** | [character/chat/lens.md](character/chat/lens.md)（改完用 `python developer_tools/lens_preview.py` 静态看账，或 `chat_session_preview.py` 边聊边看） |
 | **扩展程序行为**而不改主程序 | [behaviors/README.md](behaviors/README.md)（玩家向）→ [behaviors/dev-guide.md](behaviors/dev-guide.md) |
 | 理解**资源类型 / 信封 / 索引 / 同步**，或新增一类资源 | [resources.md](resources.md) |
@@ -111,8 +111,8 @@
 
 ## 相关组
 
-- 要在**副本里**用这些机制（章节 / 触发器 / 小游戏触发器）：副本子项目文档
-  入口在 `docs/Dungeon/README.md`；副本设计机制收在本组 [dungeon/](dungeon/README.md)。
-- 要改**程序本身**（分层、契约、提交规范）：程序开发文档入口在 `docs/dev/README.md`。
+- 要在**副本里**用这些机制（章节 / 触发器 / 小游戏触发器）：副本子项目的开发文档是
+  `docs/dungeon_engine.md`（引擎）与 `docs/dungeon_window.md`（窗口与自动化）；副本设计机制收在本组 [dungeon/](dungeon/README.md)。
+- 要改**程序本身**（分层、契约、提交规范）：程序开发文档入口在 `docs/architecture.md`。
 - 某个**特定风格**的创作工作流**不在本目录**（判据 4）——风格所需的补充步骤随风格
   自身的特质不同，写下来只对一种风格成立，因此该由风格自身的维护约定承担。

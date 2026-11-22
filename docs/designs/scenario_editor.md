@@ -67,7 +67,7 @@ schema 通用渲染——「编辑器表单按字段声明渲染」是声明里�
 **只读**：不编辑、不写盘、不承担校验展示。节点数据来自唯一建图入口
 `dungeon/scenario_graph.py::build_graph(config)`（宽容缺字段）；节点 / 边 / 泳道的
 数据模型与图分析算法（可达性、强连通分量、可触发判定）见
-`docs/Dungeon/scenario_graph.md` §2。
+`docs/designs/dungeon/scenario_graph.md` §2。
 
 **触发器依赖（泳道图）**：一条泳道一个章节（按配置顺序），悬空引用的章节有
 「（章节不存在）」占位泳道，末尾是「任意章节 / 无章节」汇流泳道。泳道内按依赖

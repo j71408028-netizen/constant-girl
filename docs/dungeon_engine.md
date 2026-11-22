@@ -1,8 +1,10 @@
-# 副本架构说明（`dungeon/`）
+# 副本引擎架构与术语（`dungeon/`）
 
-> **定位**：`dungeon/` 的分层、模块地图、一次步进的数据流、收尾与自检脚本的**总索引**。
-> 数据是配置结构看 [数据模型](../designs/dungeon/script.md)，窗口细节看 [窗口文档](window.md)，
-> 术语看 [术语表](domain_terms.md)。全系列入口见 [副本文档索引](README.md)。
+> **定位**：副本引擎核心 `dungeon/` 的**术语与命名规则、分层纪律、模块地图、
+> 一次步进的数据流、配置治理与自检索引**。
+> 方案字段与作者向玩法机制（wiki）在 `docs/designs/dungeon/`；窗口运行时、
+> 宿主边界与调试自动化见 [副本窗口运行时](dungeon_window.md)；主程序分层见
+> [架构与分层](architecture.md)。
 
 适用范围：当前 `dungeon/` 的实现现状。
 
@@ -11,16 +13,17 @@
 | 节 | 内容 |
 |---|---|
 | §1 | 一句话概览与分层 |
-| §2 | 术语速查 |
-| §3 | 分层与依赖规则 |
+| §2 | 术语：四个名字、命名规则与兼容 |
+| §3 | 分层与依赖规则（含进程隔离结论） |
 | §4 | 领域层模块地图 |
 | §5 | 一次步进的数据流 |
-| §6 | 生命周期与统一收尾 |
+| §6 | 收尾语义 |
 | §7 | 配置治理链路 |
 | §8 | 持久化布局与原子写 |
 | §9 | 自检与守卫脚本 |
 | §10 | 硬性约定 |
 | §11 | 显示组件包 |
+| §12 | 许可证红线（AGPL） |
 
 ---
 
@@ -40,18 +43,55 @@
 
 纪律：**领域层不认识 GUI、不认识服务层；UI 层负责接线与注入；外部行为一律注入，不反向 import。**
 
-## 2. 术语速查
+## 2. 术语：四个名字、命名规则与兼容
 
-| 概念 | 含义 | 持久化位置 | 命名 |
-|---|---|---|---|
-| **Dungeon / 副本** | 产品/功能名：入口、会话窗口、设置、方案编辑、小游戏 | — | `Dungeon*` / `dungeon_*`（产品 / 历史） |
-| **副本方案 Scenario** | 作者编写的**定义**：章节、触发器、提示词、演化属性、转移矩阵、显示组件、素材 | `data/packs/scenarios/<方案 id>/config.json`（+ `images/`、`components/`） | `scenario_*` |
-| **一局 Run** | 某角色用某方案**执行的一次游戏**：`DungeonState`、行动点消耗、结局达成、回放；回放模式只重放已有 Run | `data/archives/<角色>/回放\|报告`；挑战模式写 `data/user/replays\|reports` | 目标 `Run*` / `run_*`；现名 `DungeonState` / `dungeon_*` |
-| **会话 Session** | `DungeonSessionWindow` 从构造到 `run()` 返回的一次**窗口生命周期**：入口页、正式运行、关闭与收尾；产品路径一个子进程一个 Session | 不持久化；`SessionResult` 返回给调用方 | `session_*` / `SessionResult`（呈现层） |
+本仓库有四个容易混用的名字。它们不是同义词，也不是一条「Dungeon 包含 Scenario / Run」的层级链：
 
-编辑器（`ui/scenario/`）编辑的是**方案**；`DungeonSessionWindow` 运行的是**会话**，
-其中最多包含一局 Run（入口返回 / 启动失败时没有 Run；回放模式只重放已有 Run）。
-`DungeonState` 是一局的运行态，不是会话本身。完整规则与兼容读法见 [术语表](domain_terms.md)。
+| 名字 | 是什么 | 不是什么 | 代码现状 | 持久化 / 生命周期 |
+|---|---|---|---|---|
+| **Dungeon / 副本** | 产品与功能名：入口、会话窗口、设置、方案编辑、小游戏等玩家可见的「副本功能」 | 不是领域对象，也不是「一局」的精确名字 | `dungeon/` 包名、`Dungeon*` UI / 窗口类、`dungeon_settings`、`ui/hosting/dungeon_*` | 功能本身不落盘 |
+| **副本方案 Scenario** | 作者编写的**定义**：章节、触发器、提示词、演化属性、转移矩阵、显示组件与素材 | 不是一次执行，也不是窗口 | `scenario_id` / `scenario_config` / `scenario_repo` / `ScenarioRepo` | `data/packs/scenarios/<方案 id>/config.json`（+ `images/`、`components/`） |
+| **一局 Run** | 某角色用某方案**执行的一次游戏**：`DungeonState`、行动点消耗、结局达成、回放 | 不是窗口，也不是入口页；`Session` 也不是它的同义词 | 现名 `DungeonState` / `dungeon_state` / `dungeon_ended` / `dungeon_logic`；目标领域名为 `Run*` / `run_*` | `data/archives/<角色>/回放\|报告`；挑战/无角色写 `data/user/replays\|reports` |
+| **会话 Session** | `DungeonSessionWindow` 从构造到 `run()` 返回的一次**窗口生命周期**：入口页、正式运行、关闭与收尾 | 不是「一局」本身；入口返回/启动失败时没有 Run | `DungeonSessionWindow` / `SessionResult` / `_session_running` / `_session_initialized` / `session_waiting_for_input` | 不持久化；`SessionResult` 只跨进程/调用方返回 |
+
+**关系**：
+
+- `Scenario` 与 `Run` 平级：前者是定义，后者是执行；一个方案可以被执行多次，每次是一局。
+- `Session` 是呈现层的一次窗口生命周期，**承载 0 或 1 个新执行的 Run**：
+  - 入口页点「返回」、配置校验失败 / 行动点不足 → Session 结束，没有 Run；
+  - 加载回放对话框取消 → 仍留在入口页，Session 继续；
+  - 正常开始副本 → Session 内进入正式运行阶段，产生一局新 Run；
+  - 回放模式 → Session 重放已有 Run，不新增 Run、不做结局结算（窗口内会重建只读状态快照用于绘制）。
+- `Dungeon` 是产品/功能名，不是上述概念的父类；`dungeon/` 目录同时放 Scenario 与 Run 的领域模块，是当前包结构，不代表包含关系。
+- 编辑器（`ui/scenario/`）编辑的是**方案**；`DungeonSessionWindow` 运行的是**会话**；
+  `DungeonState` 是一局的运行态，不是会话本身。
+
+> **为什么暂时不改包名**：`dungeon.window.minigame` 是小游戏作者的公开导入路径
+> （`data/packs/minigames/*/game.py`、[小游戏框架](designs/dungeon/minigame.md)），且
+> `dungeon_*` 已散布在 UI / 设置 / 脚本里。术语澄清不需要包改名；将来若按引擎拆分，
+> 必须保留旧路径的兼容 shim。
+
+### 2.1 命名规则
+
+1. 新代码里引用方案 id 的变量 / 参数 / 字段一律叫 `scenario_id`；引用方案配置字典叫 `scenario_config`；方案仓库叫 `ScenarioRepo`。
+2. 方案 id 的持久化字段（世界包清单、`data/user/endings.json`、角色 `achieved_endings[]`、`.chal` 挑战包 payload）一律写 `scenario_id`；读取时用 `dungeon.terms.scenario_id_of()` / `scenario_config_of()` 兼容改名前的 `dungeon_id` / `dungeon_config`。
+3. 目录与资源键：`data/packs/scenarios/`、世界包 `resources["scenarios"]`（旧包内的 `dungeons/` 目录与旧 manifest 键由 `ScenarioRepo` / `WorldPackManifest.from_dict` 自动兼容）。
+4. 内置方案 id 用常量 `dungeon.terms.DEFAULT_SCENARIO_ID`（`_default`），不要再写字面量。
+5. **Run 领域**：新代码中表示一局状态/生命周期的类型与字段用 `Run*` / `run_*`；现有 `DungeonState` / `dungeon_state` / `dungeon_ended` / `dungeon_logic` 是历史实现名，保留但不要扩散。
+6. **Session 领域**：`session_*` 只用于窗口呈现/生命周期（`SessionResult`、`_session_running`、`_session_initialized`、`session_waiting_for_input` 等），不要拿它当 Run 的同义词。`DungeonSessionWindow` 是承载 Run 的窗口类，不是 Run 本身。
+7. **`dungeon_*` 不是精确的领域后缀**：它同时覆盖产品/功能（`DungeonSessionWindow`、`DungeonWindowUI`、`dungeon_settings`、`ui/hosting/dungeon_*`）与历史 Run 名（`DungeonState` 等）。看到前缀不要反推「它一定是 Run」，也不要据此认为 Scenario 被 Run 包含。
+8. `dungeon_font`（副本窗口字体）与 `dungeon_settings` 属于副本界面/功能设置，保持原名。
+9. 用户可见文案继续用「副本 / 副本方案 / 进入副本 / 开始副本」；不要把「Session」当玩家术语展示。界面文案用词另见 `docs/terminology.md`。
+10. 新增/改名后跑 `tests/check_scenario_naming.py`；包路径/导入关系变动还要跑 `tests/check_import_graph.py` 与 `tests/check_dungeon_layering.py`。
+
+### 2.2 兼容与迁移
+
+| 场景 | 行为 |
+|---|---|
+| 方案目录 | `ScenarioRepo.__init__` 把改名前的 `packs/dungeons/` 就地并入 `packs/scenarios/`（幂等；同名时保留 `config.json` 较新的一份，旧的留 `.bak`） |
+| 世界包 | `WorldPackManifest.from_dict` 把旧 `resources["dungeons"]` 归一化为 `resources["scenarios"]`；成员核对同时接受包内 `dungeons/<id>/` 与 `scenarios/<id>/` 两种路径 |
+| 存档字段 | 读取走 `scenario_id_of()`；`python scripts/migrate_v1_to_v2.py --apply` 可把 `endings.json` / 角色档案 / 世界包里的旧字段一次性改写为 `scenario_id`（幂等、原子写 + `.bak`，不带 `--apply` 只出清单） |
+| `.chal` 挑战包 | 加密格式，不做改写，读取侧兼容 |
 
 ## 3. 分层与依赖规则
 
@@ -68,7 +108,7 @@
 
 - 所有需要 imgui_bundle / 服务层的代码在此；`background` `dispatcher` `launcher` `component_registry` `components` 均已从包根迁回 `window/`
 - 宿主能力（尺寸/DPI、显隐、事件泵、收尾弹框、活动窗口登记、字体）一律经 `dungeon/window/host.py::HostPort` 取得，Tk 实现是 `ui/hosting/tk_host.py::TkHost`，构造时注入（`DungeonSessionWindow(..., host=TkHost(self))`）
-- 端口方法表见 [窗口文档](window.md) §5-C8
+- 端口方法表见 [副本窗口运行时](dungeon_window.md) §5.2
 
 ### 3.3 依赖倒置清单
 
@@ -81,13 +121,26 @@
 | 剧情压缩用 AI | `StorySummarizer.maybe_compress(ai_client=...)`，失败回退内部算法 | `window/engine.py` |
 | 副本独占设置（音量 / 字体 / 记忆窗口 / 自动回放 / 帧率 / 代管区停靠侧） | `dungeon_settings` 字典 + `dungeon_settings_repo`（读 / 写）；缺省空表退回 `dungeon/settings.py` 常量 | `ChildHost` 子进程按数据目录自建（见 §8）；窗口内改走 `base.set_dungeon_settings`，入口是覆盖层设置面板（`window/overlay.py`，O / 工具条齿轮） |
 
+### 3.4 进程隔离（结论）
+
+副本会话（`DungeonSessionWindow.run()` 的整个生命周期）运行在**独立子进程**里：Tk 主程序
+经 `ui/hosting/dungeon_spawner.py` 拉起子进程（`ui/hosting/dungeon_child_host.py` 是子进程
+内的宿主端口实现），渲染后端（imgui-bundle / GLFW / OpenGL）从此独占子进程，与 Tk 不再
+共享线程消息队列、GLFW 单例与 X11 连接。**父进程从不加载副本窗口栈。**
+
+由此，本文件 §3 与窗口文档 §5 里约束「进程内共存」的那几条只约束**子进程内部**。
+代价（已接受）：构造参数必须跨进程序列化（线格式见 `dungeon/window/launch_payload.py`）；
+角色在子进程里的改动（扣 AP、结局索引）由子进程直接写盘、父进程在会话结束后重载；
+每次开局有一次子进程解释器/导入的启动延迟。协议、DPI 感知与父进程侧的分工见
+[副本窗口运行时](dungeon_window.md) §6。
+
 ## 4. 领域层模块地图
 
 | 模块 | 职责 | 关键出口 |
 |---|---|---|
 | `models.py` | 运行态数据与枚举 | `DungeonTextType`（5 种段落类型 + 默认步进值 + `display_prefix`，实时与回放共用同一份前缀）、`DungeonState`（坐标 / 自定义属性 / 计数 / 二阶步长）、`PREFIX_ENDING` / `PREFIX_UNKNOWN` |
 | `rules.py` | 演化与条件求值 | `EvolutionRules`（转移矩阵、分节步长、属性演化）、`TriggerRules.evaluate` |
-| `chapters.py` | 章节模型与归一化 | `normalize_chapter(s)`、`normalize_chapters`、`normalize_background`、`normalize_bgm`、`find_chapter`、`is_terminating_chapter`、`overflow_jump_target`、`chapter_step_override`、`sensitivity_amount`、`matches_scope` |
+| `chapters.py` | 章节模型与归一化 | `normalize_chapter(s)`、`normalize_background`、`normalize_bgm`、`find_chapter`、`is_terminating_chapter`、`overflow_jump_target`、`chapter_step_override`、`sensitivity_amount`、`matches_scope` |
 | `audio/buses.py` | 音频音量**总线单一真相源**（总控 → 音乐 / 语音 / 音效） | `BUSES` / `BUS_LABELS`、`STEPS` / `STEP_LABELS` / `STEP_DB` / `BUS_ANCHOR_DB`（档位与分层的 dB 单一真相源）、`step_options` / `step_choices`（编辑器档位候选）、`clamp_step` / `step_from_level`（0-4 档位与旧 0-100 迁移）、`levels_from_settings` / `set_bus_levels` / `effective_bus_level`（玩家侧实时电平，缺省 `DEFAULT_BUS_LEVELS`）、`bus_default` / `clamp_level` / `resolve_gain`（档位×总线×总控）、`to_ratio` / `to_db` / `db_gain` |
 | `audio.py` | 音频播放底座（纯领域，不碰 UI 框架） | `BgmPlayer.play/stop/shutdown/wait_idle`、`open_track`、`backend_name`、`set_backends`（MCI → pygame → 静音降级） |
 | `speech.py` | 带结构化说话人的台词合成语音（纯领域） | `VoiceCaster.voice_for`（她 / 主角 / 配角按名字稳定映射；配角可经 `resolve_character` 回调走角色账本：显式音色 → 代词分池 → 稳定哈希键 `crc32`）、`SpeechDirector.speak/stop/set_effect/shutdown`、`synthesize`（合成**一句就返回路径**的入口，供编辑器预听）、`set_proxy` / `resolve_proxy` / `normalize_proxy`（**委托** `core/netproxy`：语音与 AI 共用一份代理）、`_endpoint_candidates` / `synthesis_endpoints`（合成端点：新主机 `api.msedgeservices.com` 优先、旧主机回退，edge-tts PR #491 未并入时本地补齐）、`last_synth_error`（失败原因，日志与预听复用）、`normalize_voice`、`normalize_rate`、`RECOMMENDED_VOICES`、`edge_tts_available` |
@@ -96,40 +149,24 @@
 | `actions.py` | 动作类型单一注册表 | `NEW_ACTIONS`（insert/option/effect/goto/none）、`ENDING_ACTION`（只读兼容）、`ACTION_LABELS`、`VISUAL_FILTERS`、`trigger_action_type`（动作类型的唯一读法：action_type → action → action_data["type"]） |
 | `coupling.py` | 耦合等级与对应提示词（玩家身份 / 视角，不决定文体） | `coupling_prompts`、`section_instruction`、`normalize_coupling_level`、`HIGHLIGHT_MARKER_RULE`；说话人规则已搬到 `speaker_notation.py`，这里只保留兼容 re-export |
 | `speaker_notation.py` | 方案级说话人写法（`speaker_notation`）二选一契约 | `LITERARY` / `TAGGED`、`SPEAKER_NOTATIONS`、`SPEAKER_NOTATION_LABELS`、`normalize_speaker_notation`、`has_speaker_markers`、`notation_declaration`、`TAGGED_SPEAKER_RULE`、`SPEAKER_STABILITY_RULE` |
-| `cast.py` | 人物表归一化与字段归属 | `normalize_cast` / `normalize_member`、`role_supports`（字段按 `key`/`extra` 分家的单一落点）、`render_first_seen`，见 [角色系统](../designs/dungeon/characters.md) §3 |
-| `characters.py` | 运行期角色账本 `CharacterLedger`：设定与状态分层，本局可写、不回写配置 | `RunCharacter`（initial / mutable / observed 三层）、`apply_updates`（吸收 AI 搭车抽取，揭示需正文锚点）、`mark_declared` / `observe_speaker` / `note_mentions` / `decay`（在场观测）、`render_brief` / `observed_brief`（只读投影）、`snapshot` / `restore`（回放）、`revealed_snapshot`（结局回顾），见 [角色系统](../designs/dungeon/characters.md) |
+| `cast.py` | 人物表归一化与字段归属 | `normalize_cast` / `normalize_member`、`role_supports`（字段按 `key`/`extra` 分家的单一落点）、`render_first_seen`，见 [角色系统](designs/dungeon/characters.md) §3 |
+| `characters.py` | 运行期角色账本 `CharacterLedger`：设定与状态分层，本局可写、不回写配置 | `RunCharacter`（initial / mutable / observed 三层）、`apply_updates`（吸收 AI 搭车抽取，揭示需正文锚点）、`mark_declared` / `observe_speaker` / `note_mentions` / `decay`（在场观测）、`render_brief` / `observed_brief`（只读投影）、`snapshot` / `restore`（回放）、`revealed_snapshot`（结局回顾），见 [角色系统](designs/dungeon/characters.md) |
 | `prompts.py` | 系统与玩家提示词构建 | `DungeonPromptBuilder.build_system_prompt`、`build_turn`（纯构建）/ `commit_turn`（成功提交）、`build_user_prompt`（兼容旧调用方，构建后立即提交） |
 | `response.py` | AI 响应解析容错 | `extract_stream_text`、`parse_final_json` |
 | `splitter.py` | 内置确定性分句 | `split_stream_units`（流式：首句上屏，余句排队）、`split_full_text`（终局定格） |
 | `summary.py` | 剧情压缩与常驻记忆 | `StorySummarizer`（按块 / 按章节压缩 + 最近 N 段原文 + 关键事件 + 事实卡；响应可搭车 `character_updates`，`drain_character_updates` 交给账本） |
-| `details.py` | 细节探究：每章一次的对象 + 方面提问，关键词触发后检索并注入 | `ASPECTS`（共用方面白名单，提示词 / 解析 / 检索同源）、`MAX_INJECT_PER_CHAPTER`、`DetailQuery` / `DetailMatch`、`build_detail_query_prompt`、`parse_detail_queries`、`parse_character_updates`（细节响应搭车抽取角色状态，见 [角色系统](../designs/dungeon/characters.md) §6）、`resolve_detail_queries`、`detail_trigger_score` / `pick_triggered` / `detail_key`（正文提到对象才注入的闸门）、`detail_injection_line`、`format_detail_label`、`search_replay_details` |
-| `replay.py` | 回放记录的**语法与解析层**（纯领域） | `KIND_STEP/CHAPTER/TRIGGER/CHARACTERS/ENDING/META`、`classify` / `parse` / `parse_all`（坏记录返回 `None` 由调用方跳过；旧格式的 `goto` 平级环境键在此展开成章节记录）、`to_config_fragment`（反向往配置片段，回溯改写的出口）、`StepRecord` / `ChapterRecord` / `TriggerRecord` / `CharactersRecord` / `EndingRecord` / `ScenarioRecord`；写侧 `meta_record` / `material_paths`（`meta.assets` 与读侧反查同源）/ `display_text_field`（决定步进记录要不要写 `display_text`）；内嵌配置复用 `normalize_background` / `normalize_bgm` / `normalize_voice_fx` / `trigger_action_type`，见 [副本剧本](../designs/dungeon/script.md) §9.3 |
+| `details.py` | 细节探究：每章一次的对象 + 方面提问，关键词触发后检索并注入 | `ASPECTS`（共用方面白名单，提示词 / 解析 / 检索同源）、`MAX_INJECT_PER_CHAPTER`、`DetailQuery` / `DetailMatch`、`build_detail_query_prompt`、`parse_detail_queries`、`parse_character_updates`（细节响应搭车抽取角色状态，见 [角色系统](designs/dungeon/characters.md) §6）、`resolve_detail_queries`、`detail_trigger_score` / `pick_triggered` / `detail_key`（正文提到对象才注入的闸门）、`detail_injection_line`、`format_detail_label`、`search_replay_details` |
+| `replay.py` | 回放记录的**语法与解析层**（纯领域） | `KIND_STEP/CHAPTER/TRIGGER/CHARACTERS/ENDING/META`、`classify` / `parse` / `parse_all`（坏记录返回 `None` 由调用方跳过；旧格式的 `goto` 平级环境键在此展开成章节记录）、`to_config_fragment`（反向往配置片段，回溯改写的出口）、`StepRecord` / `ChapterRecord` / `TriggerRecord` / `CharactersRecord` / `EndingRecord` / `ScenarioRecord`；写侧 `meta_record` / `material_paths`（`meta.assets` 与读侧反查同源）/ `display_text_field`（决定步进记录要不要写 `display_text`）；内嵌配置复用 `normalize_background` / `normalize_bgm` / `normalize_voice_fx` / `trigger_action_type`，见 [副本剧本](designs/dungeon/script.md) §9.3 |
+| `scenario_graph.py` / `graph_lint.py` | 编排图模型与图校验（零外部依赖） | `build_graph(config)` 唯一入口、两个可达性口径、五条图校验规则，见 [编排图与图校验](designs/dungeon/scenario_graph.md) |
 | `schema.py` | 方案配置字段**单一真相源** | `SCENARIO_FIELDS` / `CHAPTER_FIELDS` / `TRIGGER_FIELDS` / `FieldSpec` / `empty_scenario_config()` |
 | `validate.py` | 结构化诊断（error / warning / info） | `validate_scenario_config(config, scenario_dir=...)`、`has_errors`、`format_diagnostics` |
 | `terms.py` | 术语与持久化契约常量 | `SCENARIO_ID_KEY`、`DEFAULT_SCENARIO_ID`、旧键迁移与兼容读取 |
 | `settings.py` | 副本独占设置的键名与缺省（单一真相源，见 §8） | `defaults()`、`LEGACY_KEYS`、`DEFAULT_FPS_MAX`、`DEFAULT_STORY_RECENT_COUNT` |
 
-### 4.1 窗口层 mixin 组装顺序
+窗口层 mixin 的组装顺序（`DungeonSessionWindow` 由哪些 mixin 拼成）见
+[副本窗口运行时](dungeon_window.md) §1。
 
-`dungeon/window/__init__.py`：
-`DungeonWindowBase, DungeonLaunchStages, DungeonWindowUI, DungeonStoryEngine,
-TriggerHandler, OptionHandler, EndingHandler, DungeonPersistence, ComponentHandler`
-
-| Mixin | 文件 | 职责 |
-|---|---|---|
-| `DungeonWindowBase` | `base.py` | 窗口生命周期、方案配置加载与启动前校验、会话初始化、关闭请求 |
-| `DungeonLaunchStages` | `launcher.py` | 入口阶段：动态背景轮播、方案选择、已达成结局图标循环、开始 / 回放 / 返回 |
-| `DungeonWindowUI` | `ui.py` | UI 构建、逐帧自绘、流式文本揭示动画、布局自适应、鼠标 / 键盘输入接线 |
-| `DungeonStoryEngine` | `engine.py` | 步进核心：AI 生成、流式分句、属性演化、伤亡结算、收尾回调 |
-| `TriggerHandler` | `triggers.py` | 触发器判定、章节进出、章节效果短暂覆盖、窗口视效、插入段落 |
-| `OptionHandler` | `options.py` | 选项触发器：后台生成选项文字 → 弹窗 → 记录选择 |
-| `EndingHandler` | `ending.py` | 章节敏感效果汇总、结局生成、结局写进回放（`_record_ending`）与回放复现（`_replay_ending`） |
-| `DungeonPersistence` | `persistence.py` | 结局结算、回放 / 报告落盘、统一收尾 `_finalize(completed)` |
-| `ComponentHandler` | `components.py` | 显示组件实例的构建 / 布局 / 每帧绘制 / 销毁接入 |
-
-mixin 之间只通过 `self` 上的约定属性通信；新增方法时注意排在前面的 mixin 会覆盖同名方法。
-
-### 4.2 段落步进与转移矩阵
+### 4.1 段落步进与转移矩阵
 
 - 默认步进值由 `models.DungeonTextType.step_value` 给出（background 0.02 → action 0.3）
 - `section_steps` 可逐项覆盖；`transition_matrix` 按**行覆盖**：
@@ -141,7 +178,7 @@ mixin 之间只通过 `self` 上的约定属性通信；新增方法时注意排
 | 脏权重 | 统一转 float、负值按 0、未知行列键跳过（已在校验阶段报 warning） |
 | 整行无效 | 全 0 或解析不出有效权重时回退默认行 |
 
-### 4.3 语音效果：两级引擎与实测（2026-09-29 本机实测）
+### 4.2 语音效果：两级引擎与实测（2026-09-29 本机实测）
 
 `voice_fx.py` 的「物理效果」建立在下面这组实测结论上（Windows / Python 3.13.7 /
 edge-tts 7.2.8 / winmm MCI，探针脚本在临时目录跑，未入库）：
@@ -149,8 +186,8 @@ edge-tts 7.2.8 / winmm MCI，探针脚本在临时目录跑，未入库）：
 | 实测项 | 结论 | 对实现的约束 |
 |---|---|---|
 | 合成服务只给 MP3 | `__stream` 里 `outputFormat` 是硬编码字面量；换成 `raw-24khz-16bit-mono-pcm` / `riff-…` / `ogg-…-opus` 一律 `NoAudioReceived` | **不能**指望服务端给 PCM → 效果必须自己算 |
-| `mstts:express-as` 风格 | `whispering` / `terrified` / `angry` / `sad` 全部 `NoAudioReceived` | 语气类预设做不了（也**不该**做，见 §2.4 定位） |
-| prosody `rate` / `pitch` / `volume` | 生效（`+40%` 语速 2.95s→2.11s；`pitch=-100Hz` 谱重心 3448→1664 Hz；`volume=-40%` RMS 0.089→0.053） | 语速/音量/变调是**合成侧**免费参数（本轮按用户要求不纳入效果，见 `voice.level` 的音量档位仍走原字段） |
+| `mstts:express-as` 风格 | `whispering` / `terrified` / `angry` / `sad` 全部 `NoAudioReceived` | 语气类预设做不了，也**不该**做——`voice_fx` 的定位是物理声学效果，见 [对话语音](designs/dungeon/voice.md) |
+| prosody `rate` / `pitch` / `volume` | 生效（`+40%` 语速 2.95s→2.11s；`pitch=-100Hz` 谱重心 3448→1664 Hz；`volume=-40%` RMS 0.089→0.053） | 语速/音量/变调是**合成侧**免费参数（不纳入效果，`voice.level` 的音量档位仍走原字段） |
 | MP3 解码 | `miniaudio` 1.6 ms、`soundfile`（libsndfile 1.2.2）2.4 ms（2.95s 音频） | 离线渲染的代价可忽略（网络合成 ~1 s 才是瓶颈） |
 | numpy 效果链 | 缓抖 1.2 ms、三拍回声 0.7 ms、FFT 混响 47 ms（首帧），三者串联 7.3 ms | 全部在语音工作线程里做，不占帧循环 |
 | MCI 同一文件多路 | 同一文件开 8 个 alias 全部 `playing`；命令到 `playing` 0.3~1.0 ms | 播放侧「延迟分拍 = 回声」可行（零依赖） |
@@ -161,7 +198,7 @@ edge-tts 7.2.8 / winmm MCI，探针脚本在临时目录跑，未入库）：
 因此的降级阶梯（`speech.SpeechDirector._play`）：**离线渲染 → 播放侧近似 → 原声**，
 三者互不叠加；任何一步失败只影响「听感」，不影响「出声」。
 
-### 4.4 效果响度：声明式设计量（非归一）
+### 4.3 效果响度：声明式设计量（非归一）
 
 上表的物理效果会在**峰值几乎不动（≤ +0.3 dB）**的前提下大幅改变 RMS：实测渲染链
 的 RMS 变化可跨 **−1.6…+11.5 dB**——同一个音量档位换个效果，响度差十几个 dB，
@@ -175,7 +212,7 @@ edge-tts 7.2.8 / winmm MCI，探针脚本在临时目录跑，未入库）：
 | 摆幅 | 全部预设必须落在 `LOUDNESS_SPREAD_DB = 9 dB`（＝1.5 档）窗口内 | 自检 `check_voice_fx_loudness.py` |
 | 覆盖 | 单档可写 `loudness_db` 显式覆盖（夹取到 `LOUDNESS_RANGE` ±12 dB） | `loudness_target` |
 
-**实测（`本机`，语音谱型代理信号，强度 100，`.temp/voice_fx_loudness.py`）**：
+**实测（本机，语音谱型代理信号，强度 100）**：
 9 个预设在渲染链里的**自然**响度跨度 **16.9 dB**，对齐后收窄到 **9.0 dB**（恰好
 1.5 档），逐预设落点偏差 **0.00 dB**，全程无削波（峰值 ≤ 0.98）。之所以是「收窄」
 而非「拉平」：声明值一律**不高于**该预设的自然响度，于是对齐永远是「降」——降幅
@@ -186,7 +223,7 @@ edge-tts 7.2.8 / winmm MCI，探针脚本在临时目录跑，未入库）：
 于是两条例子的**相对摆幅一致**（都按同一声明值走），**绝对锚点差一个常数**——
 装了 vs 没装解码器的机器听感仍有系统性偏移，这是零依赖近似的固有代价。
 
-### 4.5 联网功能：共用代理与统一的失败口径
+### 4.4 联网功能：共用代理与统一的失败口径
 
 两处**需要联网**——语音合成（`audio/speech.py`，edge-tts）与 AI 文本生成
 （`core/ai.py`，OpenAI 兼容）——共用同一份设置与同一套「说清原因」的口径。
@@ -209,22 +246,22 @@ WebSocket 不生效、VPN「系统代理」WinINET 对 Python 不可见）在两
 **装配点**（`net_proxy` 在**创建 AI 客户端之前**生效，代理在客户端构造时定格）：
 `app/shell.py`（启动 / 每次切界面）、`dungeon/window/base.py::_init_session`（在建
 `ai_client` 前）与 `::_configure_voice`、设置页保存后立即生效。副本跑在**独立子进程**
-里，主进程设的代理带不过来，必须在子进程再设一次。
+里（§3.4），主进程设的代理带不过来，必须在子进程再设一次。
 
 守卫：`tests/check_ai_network.py`（AI 侧）、`tests/check_voice_tts.py`（语音侧）。
 
-> **行为变化（2026-10）**：对齐前 AI 文本生成**不读**这个代理设置，只走 SDK 默认
-> （环境变量）。对齐后它也读——好处是「一个代理管所有联网功能」，代价是**一个已经
-> 关掉的代理从此也会让 AI 连不上**（此前只是语音受影响）。所以连接类失败会**点名
-> 当前代理**并给出「清空或改用直连」的出路，而不是笼统说「连不上服务器」。
+**行为变化**：对齐前 AI 文本生成**不读**这个代理设置，只走 SDK 默认（环境变量）。
+对齐后它也读——好处是「一个代理管所有联网功能」，代价是**一个已经关掉的代理从此也会
+让 AI 连不上**（此前只是语音受影响）。所以连接类失败会**点名当前代理**并给出「清空或
+改用直连」的出路，而不是笼统说「连不上服务器」。
 
-### 4.6 副本内地点：声明职责
+### 4.5 副本内地点：声明职责
 
 副本地址只承担**声明**职责，不做任何自动匹配。曾有两版方案把主世界的地标选取
 搬进副本（整套坐标匹配、按章节地址空间相配），都被否掉：它们解决的「她此刻在哪、
 哪些地标够得着」在副本里已由作者回答，再算一遍只会引入新的失败模式——巨型尺度下
 「10 倍身高」恒真、章节是图而配置是列表、外部地标把场景带偏。机制现状见
-[副本内地点](../designs/dungeon/scene.md)。
+[副本内地点](designs/dungeon/scene.md)。
 
 把地址写进提示词是有意的：写实副本要的就是「她在一座真城市里」，模型知道地名
 才会写出相称的街景；虚构副本根本不写地址，也就没有东西可漏。
@@ -261,6 +298,9 @@ _finish_step()
   h. _check_chapter_overflow()      触发器之后再判超限，避免同一步二次跳转
 ```
 
+点击 → 游标 → 上屏这条**窗口侧**的消费管线（点击三态机、上屏游标、预生成、回放
+播放节奏）见 [副本窗口运行时](dungeon_window.md) §3。
+
 ### 5.1 触发器判定（`triggers.py::check_triggers`）
 
 条件 = 三者同时成立：
@@ -279,7 +319,7 @@ _finish_step()
 至多生效一次；被接纳即清空 `间隔计数`。`effect`（章节效果短暂覆盖）排在 goto 之后，
 覆盖才落在新章节里（先于 goto 会被换章清除）。未知动作与旧版动作（`background` /
 `sensitivity` / `ending`）走通用跳过路径，`ending` 仅回放兼容。字段与参数详见
-[数据模型](../designs/dungeon/script.md) §4–§6.1。
+[副本剧本](designs/dungeon/script.md) §4–§6.1。
 
 ### 5.2 结束路径
 
@@ -287,27 +327,16 @@ _finish_step()
 达到 `max_paragraphs` 时由 `_terminate_from_ending_chapter()` 用章节自身的结算字段
 （增量 / 伤亡步进 / 行动点返还 / 图标）生成结局。
 
-## 6. 生命周期与统一收尾
+## 6. 收尾语义
 
-本节的生命周期是 **Session**（窗口会话），不是 **Run**：入口页返回 / 启动失败会结束
-Session 但没有 Run；回放 Session 只重放已有 Run。入口阶段与运行阶段共享同一次 Session
-生命周期（同一个 ImGui 上下文 / 视口 / 根窗口，`base.py` + `launcher.py`），详见
-[窗口文档](window.md) §2。收尾只走一个入口：
+统一收尾入口是 `DungeonPersistence._finalize(completed: bool, reason: str = "")`，
+`_finalized` 标志保证幂等（多条路径抢跑时只有第一次生效）。各触发路径与落盘行为的
+完整表见 [副本窗口运行时](dungeon_window.md) §2.5。
 
-```python
-DungeonPersistence._finalize(completed: bool, reason: str = "")
-```
-
-| 路径 | 触发方 | `completed` | 行为 |
-|---|---|---|---|
-| 正常结局 | `EndingHandler._generate_ending` | `True` | 结算结局增量 → 落角色 → 写结局索引 → 自动保存开关打开时保存回放与报告（无角色先询问，拒绝则不建角色、不保存） |
-| 结局已触发但生成线程未收尾 | `_handle_exit`（reason「结局已触发，生成未结束」） | `True` | 同上，避免「生成到一半退出」被误判为未完成 |
-| 用户中断、未触发结局 | `_handle_exit`（窗口关闭统一走这里） | `False` | 先 `_confirm_abandon()` 确认；**不**结算、**不**写 `endings.json`、**不**记挑战达成、**不**落盘任何回放或报告、不创建角色 |
-| 生成异常 | `_note_session_error`（不结束会话，可重试） | 视退出时是否已触发结局而定 | 异常计入 `_session_errors`，退出确认里提示次数；异常本身不改变收尾语义 |
-
-`_finalized` 标志保证幂等（多条路径抢跑时只有第一次生效）。
 收尾语义与「能不能接续」对齐：**走到结局的一局才算数**——它结算、记索引、按需存回放；
 没走到结局的一局既不结算也不留半成品，因为本版没有中途存档，留下也接不上。
+生成异常不结束会话：异常计入 `_session_errors`，退出确认里提示次数，异常本身不改变
+收尾语义（退出时若结局已触发仍按完成收尾）。
 
 ## 7. 配置治理链路（schema → validate → 运行时）
 
@@ -326,6 +355,7 @@ normalize_chapter / ScenarioRepo._migrate（手写，行为经过实战）
 | 离线批量 / CI | `scripts/scenario_validate.py` | 有 error 时退出码 1 |
 
 诊断分三级：`error`（悬空跳转目标、无起始章节、空选项列表…）/ `warning`（未知条件键、废弃动作、失效前置引用、资产缺失…）/ `info`（无结局路径、旧版字段、未知顶层键…）。
+图校验五条规则（R1–R5）与两个可达性口径见 [编排图与图校验](designs/dungeon/scenario_graph.md)。
 
 ## 8. 持久化布局与原子写
 
@@ -362,11 +392,11 @@ Windows 保存失败。旧档的目录名不受影响，id 一经生成即固定
 整份 dict + 世界包锁键」的语义，子进程直写会竞态。旧键由 `SettingsRepo.load` 一次性
 搬进新文件，旧用户无感。
 
-窗口内的入口是**副本设置面板**（`dungeon/window/overlay.py`，`O` / 工具条齿轮图标）：
-半透明全屏遮罩 + 居中卡片，列出这几项独占设置，直接调 `base.set_dungeon_settings`
-就地生效并落盘（音量 / 帧率 / 代管区停靠侧立即生效——后者由 `set_dungeon_settings`
-就地重排组件；段落字体需重建字体图集，故写盘后**下次进入副本**生效）。拖动滑条只改内存、
-松手或关面板时落一次盘，避免逐帧写文件。
+窗口内的入口是**副本设置面板**（`dungeon/window/overlay.py`，O / 工具条齿轮）：
+列出这几项独占设置，直接调 `base.set_dungeon_settings` 就地生效并落盘（音量 / 帧率 /
+代管区停靠侧立即生效——后者由 `set_dungeon_settings` 就地重排组件；段落字体需重建
+字体图集，故写盘后**下次进入副本**生效）。拖动滑条只改内存、松手或关面板时落一次盘，
+避免逐帧写文件。面板形态见 [副本窗口运行时](dungeon_window.md) §1 的 `overlay.py` 行。
 
 **窗口视觉设置**（目前是 `dock_side`：文本组件侧边代管区贴左还是贴右）也住这份文件：
 它是玩家的实时偏好，与方案配置无关，换副本 / 换文本组件都沿用；组件经服务面
@@ -377,53 +407,70 @@ Windows 保存失败。旧档的目录名不受影响，id 一经生成即固定
 
 ## 9. 自检与守卫脚本
 
-见 [副本文档索引](README.md) §4（无 GUI 九个 + GUI 冒烟一个）。
 改动领域层 import、演化链路、收尾路径或配置结构后跑对应脚本；以上全部通过才算绿。
+
+无 GUI（可进 CI 门禁）：
+
+| 脚本 | 覆盖 | 命令 |
+|---|---|---|
+| `check_dungeon_layering.py` | 分层守卫：领域层禁 import GUI/服务层/反向依赖 window；`window/` 禁 import `tkinter`/`customtkinter`/`ui` | `python tests/check_dungeon_layering.py` |
+| `check_dungeon_window_contract.py` | 窗口契约守卫：`window/` 内禁 `threading.Timer`、禁无超时 `join`；禁 `dearpygui` 回归（import / `dpg.*`）；`hello_imgui.run` 与给 `app_shall_exit` 赋值只允许出现在 `runner.py`；禁 `sys.exit` / `os._exit` | `python tests/check_dungeon_window_contract.py` |
+| `check_gpu_texture_lifetime.py` | GPU 纹理句柄生命周期（C15）：`hello_imgui.TextureGpu` 是 RAII 句柄，六处容器（背景 / 窗口工具条 / 结局图标 / 视效覆盖层 / 组件工具条 / 小游戏贴图）经 `_drain_gpu_textures()` 一次收干净；`release`（GL 存活时释放）/ `retire`（GL 已失效时保住引用）两条口径；AST 断言 `_finish_session` 的退役兜底排在 `_destroy_components` / `_destroy_overlays` 之前、`_on_before_exit` 真调了 `_release_gpu_textures` | `python tests/check_gpu_texture_lifetime.py` |
+| `check_scenario_schema.py` | schema 单一真相源（空模板键集合、字段漂移）+ 校验器规则 + 演化配置链路 | `python tests/check_scenario_schema.py` |
+| `check_scenario_admission.py` | 进入准入：地址距离 / 身高区间 / 校验器诊断 / 仓库迁移与入口接线 | `python tests/check_scenario_admission.py` |
+| `check_dungeon_scene.py` | 章节地点与参照物：候选池四种组合、地址过滤粒度与私有名、坏地址不回落、提示词取同一池子、父进程解析完整地址进载荷、当前地点展示、结局传送写回位置 | `python tests/check_dungeon_scene.py` |
+| `check_audio_chain.py` | 方案音频端到端链：说话人分音色 / 队列 / 两档效果 / 三条引擎路径 / 降级 / BGM 缺坏文件收尾（假合成器 + 替身后端，不出声不联网） | `python tests/check_audio_chain.py` |
+| `check_splitter.py` | 内置分句器：断点切分、流式幂等、`@说话人@` 标记解析与落盘净化 | `python tests/check_splitter.py` |
+| `check_characters.py` | 运行期角色账本：seed（空 / 旧 / `intro_as`）、身份状态机、揭示与合并（锚点 / pending / authored 不合并）、容量淘汰、人物简报（不在场不渲染、超长降级）、在场观测、快照还原 | `python tests/check_characters.py` |
+| `check_cast.py` | 人物表与提示词：空配置零差异、字段归属（`role_supports`）、首次出场 / 简报注入、`build_turn` 纯构建与 `commit_turn` 提交分离、`canonical_user_entry` 历史净化、`intro_as` 撞车校验 | `python tests/check_cast.py` |
+| `check_component_pack.py` | 显示组件包：加载链（常驻包来源 / 必需 id）、文本家族与 schema 一致、组件契约与服务面（替身 ctx 只实现服务面 + AST 扫 `ctx._x` 越界）、元数据 `label`/`description`、`param_specs` 结构与 `min/max` 夹取、tag 前缀冲突、组件包不 `print` 且类都登记进 `REGISTRY`、外部包覆盖、无 GUI 替身 ctx 的 `build/layout/refresh/destroy` 冒烟与帧任务成对清理 | `python tests/check_component_pack.py` |
+| `check_dungeon_finalize.py` | 原子写 / `.bak` / 损坏回退 + `_finalize` 完成与未完成两条路径 | `python tests/check_dungeon_finalize.py` |
+| `check_dungeon_settings.py` | 副本独占设置：缺省取自 `dungeon/settings.py`、读写与合并、越界夹取、旧值迁移（幂等）与 `save` 清洗、会话侧接线 | `python tests/check_dungeon_settings.py` |
+| `check_scenario_naming.py` | 命名守卫（旧标识符残留）+ 兼容读与迁移行为 | `python tests/check_scenario_naming.py` |
+| `check_scenario_graph.py` | 编排图：节点与四类边构造、两条可达性口径、强连通分量与种子判定、五条图校验规则各命中一次、骨架方案不刷可达性诊断、同位置竞争只分组不报红、正常方案零诊断 | `python tests/check_scenario_graph.py` |
+| `check_minigame.py` | 小游戏包契约：manifest（backend/entry/params）+ 游戏代码（恰一个 MiniGame 子类、禁渲染后端/线程/print、禁私有面 `api._`） | `python tests/check_minigame.py` |
+
+另有三支**不判红**的人工/批量工具在 `scripts/`：`child_dpi_probe.py`（副本子进程
+DPI 感知探针）、`platform_api_report.py`（Windows 专有 API 落点清单，发布 macOS
+前过一眼）、`scenario_validate.py`（方案批量校验，CI 的「默认方案校验」step 显式
+调用）。三者原先在 `tests/`，2026-10-13 移出——只打印清单、不给出结论，或校验的是
+用户数据而不是代码的脚本，不该占 CI 门禁位。
+
+`scripts/escape_sim.py` 不属于上面两类：它**判红**（断言失败即非零退出）且**不需要
+显示器**，是 escape_giantess 的逻辑回归——关卡生成硬约束 → 随机走位压一段 → 强制
+一次胜、一次负校验 `api.finish` 的 payload 形状，由 `checks.yml` 在 PR 门禁里显式
+调用。种子默认固定，失败可复现。
+
+需显示器（GUI 冒烟层，不进无 GUI 门禁）：真窗口全链路回归统一走
+`python scripts/dungeon_autopilot.py`（14 场景 / 109 项断言），命令、场景表与判定
+方式见 [副本窗口运行时](dungeon_window.md) §7。**看结论行，不看退出码**（默认如此；
+`--require-clean-exit` 复测退出路径时退出状态也计入验收）。
 
 ## 10. 硬性约定
 
 | 约定 | 说明 | 出处 |
 |---|---|---|
 | 数据类一律按关键字构造 | `DungeonState` 字段曾按位置传参导致伤亡数组被写成浮点数 | `models.py::clone` 注释 |
-| 构造参数必须保存到 `self` | mixin 方法可能被其他 mixin 调用，`__init__` 里的局部变量会 AttributeError | [窗口文档](window.md) §5-C3 |
-| 关闭一律走 `_request_close()` | 业务代码不直接退（不写 `app_shall_exit`、不调库的退出函数）；由 `before_imgui_render` 帧边界落实 | [窗口文档](window.md) §5-C1 |
-| 跨线程 UI 更新走 `self._frame.call()` | 帧时钟是**窗口实例成员**；计时类逻辑用 `every/after` 帧任务而不是开线程 | [窗口文档](window.md) §5-C4、`window/frame.py` |
-| 窗口的 GL / 上下文 / 视口生命周期全交给 `hello_imgui.run()` | 进程内不手动建/毁上下文、不需要保活视口；收尾在 `run()` 返回之后做。**2026-10 起会话在独立子进程里跑**（[宿主边界](window_host.md) §7）：父进程从不加载副本窗口栈，热切换与 GL 生命周期不再相关 | [窗口文档](window.md) §5-C2 |
-| GL 资源句柄只在 GL 存活时丢 | `hello_imgui.TextureGpu` 是 RAII，清空容器 = 丢引用；释放点在 `before_exit`（`ui._release_gpu_textures`），`run()` 返回后的 `_finish_session` 只许 `retire()` 兜底保住引用——否则每局收尾在驱动层段错误（2026-10 Linux 实测） | [窗口文档](window.md) §5-C15、`window/gpu_textures.py`、`tests/check_gpu_texture_lifetime.py` |
+| 构造参数必须保存到 `self` | mixin 方法可能被其他 mixin 调用，`__init__` 里的局部变量会 AttributeError | [副本窗口运行时](dungeon_window.md) §5 C3 |
+| 关闭一律走 `_request_close()` | 业务代码不直接退（不写 `app_shall_exit`、不调库的退出函数）；由 `before_imgui_render` 帧边界落实 | [副本窗口运行时](dungeon_window.md) §5 C1 |
+| 跨线程 UI 更新走 `self._frame.call()` | 帧时钟是**窗口实例成员**；计时类逻辑用 `every/after` 帧任务而不是开线程 | [副本窗口运行时](dungeon_window.md) §5 C4、`window/frame.py` |
+| 窗口的 GL / 上下文 / 视口生命周期全交给 `hello_imgui.run()` | 进程内不手动建/毁上下文、不需要保活视口；收尾在 `run()` 返回之后做。会话在独立子进程里跑（§3.4）：父进程从不加载副本窗口栈，热切换与 GL 生命周期不再相关 | [副本窗口运行时](dungeon_window.md) §5 C2 |
+| GL 资源句柄只在 GL 存活时丢 | `hello_imgui.TextureGpu` 是 RAII，清空容器 = 丢引用；释放点在 `before_exit`（`ui._release_gpu_textures`），`run()` 返回后的 `_finish_session` 只许 `retire()` 兜底保住引用——否则每局收尾在驱动层段错误（2026-10 Linux 实测） | [副本窗口运行时](dungeon_window.md) §5 C15、`window/gpu_textures.py`、`tests/check_gpu_texture_lifetime.py` |
 | 写盘必走原子写 | 半截文件不可恢复 | 本文 §8 |
-| 剧本 / 运营术语不混用 | `scenario_*` = 方案（定义），`run_*` = 一局（执行），`session_*` = 窗口会话 / 呈现；`dungeon_*` 是产品 / 历史命名，不是精确的 Run 后缀 | [术语表](domain_terms.md) |
+| 剧本 / 运营术语不混用 | `scenario_*` = 方案（定义），`run_*` = 一局（执行），`session_*` = 窗口会话 / 呈现；`dungeon_*` 是产品 / 历史命名，不是精确的 Run 后缀 | 本文 §2 |
 | 组件只读窗口状态 | 组件 ctx 即窗口实例，不反向写状态；**访问只经组件服务面**（`component_viewport` / `schedule*` / `session_waiting_for_input` / `component_top_inset` 等，C13），不读窗口私有属性 | `component_registry.py::DungeonComponent` 契约文档、`components.py::ComponentHandler`、`tests/check_component_pack.py` |
 
 ## 11. 显示组件包
 
-官方组件包是窗口层常驻 Python 包 `dungeon/window/component_pack/`（`__init__.py`
-组装 `REGISTRY`，各组件拆在同目录模块——`base.py` 共享常量与文本组件公共基类、
-`text_gradient.py` / `text_card.py` / `text_nvl.py` / `attr_bar.py` / `proc_log.py`），
-由 `component_registry` 惰性导入。文本主组件由方案配置的 `text_component` 字段**三选一**声明（text / text_card /
-text_nvl），`components` 列表只放其余组件（如属性条、过程日志），参数统一记在
-`components_params`。组件类需实现 `build / layout / draw / destroy` 四个钩子（`refresh` 保留为 `layout` 的兼容别名），
-由 `ComponentHandler` 接入窗口的更新链（主组件先建、z 序在底）；
-可用性与参数声明来自 `component_registry`，编辑器侧由 `ui/scenario/component_mgr.py`
-三选一控件 + 卡片化管理。
-`ComponentRegistry(pack_dir=...)` 可显式指定**外部组件包目录**（入口文件名 `components.py`）
-整体替换常驻包，`registry.source` 记录实际生效来源；加载链与组件契约由无 GUI 守卫
-`tests/check_component_pack.py` 断言（无 GUI 替身 ctx 的 build/layout/refresh/destroy 冒烟）。
-配套约定：组件的展示名 / 说明写在**组件类**的 `label` / `description` 上（编辑器经
-`available_component_descriptions()` 取，`_COMPONENT_META` 只是兜底）；参数用
-`param_specs` 声明，`min` / `max` 在 `merge_params` 统一夹取；字号与字体候选链只在
-`dungeon/window/fonts.py`；组件的 ImGui 窗口/状态 ID 一律以各自的 `TAG_PREFIX` 开头（守卫查冲突）。
+官方组件包是窗口层常驻 Python 包 `dungeon/window/component_pack/`，由
+`component_registry` 惰性导入；组件契约（build / layout / refresh / destroy）、
+参数声明与夹取、slot 代管区、外部组件包替换与官方组件清单统一收在
+[显示组件](designs/dungeon/components.md)——那里是组件机制的唯一口径，本文不复述。
+加载链由无 GUI 守卫 `tests/check_component_pack.py` 断言。
 
----
+## 12. 许可证红线（AGPL）
 
-## 历史
-
-本文件只描述**现状**。以下是相关档案（不据此改代码）：
-
-| 档案 | 内容 |
-|---|---|
-| [副本模型与命名演进](history/model_evolution.md) | 章节 / 触发器模型拆分、动作类型退场、scenario / dungeon 命名拆分与目录迁移、配置治理由来（S1–S4） |
-| [宿主改造档案](history/host_refactor.md) | 窗口层手动渲染、构造/运行分离、宿主端口、帧时钟、结果对象化 |
-| [LingChat 参考价值评估](history/lingchat_evaluation.md) | 同人作品借鉴价值评估与「不采纳」清单 |
-
-其中一条属于**仍有效的现状约束**，不是历史：LingChat 为 AGPL-3.0、本项目为 MIT，
-复制 / 改写 / 移植其源码会强制本项目转为 AGPL——只读其文档与实现、用 Python 独立重写是唯一可行做法。
+LingChat（Tauri 2 + Vue 3 + Rust 的同人作品）为 AGPL-3.0、本项目为 MIT。任何复制、
+改写、移植其源码的行为都会强制本项目转为 AGPL——**只读它的文档与实现、用 Python
+独立重写**，是唯一可行做法。早年对其工程实践的借鉴（schema 单一真相源、结构化诊断、
+原子写、错误路径也收尾）均已在仓库内独立重新实现，非复制。

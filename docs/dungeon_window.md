@@ -1,14 +1,14 @@
-# 副本窗口（imgui-bundle）索引
+# 副本窗口运行时（`dungeon/window/`）：生命周期、宿主边界与调试自动化
 
-> **定位**：`dungeon/window/` 会话窗口的**文件地图、生命周期与约束清单**。
-> 分层与领域层见 [架构说明](architecture.md)，配置结构见 [数据模型](../designs/dungeon/script.md)，
-> 架构改造背景见 [宿主边界与可移植性](window_host.md)，自检见 [调试自动化](window_automation.md)。
+> **定位**：会话窗口的**文件地图、生命周期、约束清单（C1–C15）、宿主边界与
+> 调试自动化**。
+> 引擎核心的分层纪律、模块地图与步进数据流见 [副本引擎架构与术语](dungeon_engine.md)；
+> 方案字段与作者向机制（wiki）在 `docs/designs/dungeon/`。
 > **改动 `dungeon/` 下任何代码前请先扫 §5 约束清单。**
 
 窗口由 Tkinter 主程序拉起的**独立子进程**承载：父进程（Tk 主程序）经
 `ui/hosting/dungeon_spawner.py` 序列化构造参数并 spawn 子进程，会话窗口在子进程里
-跑 **imgui-bundle**（`hello_imgui` + GLFW/OpenGL，2026-10 前是 Dear PyGui，下称 DPG），
-渲染后端独占子进程（见 [宿主边界与可移植性](window_host.md) §7）。
+跑 **imgui-bundle**（`hello_imgui` + GLFW/OpenGL），渲染后端独占子进程（§6）。
 窗口起停收在 `dungeon/window/runner.py::WindowRunner.run()`——一次 `hello_imgui.run()`
 内部建 GL 后端 / ImGui 上下文 / 视口与帧循环，返回时一并释放，不堵死宿主主循环。
 窗口对宿主的全部依赖收敛在宿主端口 `dungeon/window/host.py`，因此 `dungeon/window/` 里没有任何
@@ -17,7 +17,7 @@
 
 > **术语边界**：本文的「会话（Session）」= `DungeonSessionWindow` 从构造到 `run()` 返回的
 > 一次窗口生命周期；「一局（Run）」= 进入正式运行阶段后的一次游戏。入口页返回 / 启动失败
-> 只结束 Session，不产生 Run；回放 Session 只重放已有 Run。命名见[术语表](domain_terms.md)。
+> 只结束 Session，不产生 Run；回放 Session 只重放已有 Run。命名见 [副本引擎架构与术语](dungeon_engine.md) §2。
 
 ## 目录
 
@@ -25,10 +25,12 @@
 |---|---|
 | §1 | 文件地图 |
 | §2 | 生命周期（构造 / 运行 / 帧循环 / 阶段 / 退出 / 收尾） |
-| §3 | 一步会话数据流 |
+| §3 | 一步会话数据流（窗口侧） |
 | §4 | 线程与帧时钟 |
 | §5 | 约束清单（C1–C15） |
-| §6 | 自检命令 |
+| §6 | 宿主边界与进程隔离 |
+| §7 | 调试自动化 |
+| §8 | 自检命令 |
 
 ---
 
@@ -40,7 +42,7 @@
 | `dungeon/window/base.py` | 构造（`__init__` 只存参数 + 会话初始化）与运行（`run()` 建 UI、`_runner.run()` 托管帧循环、收尾 `_finish_session`）、入口 / 运行阶段切换、关闭路径、视口尺寸（取自宿主端口） |
 | `dungeon/window/runner.py` | **宿主运行器** `WindowRunner`：把 `RunnerParams` 的回调挂到窗口原有生命周期语义上（`on_post_init` / `on_load_fonts` / `on_frame_start` / `on_draw` / `on_frame_end` / `on_capture` / `on_before_exit`），`request_exit()` 只置位、帧边界落实 `app_shall_exit`（C1） |
 | `dungeon/window/host.py` | **宿主端口** `HostPort`（含无宿主缺省实现）：尺寸/DPI、宿主显隐、事件泵、收尾弹框、活动窗口登记、缺省字体、回放文件选择 |
-| `ui/hosting/tk_host.py` | 宿主端口的 Tk/CTk 适配器 `TkHost`——**window 层唯一的 Tk 细节所在地** |
+| `ui/hosting/tk_host.py` | 宿主端口的 Tk/CTk 适配器 `TkHost`——**window 层唯一的 Tk 细节所在地**（自检/自动驾驶用；产品路径走子进程宿主） |
 | `dungeon/window/ui.py` | 建窗参数与 `WindowRunner` 组装、**副本字体对接**（经 `dungeon/window/fonts.py` 解析家族名→字体文件，按两档字号建 `dungeon_text_font` 与粗体 `dungeon_bold_font` 供文本组件使用）、每帧自绘（`_draw_frame`：根窗口 → 背景 → 文本 → 工具条 → 帧末顶层浮层）、**上屏游标**（`_reveal_*` 一族，30 字/秒限速真相源，仿流式与真流式共用）、布局自适应（`_relayout`，每帧比对 `io.display_size`）、输入接线（`_handle_input` 每帧读 `imgui.is_key_pressed` / `is_mouse_clicked`）、**F12 过程日志开关**、**A 自动播放 / F2 截图 / O 副本设置**（`toggle_autoplay` / `take_screenshot` / `toggle_settings`，与文本组件工具条按钮共用入口）与 **顶部轻通知窗**（`_notify`，窗口级常驻） |
 | `dungeon/window/engine.py` | 推进核心：AI 流式生成、JSON 解析、伤亡结算、回放步进、关闭回调 `_on_close` |
 | `dungeon/window/triggers.py` | 触发器判定（所在章节 / 前置 / 条件）、章节进入、章节效果短暂覆盖、插入段落 |
@@ -67,15 +69,32 @@
 | `dungeon/summary.py` | `StorySummarizer`：剧情压缩（概要 + 事实卡 + 关键事件）注入提示词 |
 | `dungeon/details.py` | 细节探究提问与回放检索 |
 | `dungeon/rules.py` `dungeon/models.py` | 演化规则、触发器条件规则、状态模型 |
-| `dungeon/actions.py` `dungeon/audio/chapters.py` | 触发器 / 章节数据模型与动作注册表（见 [数据模型](../designs/dungeon/script.md)） |
-| `dungeon/terms.py` | 领域术语与持久化契约常量（见 [术语表](domain_terms.md)） |
+| `dungeon/actions.py` `dungeon/audio/chapters.py` | 触发器 / 章节数据模型与动作注册表（见 [副本剧本](designs/dungeon/script.md)） |
+| `dungeon/terms.py` | 领域术语与持久化契约常量（见 [副本引擎架构与术语](dungeon_engine.md) §2） |
 | `dungeon/schema.py` `dungeon/validate.py` | 方案字段单一真相源 + 结构化校验器 |
 | `dungeon/process_log.py` | 过程日志：副本各处的过程消息（章节 / 触发器 / 预生成 / 收尾落盘……）经 `process_log.log()` 进入线程安全环形缓冲，窗口订阅后经帧时钟投递到「过程日志」面板；**副本层禁止再直接 `print`**（`host.py` 的无宿主弹框桩除外） |
 | `persistence/scenario_repo.py` | 方案仓库：`data/packs/scenarios/<id>/` 的读写（读写根分离、旧目录自愈迁移、原子写、保存即校验） |
 
-MRO 顺序：`DungeonWindowBase, DungeonLaunchStages, DungeonWindowUI, DungeonStoryEngine,
-TriggerHandler, OptionHandler, EndingHandler, DungeonPersistence, ComponentHandler`。
-新增方法时注意同名方法会被排在前面的 mixin 覆盖。
+### 1.1 mixin 组装顺序
+
+`dungeon/window/__init__.py`：
+`DungeonWindowBase, DungeonLaunchStages, DungeonWindowUI, DungeonStoryEngine,
+TriggerHandler, OptionHandler, EndingHandler, DungeonPersistence, ComponentHandler`
+
+| Mixin | 文件 | 职责 |
+|---|---|---|
+| `DungeonWindowBase` | `base.py` | 窗口生命周期、方案配置加载与启动前校验、会话初始化、关闭请求 |
+| `DungeonLaunchStages` | `launcher.py` | 入口阶段：动态背景轮播、方案选择、已达成结局图标循环、开始 / 回放 / 返回 |
+| `DungeonWindowUI` | `ui.py` | UI 构建、逐帧自绘、流式文本揭示动画、布局自适应、鼠标 / 键盘输入接线 |
+| `DungeonStoryEngine` | `engine.py` | 步进核心：AI 生成、流式分句、属性演化、伤亡结算、收尾回调 |
+| `TriggerHandler` | `triggers.py` | 触发器判定、章节进出、章节效果短暂覆盖、窗口视效、插入段落 |
+| `OptionHandler` | `options.py` | 选项触发器：后台生成选项文字 → 弹窗 → 记录选择 |
+| `EndingHandler` | `ending.py` | 章节敏感效果汇总、结局生成、结局写进回放（`_record_ending`）与回放复现（`_replay_ending`） |
+| `DungeonPersistence` | `persistence.py` | 结局结算、回放 / 报告落盘、统一收尾 `_finalize(completed)` |
+| `ComponentHandler` | `components.py` | 显示组件实例的构建 / 布局 / 每帧绘制 / 销毁接入 |
+
+MRO 顺序如上。新增方法时注意排在前面的 mixin 会覆盖同名方法；mixin 之间只通过
+`self` 上的约定属性通信。
 
 ## 2. 生命周期
 
@@ -180,6 +199,9 @@ run() → SessionResult
 - 落盘位置：有角色（探索模式）写 `data/archives/<角色>/回放|报告`；无角色或挑战模式写 `data/user/replays`、`data/user/reports`。两条路径都只覆盖「走到结局且选择保存」的一局。
 - 回放文件仍是 `[记录, ...]` 数组、后缀仍为 `.replay.json`，回放加载与档案导出照常识别。
 
+收尾语义与「能不能接续」的关系（为什么未完成局不落盘）见
+[副本引擎架构与术语](dungeon_engine.md) §6。
+
 ### 2.6 GPU 纹理句柄的收尾口径（C15）
 
 `hello_imgui.TextureGpu` 是 **RAII** 句柄：丢掉最后一个 Python 引用就去释放底层 GL
@@ -199,7 +221,7 @@ run() → SessionResult
 `_destroy_components` / `_destroy_overlays` / `_window_fx.shutdown`（这三步会清空容器）
 之前；`tests/check_gpu_texture_lifetime.py` 机械守住清单、两个出口与调用次序。
 
-## 3. 一步会话数据流
+## 3. 一步会话数据流（窗口侧）
 
 ```
 点击 / 空格（_on_mouse_click → _on_next_step）
@@ -215,22 +237,7 @@ run() → SessionResult
 │  ├─ 当前段未补满 100% → 补满并停住，不切段（再点一次才切段）
 │  └─ 已补满 → 有排队显示段落就揭示下一句（_reveal_pending_unit）
 ├─ 有非延迟插入段 → 直接消费显示
-└─ _generate_next_text()：后台线程
-   ├─ _take_pregen_for_next：有预生成结果（或在途则等待）→ 直接采用，
-   │     否则 prompt_builder.build_turn → 请求用 turn.text；成功后才提交副作用
-   ├─ ai_client.generate_stream → 逐块 extract_stream_text → split_stream_units
-   │     真流式 chunk 只经 _reveal_extend 延长 target（不直写文本）；
-   │     游标按 30 字/秒追赶；后续完成句排队到 _pending_units
-   ├─ 完整响应 parse_final_json → 正文 / 方向 / 自定义方向；split_full_text 定格最终切分
-   ├─ dungeon_logic.evolve_attributes（含敏感倍率）→ 伤亡结算
-   ├─ replay_data.append(step_info)          # 回放记录
-   ├─ 历史追加 canonical user + assistant → commit_turn（提交本回合副作用）
-   ├─ _apply_prompted_unlocks（写入角色尺寸解锁）
-   ├─ _finish_step → 记录阈值跨越关键事件 → check_triggers：
-        章节跳转 / 插入段 / 选项弹窗 / 章节效果覆盖 / 结局（结局另起线程生成 → 保存）
-   ├─ _start_detail_query：本章第一段之后问一次「还想了解哪些线索」（每章一次，
-   │     结果整章有效，正文提到该线索时才注入下一段——见「细节探究」）
-   └─ finally：下一次点击必然生成时 → _maybe_pregen_next 后台预生成下一段
+└─ _generate_next_text()：后台线程（领域侧的完整链路见 dungeon_engine.md §5）
 ```
 
 | 概念 | 说明 |
@@ -238,21 +245,19 @@ run() → SessionResult
 | **逻辑段落 vs 显示段落** | 一次 AI 输出（约 100 字）是一个逻辑段落，属性演化、回放、剧情压缩、对话历史都以它为单位；内置分句器（`dungeon/splitter.py`）把它切成若干显示段落（换行、句末标点、分号为断点；句中破折号、省略号与强调引号保留、不断句），逐句展示只为阅读节奏。`@说话人@` + 引号构成台词块：块内按句末标点断句、每段继承说话人，首尾引号不进显示文本（落盘仍保留引号以区分台词）。队列耗尽后下一次点击才触发新的 AI 调用；插入触发器的段落走同一条仿流式管线 |
 | **上屏游标（唯一速度真相源）** | `ui.py` 的 `_reveal_*` 一族：仿流式（预生成 / 固定文本 / 插入段）与真流式共用**同一条限速**，恒定 `_REVEAL_CHARS_PER_SECOND = 30 字/秒`（帧任务 `_REVEAL_TICK_SECONDS = 0.05` 即 20 Hz，每 tick 约 1.5 字；`frac` 小数累加器消除 1/1/2 的抖动）。状态字典 `self._reveal = {item, target, pos, frac}`，`pos` 是唯一进度真相源。**真流式与仿流式的区别只在 target 何时给定**：仿流式一次给全（`_reveal_start`），真流式的 chunk 到达只 `_reveal_extend` 延长 target、**不直写 item 文本**，游标按固定速率追赶——因此 AI 吐字再快，玩家看到的上屏节奏恒定，分句器也始终有一份领先缓冲，不需要为上屏等待。游标走到 target 末尾时**自我注销**（`self._reveal = None`）并调 `_on_reveal_finished` 登记自动播放的到期时刻，点击补满（`_reveal_snap`）同样算「本段播完」（只有 `_reveal_start` 顶掉旧游标那一次例外）。**全文已知的上屏只有一个入口**：`_present_paragraph`（`split_full_text` 切显示段落 → 首段起游标、其余入队、首段定稿时朗读），固定文本段、插入段与回放步进都走它；真流式因为文本是逐块到达的，走 `_update_stream_units` 那条 |
 | **点击三态机** | `_try_advance_paragraph`：① 已上屏不足 `_REVEAL_MIN_CHARS = 5` 字（≈0.17 秒）→ 吞掉点击，游标与队列都不动；② 未补满 → `_reveal_snap` 补满到 100% 并停住，**不切段**；③ 已补满（自然播完或上次点击补满）→ 才揭示队列里的下一显示段落。这个顺序保证「狂点」最多推进一个单元，不会掀翻分句器队列（`check_reveal_cursor.py` 守此契约） |
-| **说话人写法（方案二选一）** | 方案级字段 `speaker_notation`（`dungeon/speaker_notation.py`）二选一，选定后全方案强制、不许混用，与 `coupling_level`（玩家身份）、`text_component`（显示投影）三者正交，运行时只读该字段、不由耦合等级或文本组件推导：`tagged` 要求 AI 在对话句句首写 `@说话人@`（规则见 `TAGGED_SPEAKER_RULE` / `SPEAKER_STABILITY_RULE`），系统提示另有全段生效的写法声明（`notation_declaration`）；`literary` 用自由文学写法、正文不写任何标记，系统提示禁止 `@说话人@`，运行时还在定稿（`engine._normalize_ai_text`）与流式 chunk 入口用 `strip_speaker_markers` 兜底剥掉误生成的标记。**写法不丢结构化 speaker**：`tagged` 下分句器把标记解析进 `DisplayUnit.speaker` → `story_history` 的 `speaker` 键，UI 渲染名牌、语音导演朗读对话句；`literary` 下 AI 段落不带逐句 `speaker`（名牌与语音安静），但通道保留、等结构化响应接上即可复用。`validate.py` 静态扫描作者正文（初始提示 / 背景 / 章节提示 / 插入文本）里越界的 `@说话人@` 报错，回放 meta 另存 `speaker_notation` 记法版本。落盘正文（回放 / 报告 / 概要）经 `strip_speaker_markers` 剥离标记；回放额外存一份 `display_text`（只有原文真带显示层标记时才写，回放靠它把说话人与高亮还原，见 §3「回放模式」）。音色与开关见[副本对话语音](../designs/dungeon/voice.md) |
-| **高亮标记** | 正文里的成对 `==`（`splitter.HIGHLIGHT_MARK`）是高亮语法，**以显示段落为渲染单位**：分句器把标记从正文里摘掉、算出逐字符高亮掩码，某个显示段落只要被高亮区盖住就整段用 `highlight_color` 渲染（`DisplayUnit.highlight` → `story_history` 条目的 `highlight` 键）。语法对三处文本一视同仁：固定文本章节的脚本段落、插入触发器的段落、以及 AI 生成的句子（提示词规则 `coupling.HIGHLIGHT_MARKER_RULE`，拼在 user 提示词里、结局段落不加）。未闭合的开标记作用到逻辑段落末尾；落盘（回放 / 概要 / 对话历史）用 `strip_display_markers` 剥净。旧版插入触发器的 `highlight: true` 仍然按整段高亮复现，编辑器保存时迁成语法 |
-| **文本显示所有权** | 文本主组件由方案配置 `text_component` 字段**三选一**（`dungeon.schema.TEXT_COMPONENT_IDS`）：`text` **底部渐变式**（视口底部向上淡出的深色衬底上显示最近 N 句）、`text_card` **底部卡片式**（居中圆角半透明卡片）、`text_nvl` **全屏 NVL**（半透明覆盖层堆叠全部历史，可选衬线字体、可滚轮回看；`margin_percent` 按视口边长给覆盖层留百分比边距，0 = 全屏）；`components` 列表只放其余组件，主组件先建、z 序在底。行首标签只显示说话人（类型前缀是内部属性不上屏，过程日志面板可见），继续点击用闪烁 ▼ 提示。接管期间（`owns_text_display = True`）`_update_text_display` 跳过内置 `text_container` 管线、转调组件刷新链；`text`/`text_card` 屏幕只呈现当下几句，完整历史由回放/报告承接 |
-| **覆盖层服务面** | 窗口向文本主组件提供受控调用：`ctx.toggle_overlay("log")` 调出**对话记录**（全量 `story_history` 快照、可滚动，居中半透明面板）、`ctx.toggle_overlay("settings")` / `ctx.toggle_settings()` 调出**副本设置**（半透明全屏遮罩 + 居中卡片，读写副本独占设置），`ctx.component(cid)` 只读访问兄弟组件实例；写操作与组件生命周期仍由窗口集中管理，主组件只拿到调度权而非所有权。覆盖层打开时为阅读模态：点击只关闭覆盖层（`ui.py::_on_mouse_click`，点在设置卡片内不算外部），空格/回车推进在 `_on_next_step` 入口挂起 |
+| **说话人写法（方案二选一）** | 方案级字段 `speaker_notation`（`dungeon/speaker_notation.py`）二选一，选定后全方案强制、不许混用，与 `coupling_level`（玩家身份）、`text_component`（显示投影）三者正交：`tagged` 要求 AI 在对话句句首写 `@说话人@`（规则见 `TAGGED_SPEAKER_RULE` / `SPEAKER_STABILITY_RULE`），系统提示另有全段生效的写法声明；`literary` 用自由文学写法，运行时在定稿（`engine._normalize_ai_text`）与流式 chunk 入口用 `strip_speaker_markers` 兜底剥掉误生成的标记。**写法不丢结构化 speaker**：`tagged` 下分句器把标记解析进 `DisplayUnit.speaker` → `story_history` 的 `speaker` 键，UI 渲染名牌、语音导演朗读对话句；`literary` 下通道保留、等结构化响应接上即可复用。`validate.py` 静态扫描作者正文里越界的 `@说话人@` 报错，回放 meta 另存记法版本。落盘正文（回放 / 报告 / 概要）经 `strip_speaker_markers` 剥离标记；回放额外存一份 `display_text`（只有原文真带显示层标记时才写，回放靠它把说话人与高亮还原）。音色与开关见 [对话语音](designs/dungeon/voice.md) |
+| **高亮标记** | 正文里的成对 `==`（`splitter.HIGHLIGHT_MARK`）是高亮语法，**以显示段落为渲染单位**：分句器把标记从正文里摘掉、算出逐字符高亮掩码，某个显示段落只要被高亮区盖住就整段用 `highlight_color` 渲染。语法对三处文本一视同仁：固定文本章节的脚本段落、插入触发器的段落、以及 AI 生成的句子（提示词规则 `coupling.HIGHLIGHT_MARKER_RULE`）。未闭合的开标记作用到逻辑段落末尾；落盘（回放 / 概要 / 对话历史）用 `strip_display_markers` 剥净。旧版插入触发器的 `highlight: true` 仍然按整段高亮复现，编辑器保存时迁成语法 |
+| **文本显示所有权** | 文本主组件由方案配置 `text_component` 字段**三选一**（`dungeon.schema.TEXT_COMPONENT_IDS`）：`text` **底部渐变式**、`text_card` **底部卡片式**、`text_nvl` **全屏 NVL**（可选衬线字体、可滚轮回看）；`components` 列表只放其余组件，主组件先建、z 序在底。行首标签只显示说话人（类型前缀是内部属性不上屏，过程日志面板可见），继续点击用闪烁 ▼ 提示。接管期间（`owns_text_display = True`）`_update_text_display` 跳过内置 `text_container` 管线、转调组件刷新链；`text`/`text_card` 屏幕只呈现当下几句，完整历史由回放/报告承接。三种组件的版式与参数见 [显示组件](designs/dungeon/components.md) |
+| **覆盖层服务面** | 窗口向文本主组件提供受控调用：`ctx.toggle_overlay("log")` 调出**对话记录**（全量 `story_history` 快照、可滚动）、`ctx.toggle_overlay("settings")` / `ctx.toggle_settings()` 调出**副本设置**、`ctx.component(cid)` 只读访问兄弟组件实例；写操作与组件生命周期仍由窗口集中管理，主组件只拿到调度权而非所有权。覆盖层打开时为阅读模态：点击只关闭覆盖层（`ui.py::_on_mouse_click`，点在设置卡片内不算外部），空格/回车推进在 `_on_next_step` 入口挂起 |
 | **组件服务面（C13）** | 组件访问窗口的唯一入口集中在 `components.py::ComponentHandler`：几何 `component_viewport()`、帧时钟 `schedule / schedule_every / cancel_task`（**不碰 `self._frame`**）、状态查询 `session_waiting_for_input()`（继续指示用：生成中 / 游标未走完 / 分句队列还有货 / 选项 / 结局都不算等待）/ `component_autoplay_on()`、字体 `text_font_tag() / bold_font_tag()`、顶部让位 `component_top_inset()`（聚合各组件的 `top_inset(ctx)` 可选钩子，与构建顺序无关）。契约的可执行版本是 `check_component_pack.py` 的替身 ctx——它**只**实现服务面，组件越界（读私有）在冒烟与 AST 扫描里都会失败 |
-| **组件代管区（slot）** | 文本主组件在 `layout` 阶段生成 `dungeon.window.layout.Slot`：几何 + `SlotStyle` + 可接纳的角色 / 形状 / 容量。`ComponentHandler` 的布局分两遍：先排文本主组件并收集代管区，按子组件声明的 `roles` / `shapes` 机械匹配并发布 `component_rect(cid)` / `component_slot(cid)`，再排其余组件。`surface=host` 由文本组件画底纹（卡片延伸）、`bare` 无底纹（渐变区）、`own` 子组件自绘。官方示例：`text_card` 的 `card_footer`、`text` 的 `scrim_band`、`text_nvl` 的 `nvl_header`，`attr_bar` 以 `status` / `band` 优先落入，没有可用代管区时回退左上角独立面板；`text_card` 另提供**上下两区**：`card_side`（上区，`log` / `rail`，高度上限 `360*s`）与 `card_side_low`（下区，任何 `rail` 组件可认领，高度与卡片相同、底端与卡片对齐，与上区同生共死），`proc_log` 展开时落上区、按 `SlotStyle.side` 从所在侧的屏幕边缘平移进入，卡片 + 代管区作为一组整体居中、卡片往另一侧让位，收起即释放，没有代管区时回退右上角面板；`text` 也提供对齐正文列一侧的 `scrim_side`（`log` / `rail`），停在渐变正文上方、不做横向让位，`proc_log` 按 `SlotStyle.enter_from="bottom"` + `enter_fade` 从下方升起淡入；`text_nvl` 提供贴着正文列的 `nvl_side`（`log` / `rail`），占满覆盖层高度，日志 + 正文整体居中，代管区缺省不带底纹 / 边框 / 分隔线，日志区与正文区共用覆盖层那一层背景（日志经自己的 `draw_own_surface` 可改成自绘面板）。三个文本组件的正文列 / 卡片宽度都有可读上限（`base.py::_MAX_TEXT_WIDTH`，1280 逻辑点）并在可用区域内居中，大屏上不会随窗口宽度无限拉长，卡片与代管区也不会被推到窗口两端。停靠哪一侧是**窗口视觉设置** `dock_side`（`dungeon_settings.json`，副本设置面板里由玩家实时改、改完立即重排组件），不是文本组件的方案参数；组件经服务面 `ctx.component_dock_side()` 读取。毛玻璃卡片经 `ctx.component_backdrop_blur()` 拿到背景的 1/8 缩小模糊副本与背景矩形，按卡片圆角 / UV 截取身后那块模糊影像（随换图 / 振动同步），再叠半透明染色与玻璃边缘；没有纹理时只保留半透明染色。未接入代管区的旧组件继续走 `top_inset` 兼容路径 |
-| **细节探究（每章一次提问 + 关键词触发注入）** | **提问按章降频**：本章第一段写完后，用该段、近期剧情、章节意图与长期概要后台问一次 AI「还想了解哪些线索」（最多 2 组，存 `_detail_queries`），整章不再重复提问——逐段提问的产物寿命只有一段（第 N 段问、第 N+1 段注入），只允许问「下一段就能解释的疑问」，必然退化成泛泛的废话，还让预生成每段都等它落地。每组是「对象 + 方面」，方面取自 `dungeon/details.py::ASPECTS` 的共用白名单，对象必须逐字来自提问时给模型的文本，解析时硬校验，旧格式字符串查询走兼容路径。**注入由关键词触发**：此后每段生成前 `build_turn` 只看刚写完的那一段（`last_ai_text`）有没有提到某条线索的对象（`details.pick_triggered`，方面信号词只用于排序），命中才去回放与长期记忆里召回原文（`resolve_detail_queries`），把「原文参考 / 仅提及 / 未记载」三档作为「细节补充」注入下一段；同一条线索一章内最多注入 `MAX_INJECT_PER_CHAPTER` 次。检索刻意放在**触发时**而不是提问后：本章后来才写下的解答也能被召回。换章即作废整批线索（`triggers._enter_chapter` 复位），提问失败复位「问过」标记留待下一段重试。逐段的成本从「每段一次提问」降为「每章一次提问」，且不再每段硬塞一段设定说明 |
-| **预演化** | 步进收尾后（`finally`，插入晋升之后）若下一次点击必然触发生成（无选项/插入/结局排队），立即后台预生成下一段，缓存 `(turn, 生成前历史, 原始响应, 段落类型)`；玩家点击时 `_take_pregen_for_next` 直接采用（在途则等待收养，不重复发请求），首句仿流式揭示。选项选择后、插入段消费后各补射一次；`build_turn` 是纯构建，预生成失败自动回退实时路径且无需还原会话状态。调用次数不变，只是提前发出 |
-| **章节与触发器** | 会话开始先 `_enter_start_chapter()` 进入起始章节再 `check_triggers()`；完整条件是「所在章节 + 前置触发器 + 条件规则」三者同时满足 |
-| **结束章节** | 段落类型固定为「结局」（前缀 `【结局】`），步进 0（`evolve_attributes(step_override=0.0)`），触发器不能跳出或弹选项；节内段落数达到 `max_paragraphs` 时终止并结算 |
-| **章节上限兜底** | 普通章节节内段落数达到 `max_paragraphs`（默认 99）时，在 `_finish_step` 末尾（触发器判定之后）自动跳到 `overflow_target`（空串 = 离开章节） |
-| **剧情压缩** | `StorySummarizer` 按块（默认 20 段）与换章时机压缩；`build_turn` 注入「全部压缩概要 + 关键事实 + 关键事件」。近期原文不再注入——对话历史（窗口大小即 `story_recent_count` 设置，`_message_window_size`）已逐字携带最近剧情，重复注入只会推高 prefill 与首字延迟。AI 额外输出 `facts`（跨块去重成事实卡）；确定性关键事件（章节进出、选项选择、介入度 / 破坏性跨整数阈值）由代码直接登记。**按块压缩走异步**：主线程 `detach_chunk` 切块（立刻移出缓冲）、后台线程 `compress_chunk` 调 AI、写回按序号保序（`apply_result`），AI 等待不占主线程；换章 / 结局前的 `flush_chapter` 仍同步，并先等在途块落地，保证概要完整（回放 / 无 AI 客户端走原同步路径） |
-| **回放模式** | 不建 AI 客户端；`_init_replay` 用 `dungeon.replay.parse_all` 把记录解析成 Record（坏记录在这里被丢弃，旧格式的 `goto` 平级环境键在这里展开成章节记录），紧接着 `_resolve_replay_scenario` **认回放所属的方案**——章节背景 / 音乐 / 结局图标都是相对方案目录的路径，少了 `scenario_id` 这些素材一律解析失败（开场停在入口背景、音乐不响）。判定链：调用方显式给的 `scenario_id` > 身份记录 `kind:"meta"` 的 `scenario.id`（且方案还在）> user 回放文件名前缀（`<方案 id>_回放_<时间>`）> 素材路径在全部方案目录里命中计数最多者；最后一级只照顾不认识 `meta` 的旧文件（同名素材会静默错配），`meta.assets` 的字节数与现盘对不上时只记一行过程日志。`_replay_next_step` 逐条分派：`ChapterRecord` → `_replay_chapter`、`TriggerRecord` → `_replay_trigger`（`goto` 只兜底对章节名，环境由章节记录落地）、`EndingRecord` → `_replay_ending`、`CharactersRecord` / `ScenarioRecord` 跳过、其余 → `_replay_step`（正文 + 状态快照 + 覆盖到期）。**播放节奏与实时同构**：正文走 `_present_paragraph` 的限速游标与分句队列，点击走同一条三态机（含 0.4 秒防抖），`_replay_next_step` 循环跳过不产生正文的记录（章节 / 跳转 / 覆盖 / 视效），所以一次点击必有反应；段落走完同样登记 `_advance_due`，自动播放对回放一样有效。**朗读走的也是这条管线**：`_configure_voice` 在 `_init_replay` 里照方案装配，`_replay_step` 把记录的 `display_text`（原文带 `@说话人@` / `==` 时才写）交给 `_present_paragraph`，说话人随之还原、对话句进语音导演念整句；旧记录没有这个字段，退回净文本——逐句渐显照旧，只是不念。**步数也随记录还原**：回放不经过 `evolve_attributes`，`_replay_step` 把 `record.step` 写回 `dungeon_state.total_steps`（剧情压缩的分块节奏、结算报告的「总步数」都读它）。`TriggerRecord` 的 `option` / `mini_game` 动作在实时是弹窗 / 独立界面，回放不弹窗，改在故事区补一行「【选择】…」/「【小游戏】…」并占一次点击——这两行只活在显示层，不进记录也不进 `to_config_fragment`。刚进入回放的那一次调用带 `auto_close=False`：整份记录只有环境、没有正文时（开局即中断的短回放）不自动关窗。记录的字段与容错约定见 [副本剧本 §9.3](../designs/dungeon/script.md) |
+| **组件代管区（slot）** | 文本主组件在 `layout` 阶段生成 `dungeon.window.layout.Slot`：几何 + `SlotStyle` + 可接纳的角色 / 形状 / 容量。`ComponentHandler` 的布局分两遍：先排文本主组件并收集代管区，按子组件声明的 `roles` / `shapes` 机械匹配并发布 `component_rect(cid)` / `component_slot(cid)`，再排其余组件。官方组件的代管区（`card_footer` / `scrim_band` / `nvl_header` / `card_side` 等）、`dock_side` 停靠侧与毛玻璃卡片的机制说明见 [显示组件](designs/dungeon/components.md) §3；停靠哪一侧是**窗口视觉设置** `dock_side`（`dungeon_settings.json`，副本设置面板里由玩家实时改、改完立即重排组件），不是文本组件的方案参数，组件经服务面 `ctx.component_dock_side()` 读取 |
+| **细节探究（窗口侧接线）** | 本章第一段写完后 `_start_detail_query` 后台问一次（每章一次，结果整章有效），此后每段生成前按「正文是否提到线索对象」触发注入；提问内容、方面白名单与注入闸门的机制见 [副本提示词](designs/dungeon/prompts.md) §6，领域出口在 `dungeon/details.py`（dungeon_engine.md §4） |
+| **预演化（预生成）** | 步进收尾后若下一次点击必然触发生成（无选项/插入/结局排队），立即后台预生成下一段，缓存 `(turn, 生成前历史, 原始响应, 段落类型)`；玩家点击时 `_take_pregen_for_next` 直接采用（在途则等待收养，不重复发请求），首句仿流式揭示。选项选择后、插入段消费后各补射一次；`build_turn` 是纯构建，预生成失败自动回退实时路径且无需还原会话状态。调用次数不变，只是提前发出 |
+| **章节 / 触发器 / 结束章节** | 会话开始先 `_enter_start_chapter()` 进入起始章节再 `check_triggers()`；触发器判定顺序、同位置派发、结束章节冻结与超限兜底的语义见 [副本引擎架构与术语](dungeon_engine.md) §5，字段见 [副本剧本](designs/dungeon/script.md) |
+| **剧情压缩（窗口侧接线）** | `StorySummarizer` 按块（默认 20 段）与换章时机压缩；`build_turn` 注入「全部压缩概要 + 关键事实 + 关键事件」，近期原文由对话历史逐字携带、不再注入。**按块压缩走异步**：主线程 `detach_chunk` 切块、后台线程 `compress_chunk` 调 AI、写回按序号保序；换章 / 结局前的 `flush_chapter` 仍同步并先等在途块落地。机制与参数见 [副本提示词](designs/dungeon/prompts.md) §4 |
+| **回放模式** | 不建 AI 客户端；`_init_replay` 用 `dungeon.replay.parse_all` 把记录解析成 Record（坏记录丢弃，旧格式的 `goto` 平级环境键展开成章节记录），紧接着 `_resolve_replay_scenario` **认回放所属的方案**——章节背景 / 音乐 / 结局图标都是相对方案目录的路径，少了 `scenario_id` 这些素材一律解析失败。判定链：调用方显式给的 `scenario_id` > 身份记录 `kind:"meta"` 的 `scenario.id`（且方案还在）> user 回放文件名前缀 > 素材路径在全部方案目录里命中计数最多者（最后一级只照顾不认识 `meta` 的旧文件）；`meta.assets` 的字节数与现盘对不上时只记一行过程日志。`_replay_next_step` 逐条分派（ChapterRecord / TriggerRecord / EndingRecord / 步进记录），记录的语法与容错见 [副本剧本 §9.3](designs/dungeon/script.md)。**播放节奏与实时同构**：正文走 `_present_paragraph` 的限速游标与分句队列，点击走同一条三态机（含 0.4 秒防抖），一次点击必有反应；自动播放对回放一样有效。**朗读走同一条管线**：`_configure_voice` 在 `_init_replay` 里照方案装配，记录的 `display_text` 交给 `_present_paragraph`，说话人随之还原。**步数也随记录还原**：`_replay_step` 把 `record.step` 写回 `dungeon_state.total_steps`。`TriggerRecord` 的 `option` / `mini_game` 动作回放不弹窗，改在故事区补一行「【选择】…」/「【小游戏】…」并占一次点击（只活在显示层，不进记录）。刚进入回放的那一次调用带 `auto_close=False`：整份记录只有环境、没有正文时不自动关窗 |
 | **过程日志（proc_log 组件）** | 右上角日志面板是官方组件包里的 `proc_log` 组件：方案在 `components` 里声明才构建（`_default` 已声明），默认收起，**F12** 切换展开 / 收起。数据源是 `dungeon/process_log.py`：组件 build 时订阅并取走缓冲积压（构造 / 会话初始化阶段的报错也会补显），此后任意线程的 `log()` 经订阅回调 → `ctx._frame.call()` 进主线程追加（上限 300 行，自动滚底）；组件 destroy 时退订。方案未配置该组件时按 F12 弹通知「日志查看已禁用」 |
-| **文本组件功能工具条** | 三种文本组件（text / text_card / text_nvl）各自在合适位置挂一条悬浮工具条（基类统一创建，圆角低透明度容器 + 四个图标按钮——图标为程序化生成的小纹理，无底色仅悬停色，常驻不可关）：播放（自动播放，A）/ 相机（截图，F2）/ 列表（过程日志面板，F12）/ 齿轮（副本设置，O），悬停有文字提示。渐变文本栏放渐变区右下角（继续指示 ▼ 左移让位），卡片文本栏骑在卡片右上角，NVL 顶部居中。按钮只转调窗口同名服务，与快捷键等效；自动播放由帧时钟任务采样（`toggle_autoplay` 挂 `every(_AUTOPLAY_INTERVAL = 0.2)`，只是采样频率），真正的推进节奏由**事件驱动**：上屏游标自然走完时 `_on_reveal_finished` 登记 `_advance_due = now + _AUTOPLAY_DWELL(0.5s) + _AUTOPLAY_DWELL_PER_CHAR(0.012) × 句长`，`_autoplay_tick` 三重检查（会话可推进 → 游标已收尾 → 停留期已过）后才 `_on_next_step`，长句多停一点、不再固定 1.2 秒。**分句队列不是阻塞项**：只剩「生成中 / 结局 / 选项」三类硬阻塞（`_session_can_advance`，与继续指示同源但**不看游标与队列**）——队列里还有没上屏的显示段落时自动播放要接着把这些句子播完，若拿 `session_waiting_for_input` 当闸门就会每段只播首句后永久停住。点击补满（`_reveal_snap`）与整句直出的行（回放的选择 / 小游戏行、小游戏结算行）同样登记 `_advance_due`，自动播放不会在这些地方一闪而过。自动播放中播放图标转金色。窗口 `_on_mouse_click` 用 `toolbar_hovered()` 区分点按钮与点屏幕推进剧情。截图经 `RunnerParams.callbacks.after_swap` 的 `on_capture` 钩子（`glReadPixels` 抓整帧）交给 `PixelWorker` 存到 `data/user/screenshots/`（通知延后弹出，避免通知条被截进画面）。正文颜色为固定常量（`_DEFAULT_TEXT_COLOR`），可配置的是标签 / 高亮 / 渐变底色（见组件包 `param_specs`） |
+| **文本组件功能工具条** | 三种文本组件各自挂一条悬浮工具条（播放 A / 截图 F2 / 过程日志 F12 / 副本设置 O，与快捷键等效）。自动播放由帧时钟任务采样（`toggle_autoplay` 挂 `every(0.2)`），真正的推进节奏**事件驱动**：上屏游标自然走完时登记 `_advance_due = now + 0.5s + 0.012 × 句长`，`_autoplay_tick` 三重检查（会话可推进 → 游标已收尾 → 停留期已过）后才推进，长句多停一点。**分句队列不是阻塞项**：只剩「生成中 / 结局 / 选项」三类硬阻塞（`_session_can_advance`）——队列里还有没上屏的显示段落时自动播放要接着播完。点击补满与整句直出的行（回放的选择 / 小游戏行、小游戏结算行）同样登记 `_advance_due`。截图经 `RunnerParams.callbacks.after_swap` 的 `on_capture` 钩子（`glReadPixels` 抓整帧）交给 `PixelWorker` 存到 `data/user/screenshots/`（通知延后弹出）。窗口 `_on_mouse_click` 用 `toolbar_hovered()` 区分点按钮与点屏幕推进剧情 |
 | **轻通知窗** | 主窗口顶部居中的通知条（`ui.py::_notify`），窗口级常驻、**不受组件配置影响**；显示约 3 秒自动隐藏（`after` 同 key 任务互斥，连续通知覆盖前一条并重置计时）。副本内需要「提示但不必确认」的场景都可用它 |
 
 ## 4. 线程与帧时钟
@@ -267,11 +272,6 @@ run() → SessionResult
 `imgui.is_key_pressed` / `is_mouse_clicked`，鼠标与键盘天然在帧线程执行，上面的
 单线程约定不需要任何"收拢"就成立。自动驾驶 `native-input` 场景用
 「SendMessage 直投 WM_KEYDOWN 触发真原生按键」锁住这条性质。
-
-> 迁移前（DPG 2.3.1）控件 / 按键回调默认派发到**工作线程**，窗口靠
-> `dpg.configure_app(manual_callback_management=True)` + 帧循环
-> `run_callbacks(get_callback_queue())` 把它们收拢到帧线程（旧 C6）。那条补救链
-> 已随 imgui 迁移（P1）删除，本段落记的是它的来历；DPG 的其余兼容怪癖见 §5.1。
 
 帧时钟 API（`dungeon/window/frame.py::FrameScheduler`，窗口实例成员 `self._frame`）：
 
@@ -300,20 +300,20 @@ run() → SessionResult
 
 | 编号 | 约束 | 原因 / 出处 | 验证 |
 |---|---|---|---|
-| **C1** | 任何「程序主动关闭副本窗口」都必须走 `base._request_close()`，业务代码不直接退（不写 `app_shall_exit`、不调库的退出函数）；`runner.request_exit()` 只置位，由 `before_imgui_render` 帧边界统一落实 `app_shall_exit` | 在回调执行途中直接退会让 `hello_imgui` 的 `confirm_exit` 路径在帧中途拆掉上下文。迁移前 DPG 直接 `stop_dearpygui()` 同样收尾不干净（入口页「返回」后进程延迟崩溃 / 视口僵尸残留，见历史档案），当时的补救是把停止挪回帧边界——本约束即那条纪律的 imgui 版 | `python tests/check_dungeon_window_contract.py`（`hello_imgui.run` / `app_shall_exit` 只许出现在 `runner.py`）；`python scripts/dungeon_autopilot.py --scene session-close --isolate`（含 `--repeat 2`）；真应用手测「进入副本 → 返回 → 再进入副本」 |
-| **C2** | 窗口的 GL 后端 / ImGui 上下文 / 视口生命周期**全权交给 `hello_imgui.run()`**：进程内不手动建 / 毁上下文，`run()` 返回即全部释放，不需要保活视口；收尾（恢复主窗口、弹框）在 `_finish_session` 里、`run()` 返回之后做，与子进程的 GL 栈生命周期无关 | 迁移前 DPG 的进程单例上下文 + GLFW 终止会让 Tk 根窗口失去窗口级命令（`destroy()` / `withdraw()` 硬崩 0xC0000005），才需要「保活视口 `park_context` / `unpark_context`」把进程留在健康状态（当年实测矩阵见 `history/`）。imgui 的 runner 把上述全收进库内部（R1 实测 3 轮开关窗零崩溃）、会话又跑在独立子进程里，那条补救链整体退场 | `tests/smoke_switch.py` 第 2/5 轮（真跑两局副本 + 三次切换，断言父进程始终没在本进程启动副本窗口）；`scripts/dungeon_autopilot.py` |
+| **C1** | 任何「程序主动关闭副本窗口」都必须走 `base._request_close()`，业务代码不直接退（不写 `app_shall_exit`、不调库的退出函数）；`runner.request_exit()` 只置位，由 `before_imgui_render` 帧边界统一落实 `app_shall_exit` | 在回调执行途中直接退会让 `hello_imgui` 的 `confirm_exit` 路径在帧中途拆掉上下文。迁移前 DPG 直接 `stop_dearpygui()` 同样收尾不干净，当时的补救是把停止挪回帧边界——本约束即那条纪律的 imgui 版 | `python tests/check_dungeon_window_contract.py`（`hello_imgui.run` / `app_shall_exit` 只许出现在 `runner.py`）；`python scripts/dungeon_autopilot.py --scene session-close --isolate`（含 `--repeat 2`）；真应用手测「进入副本 → 返回 → 再进入副本」 |
+| **C2** | 窗口的 GL 后端 / ImGui 上下文 / 视口生命周期**全权交给 `hello_imgui.run()`**：进程内不手动建 / 毁上下文，`run()` 返回即全部释放，不需要保活视口；收尾（恢复主窗口、弹框）在 `_finish_session` 里、`run()` 返回之后做，与子进程的 GL 栈生命周期无关 | 迁移前 DPG 的进程单例上下文 + GLFW 终止会让 Tk 根窗口失去窗口级命令（`destroy()` / `withdraw()` 硬崩 0xC0000005），才需要「保活视口」把进程留在健康状态。imgui 的 runner 把上述全收进库内部、会话又跑在独立子进程里，那条补救链整体退场 | `tests/smoke_switch.py` 第 2/5 轮（真跑两局副本 + 三次切换，断言父进程始终没在本进程启动副本窗口）；`scripts/dungeon_autopilot.py` |
 | **C3** | `__init__` 的每个构造参数都必须存到 `self` 上 | `_init_session()` 在入口阶段**迟到执行**（点「开始副本」时才跑），此时局部变量早已不可见；曾因漏存 `merged_quips` 导致「开始副本」必然 AttributeError | 构造后读属性 / `entry-start` 场景 |
 | **C4** | 跨线程 UI 更新走 `self._frame.call()`；禁止后台线程直接调 imgui | 帧时钟是窗口实例成员（随会话创建与停止），不是模块级单例；`stop()` 后 `call()` 返回 `False` 不抛异常 | `dungeon_autopilot.py` |
 | **C5** | 计时类逻辑不开线程，用 `every` / `after` 帧任务 | 旧实现各自靠 `_closing` 标志轮询退出、收尾时逐个 join；现在退出不需要 join | `python tests/check_dungeon_window_contract.py`（禁 `threading.Timer`）；场景结束时断言 `threading.enumerate()` 无非 daemon 残留 |
 | **C6** | 后端迁移的已知差异与已退役的 DPG 怪癖见 §5.1 | 实测结论 | 手测 + 自动驾驶 |
 | **C7** | 入口阶段与会话页共用 `bg_texture` / `bg_image_item` | 进入会话时 `_freeze_background` 把冻结帧设为 `_bg_pil_full`，后续 relayout 沿用冻结画面 | 手测入口 → 会话 |
 | **C8** | window 层不许 import `tkinter` / `customtkinter` / `ui`；宿主能力一律经 `HostPort`，见 §5.2 端口表 | 换 UI 框架只需换适配器；自检不再需要打桩 `ui.ctk.dialogs` | `tests/check_dungeon_layering.py` |
-| **C9** | 构造 / 复制 `DungeonState` 只用关键字参数 | 字段顺序会随迭代变化（`chapter_steps` 就是从中间插入的）；`clone()` 曾按位置传参导致伤亡数组被填成步长浮点数，于是**每一步** `_finish_step` 都抛 `'float' object is not iterable`——故事看着还在出字，但总计数不增长、触发器与结局永不触发 | 断言「回放记录是否增长」 |
+| **C9** | 构造 / 复制 `DungeonState` 只用关键字参数 | 字段顺序会随迭代变化；`clone()` 曾按位置传参导致伤亡数组被填成步长浮点数，于是**每一步** `_finish_step` 都抛 `'float' object is not iterable`——故事看着还在出字，但总计数不增长、触发器与结局永不触发 | 断言「回放记录是否增长」 |
 | **C10** | 写盘一律用原子写（`persistence/json_store.py`） | 半截文件不可恢复，`.bak` 是唯一回退；回放 / 报告按时间戳命名、本来不会被覆盖，调用时传 `backup=False` | `tests/check_dungeon_finalize.py` |
-| **C11** | 术语不混用：`scenario_*` = 方案（定义），`run_*` = 一局（执行），`session_*` = 窗口会话 / 呈现；`dungeon_*` 是产品 / 历史命名，不是精确的 Run 后缀 | 见 [术语表](domain_terms.md) 与 `dungeon/terms.py` | `tests/check_scenario_naming.py` |
-| **C12** | 任何 Tk 交互前必须调用 `self._discard_pending_quit()` | 用户通过视口原生关闭键（X）退出时，GLFW 销毁原生窗口会导致 Windows 在本线程队列中留下一条 `WM_QUIT`；它不会被 Tk 消费，却会让 Windows 停止合成 `WM_TIMER`，造成随后的收尾提示模态对话框（`wait_window`）以及主窗口所有 `after` 计时器彻底收不到事件而表现为**弹出提示对话框后主窗口卡死**；收尾时在 `show_window()` / 弹框前由端口抛弃该残留消息 | `python scripts/dungeon_autopilot.py --scene native-close --isolate` |
+| **C11** | 术语不混用：`scenario_*` = 方案（定义），`run_*` = 一局（执行），`session_*` = 窗口会话 / 呈现；`dungeon_*` 是产品 / 历史命名，不是精确的 Run 后缀 | 见 [副本引擎架构与术语](dungeon_engine.md) §2 与 `dungeon/terms.py` | `tests/check_scenario_naming.py` |
+| **C12** | 任何 Tk 交互前必须调用 `self._discard_pending_quit()` | 用户通过视口原生关闭键（X）退出时，GLFW 销毁原生窗口会导致 Windows 在本线程队列中留下一条 `WM_QUIT`；它不会被 Tk 消费，却会让 Windows 停止合成 `WM_TIMER`，造成随后的收尾提示模态对话框以及主窗口所有 `after` 计时器彻底收不到事件而表现为**弹出提示对话框后主窗口卡死**；收尾时在 `show_window()` / 弹框前由端口抛弃该残留消息 | `python scripts/dungeon_autopilot.py --scene native-close --isolate` |
 | **C13** | 组件只经**组件服务面**访问窗口（`ctx.component_viewport / schedule / schedule_every / cancel_task / session_waiting_for_input / component_autoplay_on / text_font_tag / bold_font_tag / component_top_inset / component`），不得读窗口私有属性（`_dpi_scale` / `_layout_w` / `_frame` / `_autoplay`…） | 组件 ctx 就是窗口实例，摸私有零成本，一旦窗口侧改名即静默 AttributeError；契约的可执行版本是守卫里的**替身 ctx**（只实现服务面）与 AST 越界扫描 | `tests/check_component_pack.py` |
-| **C14** | 会话收尾不许留下本代窗口：`hello_imgui.run()` 返回后，本进程不应再有标题以 `副本模式` / `回放模式` 开头的顶层原生窗口 | 迁移前 DPG 的 `destroy_context()` **不销毁**视口对应的 GLFW 原生窗口（2026-10-07 最小复现：`IsWindow/IsWindowVisible` 在 destroy 之后仍为真，`park_context()` 也不会带走它）。典型 DPG 程序感知不到（destroy 后进程随即退出，窗口由 OS 回收），但本程序收尾后仍跑 Tk 主循环，那个不再响应的副本窗口就**留在屏幕上**——用户报的「启动界面点返回后卡死」，且每局累加一个；当时必须趁 GLFW 有效时显式销毁（那之后 GLFW 的 WndProc 已释放，`DestroyWindow` 会以 0xC0000005 掀掉进程）。imgui 的 runner 自己销毁窗口，本条改为**回归断言**：无论后端怎么实现，收尾都不许留下这一代窗口 | `python scripts/dungeon_autopilot.py --scene entry-cancel` / `--scene session-close`（断言「返回/关闭后不再新增副本视口原生窗口」） |
+| **C14** | 会话收尾不许留下本代窗口：`hello_imgui.run()` 返回后，本进程不应再有标题以 `副本模式` / `回放模式` 开头的顶层原生窗口 | 迁移前 DPG 的 `destroy_context()` **不销毁**视口对应的 GLFW 原生窗口（`IsWindow/IsWindowVisible` 在 destroy 之后仍为真）。典型 DPG 程序感知不到，但本程序收尾后仍跑 Tk 主循环，那个不再响应的副本窗口就**留在屏幕上**——用户报的「启动界面点返回后卡死」，且每局累加一个。imgui 的 runner 自己销毁窗口，本条改为**回归断言**：无论后端怎么实现，收尾都不许留下这一代窗口 | `python scripts/dungeon_autopilot.py --scene entry-cancel` / `--scene session-close`（断言「返回/关闭后不再新增副本视口原生窗口」） |
 | **C15** | `hello_imgui.TextureGpu` 等 GL 资源句柄**只在 GL 存活时释放**：统一走 `dungeon/window/gpu_textures.py` 的 `release()`（`before_exit`，`ui._release_gpu_textures`）；`hello_imgui.run()` 返回后的 `_finish_session` 只许 `retire()` 兜底保住引用。六处句柄容器（背景 / 窗口工具条 / 结局图标 / 视效覆盖层 / 组件工具条 / 小游戏贴图）一律经 `ui._drain_gpu_textures()` 收走，`_retire_gpu_textures()` 必须排在 `_destroy_components` / `_destroy_overlays` / `_window_fx.shutdown` 之前 | `TextureGpu` 是 RAII：丢最后一个引用即释放底层 GL 纹理。`run()` 返回后 GL 后端与 ImGui 上下文已随库释放，此时再丢引用会去解引用失效后端，在驱动层**直接段错误**——2026-10 在 Linux 上实测**每局副本收尾必崩**（软/硬 GL 都复现），成因是组件基类的 `destroy` 在 `_finish_session` 里清了工具条图标纹理。看着人畜无害的「清空容器」正是丢引用 | `python tests/check_gpu_texture_lifetime.py`（六处容器清单 + `release`/`retire` 口径 + `_finish_session` 次序与 `_on_before_exit` 释放的 AST 断言）；`scripts/dungeon_autopilot.py`（真窗口收尾后退役仓库必须为 0） |
 
 ### 5.1 C6：后端差异与已退役的 DPG 怪癖
@@ -332,13 +332,10 @@ run() → SessionResult
 | 静默期出帧 | `fps_idling.enable_idling = False`（否则帧时钟停摆）；`fps_max` 只是高刷屏封顶，节拍由 vsync 定 |
 | 关窗 | 点 X 与程序侧关窗共用一条路径（库关窗 → `before_exit`）；`confirm_exit` 显式置 None，不弹库自带确认框 |
 
-DPG 时代记进本小节的怪癖（`dpg.add_child_window(no_scrollbar=)` 创建时不生效、
-viewport drawlist 不渲染、动态纹理同 tag 重建复用旧 GL 存储导致花屏、
-`set_exit_callback` 是「最后一帧」语义、控件回调默认派发到工作线程需要
-`manual_callback_management` 收拢、`destroy_context()` 不销毁视口原生窗口、
-保活视口、临时标题绕过标题缓存……）**已随迁移整体退场**。它们的完整来历与
-当时的应对留在 [imgui 迁移档案](history/imgui_migration.md) 与更早的
-[宿主改造档案](history/host_refactor.md)、[退出挂死调查](history/exit_hang_investigation.md)。
+DPG 时代的怪癖（`dpg.add_child_window(no_scrollbar=)` 创建时不生效、viewport drawlist
+不渲染、动态纹理同 tag 重建复用旧 GL 存储导致花屏、`set_exit_callback` 是「最后一帧」
+语义、控件回调默认派发到工作线程需要收拢、`destroy_context()` 不销毁视口原生窗口、
+保活视口……）**已随迁移整体退场**。
 
 与后端无关的一条旧坑仍在：入口背景图收集 `collect_dungeon_images` 按规范化路径
 去重（同一图会经副本仓库相对根与自由副本绝对根各采一次）；只有一张图时轮播禁止
@@ -348,7 +345,7 @@ viewport drawlist 不渲染、动态纹理同 tag 重建复用旧 GL 存储导�
 
 `dungeon/window/host.py::HostPort`（缺省实现 = 无宿主），Tk 实现 `ui/hosting/tk_host.py::TkHost`，
 子进程实现 `ui/hosting/dungeon_child_host.py::ChildHost`（弹框/文件框走协议请父进程代答，见
-[宿主边界与可移植性](window_host.md) §7）。
+§6）。
 
 | 端口方法 | 用途 | Tk 实现 |
 |---|---|---|
@@ -370,10 +367,310 @@ DungeonSessionWindow(...).run()                      # 不传 = HostPort()，无
 
 注意：`dungeon/window/ui.py::_update_dpi_scale` 里仍有一处 Windows 平台代码
 （`FindWindowW` + `GetDpiForWindow`，运行期发现 DPI 变化后重算 `_dpi_scale`），
-属于 Win32 细节而非宿主端口范畴，是后续可选的清理项（迁移前它还与临时标题
-`_temp_title` 配套，后者已随 imgui 迁移删除）。
+属于 Win32 细节而非宿主端口范畴，是后续可选的清理项。
 
-## 6. 自检命令
+## 6. 宿主边界与进程隔离
+
+一句话：window 层不认识任何 UI 框架，宿主能力全部经端口索取；副本窗口是独立顶层窗口——
+**换宿主可以做，嵌入宿主布局做不到**。
+
+### 6.1 宿主端口：唯一的接触面
+
+| 项 | 现状 |
+|---|---|
+| 端口定义 | `dungeon/window/host.py::HostPort`（含无宿主的缺省实现） |
+| Tk 实现 | `ui/hosting/tk_host.py::TkHost`（自检/自动驾驶用；产品路径已改走子进程宿主） |
+| 子进程实现 | `ui/hosting/dungeon_child_host.py::ChildHost`——子进程内的宿主端口，宿主能力走协议请父进程代劳（§6.5） |
+| 端口方法表 | 本文 §5.2 |
+| 注入方式 | 父进程：`launch_dungeon_subprocess(...)`（`ui/hosting/dungeon_spawner.py`）；子进程内构造等价于 `DungeonSessionWindow(host=ChildHost(...), **deserialize_launch(payload))`；不传 host = `HostPort()`（无宿主，自检走这条路径） |
+| 守卫 | `tests/check_dungeon_layering.py`：`dungeon/window/*.py` 里出现 `tkinter` / `customtkinter` / `ui` 即失败 |
+
+换宿主要做的事只剩一件：**写一个新适配器**（尺寸/DPI、显隐、事件泵、弹框、活动窗口登记、字体、回放文件选择）。正因为 window 层不认 tkinter，`open_replay_file()` 里的 `json` 解析与 `filedialog` 必须住在适配器侧（`ui/hosting/tk_host.py`）。
+
+### 6.2 驱动方式：宿主循环里的同步窗口
+
+副本窗口**不**把宿主主循环交给库，而是由窗口自己的运行器
+`dungeon/window/runner.py::WindowRunner` 调 `hello_imgui.run(RunnerParams)`——它内部建
+GL 后端 / ImGui 上下文 / 视口并驱动帧循环，返回即全部释放。每帧顺序与关闭判定见 §2.2。
+
+由此得到的三条性质（都是现状）：
+
+| 性质 | 说明 |
+|---|---|
+| 宿主不冻结 | 帧回调每帧经端口 `pump_events()` 泵一次宿主事件（`on_frame_start`） |
+| 关闭不依赖平台 | 程序化关闭经 `_request_close()` → `runner.request_exit()` 置位，`before_imgui_render` 帧边界统一写 `app_shall_exit`（C1） |
+| 时间源唯一 | `FrameScheduler`（`self._frame`）是 window 层唯一的时间源；计时类逻辑用帧任务，不开线程 |
+
+产品路径里会话跑在独立子进程（§6.5），子进程内没有 Tk，窗口的宿主是 `ChildHost`——
+上述性质在子进程内同样成立（帧回调仍每帧泵一次「宿主事件」，只是那里是空操作）。
+
+### 6.3 换宿主：能；嵌入：不能
+
+| 说法 | 含义 | 结论 |
+|---|---|---|
+| **换宿主** | 换成 Qt / 其它框架 / 无框架脚本来「驱动」副本窗口：谁给主循环节拍、谁给尺寸与 DPI、谁弹对话框和文件选择框 | **能** |
+| **嵌入** | 把副本画面当控件塞进宿主布局（Qt 的 QWidget、Tk 的 Frame） | **不能** |
+
+驱动侧只依赖宿主「能处理一次挂起事件」这一个能力（经端口 `pump_events()`；无宿主就不泵）。
+帧节拍由窗口的运行器（`hello_imgui.run`）提供，宿主不必自带定时器——无宿主的 `HostPort()`
+就是把 `pump_events()` 做成空操作即可跑。因此任何能处理一次挂起事件的框架都能当宿主：
+
+| 宿主 | 需要实现的端口 |
+|---|---|
+| Tk（现状） | 宿主窗口显隐（控件本身若没有窗口级命令，退回 `winfo_toplevel()`——`CTkFrame` 的 `withdraw`/`deiconify` 是 `Wm` 的方法，直接拿控件显隐会**静默失效**）+ `winfo_*` + ctypes DPI + `ui.ctk.dialogs` |
+| Qt | `QWidget.hide/show` + `devicePixelRatioF()` + `QMessageBox` / `QFileDialog`（帧回调里调 `processEvents()` 泵宿主） |
+| 无框架脚本 / CI | 屏幕尺寸 + no-op + print（`HostPort()` 缺省实现即此） |
+| Web / 其它进程 | 做不到（渲染后端必须在本进程有 GLFW 窗口） |
+
+> 注意：副本 `run()` 是**同步阻塞**的。宿主的节拍是在调度回调里被**消费**的
+> （每次 `on_frame_start` 里 `pump_events()`）。`QTimer` 这类事件循环回调式节拍没法直接
+> 驱动它——要么继续用「循环内轮询」式（`processEvents()`），要么把会话挪到自己的线程 /
+> 子进程里跑（产品路径选的是后者，§6.5）。
+
+因此「迁移到 Qt」的真正工作量从来不在副本窗口（只需换 host 适配器），而在 `ui/` 那一整套面板。
+
+**嵌入为什么做不到**：imgui-bundle（`hello_imgui`）的窗口是**独立的 GLFW 顶层窗口**，
+公开 API 里没有把画面渲染进宿主某个控件句柄的入口。强行 `SetParent` 会被 GLFW 把父级
+改回去，最多做到「位置跟着宿主移动」的伪嵌入，不是控件级嵌入，跨平台更无从谈起。
+结论：**换框架时副本窗口仍然是一个浮在旁边的独立窗口**，这一点不会改变。
+
+### 6.4 明确不做的事
+
+| 不要 | 原因 |
+|---|---|
+| 同一进程里并发两个副本窗口 | 副本的 GL 上下文与视口都是进程级单例语义；`DungeonWindowBase._session_running` 是守门人（产品路径里会话本就在独立子进程，父进程不涉及） |
+| 在帧循环里 `join` 线程 | 会卡帧 |
+| 业务代码直接退出副本窗口 | 一律走 `_request_close()` → `runner.request_exit()`（只置位，帧边界落实，C1） |
+| 为「修挂死」堆看门狗 | Python 层定时器在渲染期间拿不到 GIL，超时兜底只能放父进程；真正卡住时 `os._exit` 与 `Stop-Process -Force` 都无效 |
+| 指望把副本窗口嵌入宿主布局 | 只能是独立顶层窗口（§6.3） |
+| 动 `dungeon/` 领域层 | 分层守卫守着；本层只在 `dungeon/window/` 与调用方之间动刀 |
+| 在父进程（Tk 主程序）里 import 副本窗口栈（`imgui_bundle`） | 父进程从不创建渲染后端上下文，副本窗口栈只该活在子进程里。父进程侧一切副本交互都经 `ui/hosting/dungeon_spawner.py` |
+
+### 6.5 进程隔离：会话子进程（现状）
+
+副本会话（`DungeonSessionWindow.run()` 的整个生命周期，即 Session）运行在**独立子进程**里。
+当初不做它的依据是「它唯一能治愈的症状（退出挂死）不存在」；但此后发现的同进程共存问题
+（C2 的 Tk 崩溃面、C12 的 `WM_QUIT` 残留、C14 的视口僵尸窗口、热切换兜底修复）让它的收益面
+被大幅低估——保活视口、残留清理、僵尸窗口销毁这一整套机器，全部只在描述「Tk 与副本渲染栈
+同进程」。拆进程后这些机制要么随子进程消失，要么退化为子进程内部的无害收尾。
+
+| 件 | 位置 | 职责 |
+|---|---|---|
+| 父进程侧 | `ui/hosting/dungeon_spawner.py` | 序列化构造参数（`dungeon/window/launch_payload.py`）→ `multiprocessing.Process` 拉起子进程 → 泵循环（`host_window.update()`）→ 代答协议请求 → 还原 `SessionResult`；会话期把句柄登记到 `app._active_dungeon_window`（老代码的「副本进行中」守卫与 `request_close()` 因此零改动） |
+| 子进程侧 | `ui/hosting/dungeon_child_host.py` | `ChildHost(HostPort)`：尺寸/弹框/回放文件框走协议请父进程代劳；管道断开（父进程死亡）即 `os._exit`，孤儿副本不会继续写 `data/` |
+| 线格式 | `dungeon/window/launch_payload.py` | 构造参数 dict ↔ 纯数据 dict 的往返（dataclass 落 `asdict`、宿主侧参数剔除）；`SessionResult` 的往返同文件。守卫：`tests/check_dungeon_launch_payload.py` |
+
+载荷里唯一与文件系统有关的是 `asset_root`：挑战包把方案素材解在方案目录之外
+（系统临时目录），子进程构造仓库时由 `_AssetBackedRepo` 包一层，让
+`asset_dir()` 指向该目录，其余转发真仓库（口径见 `docs/architecture.md` §2.9）。
+它只是路径字符串，不破坏「载荷全是纯数据」这条线格式约定。
+
+协议（`multiprocessing.Pipe` 双向，JSON 安全 dict）：子 → 父发
+`show_window` / `dialog` / `open_replay_file`（带请求 id）/ 最终 `result`；
+父 → 子发 `{"reply": id, "answer": ...}`（`open_replay_file` 的应答额外带
+`path`，供窗口从文件名认出方案）与 `{"req": "close"}`（父进程整体退出前请
+子进程走帧边界收尾）。子进程的弹框请求在父进程泵循环里用调用方自己的弹框实现
+代答（专业版 `ui.ctk.dialogs`、挂件版 `MiniDialogs`）——子进程内因此没有任何
+Tk 代码，`tests/check_mini_layering.py` 白名单放行 `dungeon_spawner` 的依据正是它
+模块级零 CTk 依赖。
+
+**DPI 感知**是进程级的、不随 multiprocessing 继承：子进程的感知档位镜像父进程
+（载荷 `dpi_aware` → 子进程 `_ensure_dpi_awareness`，档位与 CTk 相同的
+`shcore.SetProcessDpiAwareness(2)`）。父感知而子不感知，Windows 会把视口的
+96-DPI 逻辑坐标按系统缩放再放大一次（窗口与字体巨大）；父（挂件版）刻意无感知
+而子感知，视口会比主窗口小一圈。诊断：`scripts/child_dpi_probe.py`（拉两个子进程
+打印各自的 `GetDpiForSystem()` 与注册表 `AppliedDPI`，人工对照）。
+
+代价（真实存在，已接受）：构造参数必须跨进程序列化（线格式见上表）；角色在子进程里
+的改动（扣 AP、结局索引）由子进程直接写盘、父进程在会话结束后重载；每次开局有
+一次子进程解释器/导入的启动延迟。
+
+### 6.6 进程退出挂死（结论）
+
+跑完会话后进程可能在**退出阶段挂死**。已查明：这是**长时会话累积出的 OS/驱动级环境现象**，
+与本项目代码、与渲染后端、与驱动方式都无关（纯 Tk、不 import 副本窗口栈的进程同样复现，
+重启即消失；同一进程内连做 10 轮 create/destroy 也能干净退出，说明不累积在进程内）。
+
+因此：自检按「读输出判定 + 父进程超时兜底」（§7.3），默认**不**把退出码当失败信号；
+真遇到症状**先重启系统**再复现，不要改代码。复测退出路径时用
+`dungeon_autopilot.py --require-clean-exit`（重启后应全绿；它把「未自行干净退出」也判为
+失败）。父进程的等待是**硬超时**（读输出在独立线程里做，主线程按 deadline 轮询），
+子进程的结论行打印后立即 flush——「已通过但退出挂死」与「超时未出结论」因此可以
+分开汇报。
+
+## 7. 调试自动化
+
+**调试副本窗口能不能不靠人手点电脑？能，而且大部分已经做到。**
+已落地 `scripts/dungeon_autopilot.py`（GUI 冒烟：无人手点击、不联网、不碰真实 `data/`）。
+
+### 7.1 场景表
+
+基线实测（本机 Windows / imgui-bundle 1.92.900 / Python 3.13）：
+
+| 场景 | 覆盖 | 断言 |
+|---|---|---|
+| `chapter-bgm` | 章节背景音乐接线：起始章节起播 → 跳到无音乐章节停播 → 收尾收工（替身后端，自检不出声；真实后端由 `check_audio_chain.py` 探） | 7 项 |
+| `chapter-voice-fx` | 章节对话语音**物理**效果接线（她 / 其他人两档）：她那一档开分拍回声 → 其他人那一档只缓抖 → 叙述句不念也不进合成队列 → 跳到没配效果的章节清空 → 回放记录带 `voice_fx` → 收尾线程与临时音频收干净（假合成器不联网 + 替身后端不出声；假音频必然解不开，顺带验证「解不开也不拖垮朗读」） | 11 项 |
+| `dialogue-voice` | 带结构化说话人的对话语音接线：她 / 主角 / 配角分嗓子、叙述句与 `literary` 方案不念、语音总线拧到 0 一声不吭（连合成都省）、收尾收工与临时音频清理（假合成器不联网 + 替身后端不出声） | 9 项 |
+| `entry-cancel` | 探索模式入口页 → 中途读一次 `ui_snapshot()` 断言入口页状态 → 点「返回」 | 9 项 |
+| `entry-replay` | 入口页「加载回放」→ 取消一次 → 再选文件 → **同一窗口内**切回放（「取消那一刻仍停在入口页」也由快照断定） | 12 项 |
+| `entry-start` | 探索模式入口页 → 点「开始副本」→ 步进 → 关闭 | 8 项 |
+| `mini-game-escape` | `escape_giantess` 真覆盖层舞台：离屏画布 GL 纹理上传 + 每帧绘制指令 + ESC 中止 | 1 项 |
+| `mini-game-py` | 小游戏覆盖层舞台：打开 / 结算记返回值 / ESC 中止 | 1 项 |
+| `mini-game-repeat` | 可再次触发的小游戏：结算后回副本主页面（不原地重启）、后续步进可再进 | 1 项 |
+| `native-close` | 视口通过原生关闭键（X / `WM_CLOSE`）关闭：队列不得残留 `WM_QUIT`、收尾提示与宿主计时器不卡死 | 7 项 |
+| `native-input` | 真原生按键（`SendMessage` 直投 `WM_KEYDOWN`）落到窗口**自己的输入接线**上并在帧循环线程执行 | 6 项 |
+| `session-close` | 挑战模式直进会话 → 步进 → 中途读一次 `ui_snapshot()` → 关闭（含帧时钟 / 像素工作者收工、结果对象字段） | 20 项 |
+| `text-components` | 文本组件家族（`text_card` / `text_nvl`）接管显示的会话中途可见状态 + `text_component` 字段三选一与旧写法提升 + 覆盖层服务面（调出/阅读模态挂起/关闭恢复/兄弟组件只读访问）；`("check", fn)` 脚本动作在帧循环线程上断言 | 10 项 |
+| `tk-host` | 宿主换成真 Tk 根窗口（`TkHost` 适配器）：会话期间宿主心跳照跑 | 7 项 |
+
+**14 个场景共 109 项断言**（7 + 11 + 9 + 9 + 12 + 8 + 1 + 1 + 1 + 7 + 6 + 20 + 10 + 7），
+全部子进程**自行干净退出**（rc=0）。每个场景结束还会断言 **会话内无残留非 daemon 线程**
+（`threading.enumerate()` 为空）——这是帧时钟 + `PixelWorker` 的验收条件。
+单场景耗时数秒到二十几秒不等，全套（`--scene all`）几分钟量级。
+
+窗口状态一律经窗口自己的 **`ui.ui_snapshot()` 值快照**读取：立即模式没有 retained
+控件树，DPG 时代的内省探针已随迁移删除（它们在没有 DPG 上下文的进程里是 access
+violation，不是异常）。
+
+注意：官方组件包是窗口层常驻 Python 包 `dungeon/window/component_pack/`，随 registry
+正常导入，与 data_dir 重定向无关——autopilot **不需要**任何组件包注入。组件包本身由
+无 GUI 守卫 `check_component_pack.py` 覆盖；本脚本的 `text-components` 场景只负责真窗口
+里的接管可见状态。
+
+注入点：宿主能力（尺寸/DPI、显隐、事件泵、收尾弹框、回放文件选择）全部经
+`dungeon.window.host.HostPort` 注入，**不用打桩 `ui.ctk.dialogs`**——
+`ScriptedHost`（无宿主）与 `RecordingTkHost`（真 Tk 度量 + 记录弹框）就够了。
+
+### 7.2 覆盖范围与分层
+
+| 能自动化的 | 不能 / 不做 |
+|---|---|
+| 真窗口生命周期：构造 → `run()` → 步进 → 关闭 → 落盘 | **进程退出码**不能当验收条件（退出阶段可能挂死，是环境现象，§6.6） |
+| 收尾路径（`_finalize` 两条分支）、结果对象字段 | **视觉观感**（背景、字体 DPI、留白） |
+| 宿主心跳（会话期间宿主不被冻结） | **真机手感**（F11、拖 resize、高 DPI 首图时机） |
+| 回放切换（取消 / 选中两条分支） | **真实 AI 的输出质量** |
+| 会话结束后无残留非 daemon 线程 | 真实鼠标输入与拖 resize（键盘一侧已由 `native-input` 覆盖）、视觉回归（可选，优先级低） |
+
+| 层 | 覆盖什么 | 状态 |
+|---|---|---|
+| **L0 纯逻辑** | 收尾路径、原子写、schema、命名、分层 | 已有：`tests/check_*.py`，无 GUI，进 CI 门禁 |
+| **L1 无宿主自动驾驶** | 构造 → 运行 → 步进 → 关闭 → 落盘的完整生命周期 | 已落地：`scripts/dungeon_autopilot.py`，`parent=None` 直起运行器（无宿主 `HostPort`） |
+| **L2 Tk 宿主 + 自动驾驶** | 宿主在会话期间不被冻结 | 场景已落地（`tk-host`）；「进程是否退出」这一项**不能断言**（§6.6） |
+| **L3 真实输入事件** | 真实按键（`SendMessage(WM_KEYDOWN)` → GLFW → imgui 输入队列）、F11、resize | 部分落地：`native-input` 场景已覆盖键盘直投；鼠标/重排仍靠 `--check` 钩子与快照 |
+| **L4 视觉回归** | 布局 / 背景 / 字体 | 可选、优先级低（没有 headless 渲染，只能截屏比对或断言几何量） |
+
+L1 与 L0 的分工：L0 保证逻辑对，L1 保证「真窗口跑起来也是对的」——只有真窗口才会走的
+运行器起停（`hello_imgui.run()` 的 GL 上下文/窗口生命周期）、调度队列、后台线程与关闭路径的交互。
+
+### 7.3 命令与判定方式
+
+```bash
+python scripts/dungeon_autopilot.py                              # 全部场景（每场景一个子进程）
+python scripts/dungeon_autopilot.py --scene tk-host --isolate    # 单场景，子进程隔离
+python scripts/dungeon_autopilot.py --scene session-close --repeat 2 --isolate  # 同进程连开两轮
+python scripts/dungeon_autopilot.py --in-process                 # 当前进程内依次跑（快，但崩溃带走全部）
+```
+
+判定规则（默认**不要**把退出码当验收条件）：
+
+1. 控制台出现 `[dungeon_autopilot] PASSED n/n` 即通过；脚本自身会用 `report:` 行给出明细报告路径。
+2. 判定成败**看子进程打印的结论行，不看退出码**。结论行在子进程里打印后立即 flush（管道 stdout 是
+   块缓冲，默认 flush 排在解释器退出收尾的最后——退出挂死时结论行会困在缓冲里，父进程就会把
+   「已通过但退出挂死」误判成「超时未出结论」）。
+3. 每个场景开**子进程**（单场景用 `--isolate`）。读输出在父进程的独立线程里做，主线程按 deadline
+   轮询，所以超时是**硬超时**——子进程停止出字（如渲染占住 GIL）也吊不住父进程。读到结论行
+   后等 `EXIT_GRACE`（5s）宽限，仍不退出才 `kill()`（正常子进程在结论行后约 0.1s 就退出，这是加
+   宽限的原因）。
+4. 断言、退出码、退出方式（自行退出 / 超时未出结论 / 结论已出但退出挂死）**分开汇报**，默认只有
+   断言影响成败；`--require-clean-exit` 把「未自行干净退出」也判为失败（退出路径的环境复测用，
+   见 §6.6）。
+5. CI：GUI 冒烟层单独一个 job（需要显示器），不要并进无 GUI 的门禁。已落地为
+   `.github/workflows/gui-smoke.yml`（每晚 + 手动：`xvfb-run` + 软件 GL 跑
+   `dungeon_autopilot --scene all --isolate`、`smoke_mini`、`smoke_switch`，并带一个
+   Linux 打包自检 job）。
+
+### 7.4 长压测标准姿势：`--isolate` + 外层 watchdog
+
+反复开关窗口（`hello_imgui.run()` 每次拆建 GLFW 窗口 + GL 上下文）会暴露 imgui/GLFW 的低概率
+**原生**段错误（`SIGSEGV @ ImGui_ImplGlfw_WindowFocusCallback`，Python 层 `try/except` 捕不到）。
+这类问题只能靠「一轮一个子进程 + 外层统计退出码」抓：单轮跑在父进程里，一次崩溃就把整轮统计
+带走，永远得不到"20 轮里崩了几轮"。
+
+标准做法是**逐轮起子进程、按退出码分类**，别把 `--in-process` 用于压测：
+
+```bash
+# 现成脚本（developer_tools/，本地探针目录，不入库）：
+python developer_tools/_probe_stress.py smoke_switch 20                    # 默认：XInitThreads 生效
+GIANTESS_X11=0 python developer_tools/_probe_stress.py smoke_switch 20     # 对照组
+python developer_tools/_probe_stress.py autopilot 5 -- --scene all --isolate
+```
+
+它每轮打印 `rc` 与耗时，末尾汇总 `PASS / 非零退出 / 原生崩溃`——**负的 rc 就是信号**
+（`-11` = SIGSEGV）。等价的手工版本：
+
+```bash
+for i in $(seq 1 20); do
+  .venv/bin/python tests/smoke_switch.py >/dev/null 2>&1
+  echo "round=$i rc=$?"        # 139 = 128+11 段错误
+done
+```
+
+Linux 侧配合 `GIANTESS_X11=0` 做 XInitThreads 有效/无效对比（X11 boot 的机制见
+`docs/platforms.md` §2.2）。判定只看「跑完且没崩」，不看单轮断言——断言已由单轮标准跑覆盖。
+
+### 7.5 注入点清单（照抄即可）
+
+| 目的 | 做法 | 依据 |
+|---|---|---|
+| 不要 Tk 主窗口 | `DungeonSessionWindow(parent=None, ...)` | `base.py` 里 `self.parent` 的用法全部有 None / hasattr 守卫 |
+| 真 Tk 宿主 | `parent=tk.Tk()`（屏幕外 + 全透明） | `_pump_host_events` 只要求宿主有 `update()` |
+| 假 AI（不联网） | 打桩 `dungeon.window.base.create_client`，实现 `generate_stream` / `generate` | `base.py::_init_session` 用它建 `self.ai_client` |
+| 数据隔离 | 把 `paths.data_dir` 重定向到临时目录 | **必须在 import `dungeon.window.*` 之前**——那些模块用 `from paths import data_dir` 在导入时绑定函数对象 |
+| 屏蔽对话框 | **注入宿主端口**：`DungeonSessionWindow(..., host=ScriptedHost())` | window 层只经 `HostPort` 弹框；真模态窗需要 Tk 根窗口，自检里点了会挂住 |
+| 主线程操作 | 一律 `_frame.call(fn)`，后台线程绝不直接碰窗口/GL 状态 | 立即模式下窗口状态只在帧循环线程上变，§4 |
+| 关闭窗口 | `_close_loop()` → `_request_close()` → 帧边界落实（运行器收帧） | 业务代码不要自己停帧循环；`_request_close` 只置位 |
+| 脚本化动作 | `click / enter / cancel / replay / check / close / native-close / native-key / sleep`，见 `AutopilotWindow._run_script` | 本文配套脚本 |
+| 读窗口状态 | `win.ui_snapshot()`（值快照）或 `("check", fn)` 动作 | 立即模式没有 retained 控件树可内省 |
+
+```python
+import paths; paths.data_dir = lambda: tmp_data        # 先重定向，再导入窗口模块
+import dungeon.window.base as wbase
+wbase.create_client = lambda *a, **k: ScriptedAI()      # 脚本化 AI
+from dungeon.window.host import HostPort                # 宿主端口：弹框收进 calls
+
+class ScriptedHost(HostPort):
+    def dialog(self, kind, title, message):
+        self.calls.append((kind, title, message))
+
+class Auto(DungeonSessionWindow):
+    def _build_ui(self):
+        super()._build_ui()
+        threading.Thread(target=self._run_script, daemon=True).start()
+
+Auto(..., host=ScriptedHost()).run()
+```
+
+### 7.6 坑清单
+
+| 坑 | 现象 | 应对 |
+|---|---|---|
+| **退出阶段挂死（与渲染后端无关）** | 断言全部打印完毕、无残留非 daemon 线程，`sys.exit` 与 `os._exit` 都试过仍不退出（约 190MB 常驻）；卡点在 Python 之下，卡住后 `Stop-Process -Force` 也杀不掉 | 按 §7.3 的输出判定 + 父进程硬超时兜底；**不要**看退出码（复测退出路径用 `--require-clean-exit`）。根因见 §6.6——长时会话累积的环境现象，先重启系统 |
+| **Python 层看门狗无效** | 渲染循环期间 `threading.Timer` 可能拿不到 GIL，实测 40s 定时器根本没触发 | 超时只能由父进程兜底 |
+| **会话收尾别对旧宿主窗口动手** | DPG 时代 `destroy_context()` 之后对现场 Tk 根做窗口级命令（`destroy()` / `withdraw()`）会硬崩；imgui 侧 `run()` 之后销毁 Tk 根安全 | 自检里 `scene_tk_host` 仍**不销毁**它创建的根窗口（留在 `_KEEP_ALIVE_ROOTS` 里）——销毁与不销毁都安全，保留现状以免影响覆盖面 |
+| **自检里不要用真模态弹框** | `scene_tk_host` 用真 `TkHost`，收尾提示会弹真 CTk 模态框，没人点就一直等（实测 40s/90s 均超时） | 用 `RecordingTkHost(TkHost)`：尺寸/DPI/显隐/事件泵走真适配器，只把 `dialog()` 换成记录器 |
+| **需要显示器** | 没有 headless 渲染，窗口会真的出现 | 这是它属于 GUI 冒烟层、不进无 GUI CI 门禁的原因 |
+| **时序** | 固定 sleep 不稳 | 用轮询 / 条件等待；两次点击间隔 ≥ 0.4s（`_on_next_step` 节流）；窗口存活期间读状态要在 enqueue 的回调里读，构造返回后可以随便读 |
+| **假 AI 必须遵守解析契约** | 否则只测到「生成异常」那条路径 | 遵守 `dungeon/response.py` 的 `{"text", "direction", "custom_directions"}` |
+| **打桩的 `personality` 要补齐字段** | 缺 `sensitivity` / `normalized_strength` / `strategy_value` 时每一步 `_finish_step` 都抛异常，而故事**看上去还在正常出字** | 靠断言「回放记录是否增长」发现 |
+
+### 7.7 仍然需要人工的部分
+
+- **视觉观感**：背景裁切 / 淡入淡出、字体与 DPI 缩放、文本区留白、Ken Burns 运动幅度。
+- **真机交互手感**：F11 全屏、拖 resize 的重排效果、高 DPI 下的首图时机。
+- **真实 AI 的输出质量**：自动化只能保证「跑得通、状态推进正确、收尾正确」，不能保证「故事好看」。
+
+## 8. 自检命令
 
 | 改动范围 | 先跑 |
 |---|---|
@@ -388,27 +685,12 @@ DungeonSessionWindow(...).run()                      # 不传 = HostPort()，无
 | 收尾释放纹理 / 新增 `TextureGpu` 持有处 | `python tests/check_gpu_texture_lifetime.py`（C15 的机械可查部分，13 项断言）；真窗口收尾看 `scripts/dungeon_autopilot.py` 后退役仓库是否仍为 0 |
 | schema / 校验器 | `python tests/check_scenario_schema.py`；批量校验 `python scripts/scenario_validate.py --errors-only` |
 
-无 GUI 守卫（`check_dungeon_layering.py` / `check_dungeon_finalize.py` / `check_splitter.py` 等）+
-真窗口冒烟（`dungeon_autopilot.py`）才算绿。判定方式见 [调试自动化](window_automation.md) §4：**按子进程输出判定，不看退出码**
-（退出阶段可能挂死，已查明是环境现象而非代码缺陷，调查记录见
-[退出挂死调查](history/exit_hang_investigation.md)）。
+无 GUI 守卫（见 [副本引擎架构与术语](dungeon_engine.md) §9 的脚本索引）+
+真窗口冒烟（`dungeon_autopilot.py`）才算绿。判定方式见 §7.3：**按子进程输出判定，
+不看退出码**（退出阶段可能挂死，已查明是环境现象而非代码缺陷，§6.6）。
 
 其它提示：
 
 - 涉及关闭路径的改动**必须**在真实应用中手测（最小 imgui 脚本复现不了 Tk 宿主 + 完整线程栈的组合行为）。
 - 回放结束、入口返回、会话 X 关闭是三条独立路径，改 `_request_close` / `_on_close` / `_handle_exit` 时逐一回归。
 - 控制台出现 `流式任务执行异常: '...xxx' object has no attribute ...` 通常是 `_init_session` 没跑完（某属性缺失），先看完整 traceback 的第一个异常点。
-
----
-
-## 历史
-
-本文件只描述**现状**。以下档案记录窗口层是怎么变成现在这样的：
-
-| 档案 | 内容 |
-|---|---|
-| [imgui 迁移档案](history/imgui_migration.md) | 2026-10：Dear PyGui → imgui-bundle 的整体迁移（P0 可行性 → P8 清场），逐阶段取舍与验收 |
-| [宿主改造档案](history/host_refactor.md) | 手动渲染、构造/运行分离、宿主端口、帧时钟、结果对象化的全过程与验收 |
-| [退出挂死调查](history/exit_hang_investigation.md) | 进程退出挂死的复现矩阵与修正结论；`destroy_context()` 后碰 Tk 崩溃的实测（对应 C2） |
-
-约束 C1–C11 里若出现「以前…现在…」的表述，只用于说明**为什么**要这样写，不构成历史记录。

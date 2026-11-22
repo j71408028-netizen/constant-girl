@@ -3,8 +3,9 @@
 > 这个目录放的是**面向非特定读者**的说明文档。
 > 找东西先看下面两节：先按「我是什么身份」找去向，再看四条准入判据决定「新文档该不该放这」。
 >
-> `Dungeon/` 是仓库内的**副本子项目**入口（引擎核心 + 窗口运行时 + 宿主集成），
-> 不是普通功能页；同仓库、同版本，不单独发版。
+> 副本是仓库内的**逻辑子项目**（引擎核心 + 窗口运行时 + 宿主集成），
+> 不是普通功能页；同仓库、同版本，不单独发版，文档即
+> `dungeon_engine.md`（引擎）与 `dungeon_window.md`（窗口与自动化）。
 
 ## 什么能进这里
 
@@ -26,17 +27,17 @@
 |---|---|---|
 | 玩家 | [`../README.md`](../README.md)「快速开始」 | [`designs/README.md`](designs/README.md) |
 | 写界面文案 / 提示词 | [`terminology.md`](terminology.md) | [`designs/README.md`](designs/README.md) |
-| 在 Linux 上跑 | [`users/platforms/linux.md`](users/platforms/linux.md) | [`users/platforms/linux-history.md`](users/platforms/linux-history.md) |
-| 在 macOS 上跑 | [`users/platforms/macos.md`](users/platforms/macos.md) | 根 [`../README.md`](../README.md)「平台支持」 |
+| 在 Linux / macOS 上跑 | [`platforms.md`](platforms.md) | 根 [`../README.md`](../README.md)「平台支持」 |
 | 做资源包 / 世界包 / 小游戏 | [`designs/README.md`](designs/README.md) | [`designs/behaviors/dev-guide.md`](designs/behaviors/dev-guide.md) |
-| 写副本方案 / 改副本引擎 | [`Dungeon/README.md`](Dungeon/README.md)（子项目入口，按任务查表） | [`designs/dungeon/script.md`](designs/dungeon/script.md)、[`dev/architecture.md`](dev/architecture.md) |
-| 改代码 | [`dev/README.md`](dev/README.md) | [`dev/architecture.md`](dev/architecture.md) |
-| 发版 | [`ops/release.md`](ops/release.md) | [`ops/release.md`](ops/release.md) §9（v1.0.0 之后直接进 2.0 线） |
+| 写副本方案 / 改副本引擎 | [`designs/dungeon/script.md`](designs/dungeon/script.md)（方案作者）；[`dungeon_engine.md`](dungeon_engine.md)（改引擎） | [`dungeon_window.md`](dungeon_window.md)（改窗口） |
+| 改代码 | [`architecture.md`](architecture.md) | [`dungeon_engine.md`](dungeon_engine.md)（改副本时） |
+| 发版 | [`release.md`](release.md) | [`release.md`](release.md) §9（v1.0.0 之后直接进 2.0 线） |
 
 ## 约定
 
-1. 每个子目录都有自己的 README，进入后先看它。
-2. 现状文档只写「现在是什么」；历史放 `history/` 或 `legacy/`，只放**指针**，不展开叙述。
+1. 文档平铺在本目录，机制类收在 `designs/`；`designs/` 的 README 是它的组内入口。
+2. 现状文档只写「现在是什么」；历史不进仓库（蒸馏后留在 git 历史），现状文档里
+   只留结论，不展开叙述。
 3. `designs/` 按**机制目录式**组织：机制目录的 `README.md` 是全景页，细节页从那里
    进入；未拆分的机制仍是单篇，前半全景、后半开发事项（详见该组 README）。
 4. 新增文档前先过上面四条判据；跨组引用用相对链接，别复制正文。
