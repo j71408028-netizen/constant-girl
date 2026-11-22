@@ -100,7 +100,7 @@ def main():
               f"感知 {aware}——链路正常")
     else:
         print("[child_dpi_probe] 两档探针没拉开差距：确认子进程是否丢了"
-              " _ensure_dpi_awareness（对照 docs/Dungeon/window_host.md §3）")
+              " _ensure_dpi_awareness（对照 docs/dungeon_window.md §6.3）")
     return 0
 
 

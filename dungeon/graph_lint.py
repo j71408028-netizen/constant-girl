@@ -2,8 +2,7 @@
 
 ``validate.py`` 管的是**字段级**问题（某个键写错了、某个文件不存在）；这里管的是
 **结构级**问题——章节与触发器的依赖、可达性、跳转闭合、循环依赖。两者产出同一套
-``Diagnostic``，接入点也同一个（``validate_scenario_config``），口径与判据见
-``docs/Dungeon/scenario_graph.md`` §3。
+``Diagnostic``，接入点也同一个（``validate_scenario_config``）。
 
 **本模块不 import ``validate``**：它只产出 ``(level, path, message)`` 三元组，由
 ``validate.py`` 侧包成 ``Diagnostic``。这样避免
@@ -37,7 +36,7 @@
 - **同位置动作竞争不进校验器。** 运行时 ``ACTION_POSITIONS`` 同位置至多生效一个，
   严格判断「两条的条件会不会撞车」需要求解器、不可行；`graph.same_position_groups()`
   只把同位置同作用域的成员分好组，交给关系图对话框按位呈现（看得见，但不刷屏）。
-  本仓一贯的降噪口径：只有「无争议才报红」。详见 ``docs/Dungeon/scenario_graph.md`` §3.2。
+  本仓一贯的降噪口径：只有「无争议才报红」。
 """
 
 from dungeon.scenario_graph import (

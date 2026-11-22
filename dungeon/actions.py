@@ -114,7 +114,7 @@ def normalize_action_type(action_type, action_data: dict = None) -> str:
 # 动作类型的规范键 + 只读兼容的旧键（按序取第一个非空值）。三个键并存是历史包袱：
 # ``action_type`` 是运行时与编辑器一直在用的键，``action`` 是早期 schema 声明的键，
 # ``action_data["type"]`` 更早。三者同时出现时以 ``action_type`` 为准——运行时
-# 从来按它执行，另两个只是兼容。见 docs/designs/dungeon/script.md §4。
+# 从来按它执行，另两个只是兼容。
 ACTION_TYPE_KEYS = ("action_type", "action")
 
 

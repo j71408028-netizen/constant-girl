@@ -5,7 +5,7 @@
 ``dungeon.script_text`` 的同一套解析给出段落数、每段的指令与校验警告，
 让作者在编辑器里就能看见「哪一段会演化、哪一段不会」。
 
-格式说明（逻辑段落 / 指令行）见 ``docs/Dungeon/script.md``。
+正文格式（逻辑段落 / 指令行）以 ``dungeon.script_text`` 的解析口径为准。
 """
 
 import tkinter as tk

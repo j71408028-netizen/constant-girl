@@ -1,11 +1,13 @@
 """校验全仓 Markdown 相对链接与 `docs/...` 字符串引用是否指向存在的文件。
 
+校验对象：``.md`` 里的相对链接与 ``docs/...md`` 字符串；``.py`` / ``.yml`` /
+``.yaml`` 里以字符串写死的 ``docs/...md`` 路径（同一套存在性规则）。
+
 **大小写必须是精确匹配**——这是本守卫的核心约束，不是顺手加的严格性。Windows /
-macOS 的文件系统不区分大小写，``Path.exists()`` 对 ``docs/Releases/`` 和
-``docs/releases/`` 会给同一个答案；Ubuntu 区分，两者是**两个目录**。只按
-``exists()`` 判会导致「本机全绿、CI 全红」：曾有一版把目录提交成 ``docs/Releases/``
-（大写 R），而三处引用写成 ``docs/releases/``，Windows 上检查通过、Ubuntu 上报
-3 处失效引用。
+macOS 的文件系统不区分大小写，``Path.exists()`` 对只有大小写之差的两条路径会给
+同一个答案；Ubuntu 区分，两者是**两个文件**。只按 ``exists()`` 判会导致「本机全绿、
+CI 全红」：引用里的大小写与真实文件名不一致时，Windows 上检查通过、Ubuntu 上
+报失效引用。
 
 因此这里不直接用 ``exists()``，而是逐段比对**真实目录项的名字**（``os.listdir``），
 在 Windows 上也能复现 Linux 的判定。跨平台共享的路径一律用全小写。
@@ -28,6 +30,9 @@ DESIGN_ROOT = ROOT / 'docs' / 'designs'
 #: 正式文档不得提及的本地内容。AGENTS.md 是本地导览本身，豁免。
 LOCAL_ONLY = re.compile(r'\.workbuddy(?:/|\b)|AGENTS\.md')
 LOCAL_GUIDE = ROOT / 'AGENTS.md'
+#: designs/ 与代码**单向引用**：代码文件里禁止出现 designs 页路径
+#: （机制页引用代码符号；代码注释自述「这是什么机制的哪一部分」）
+DESIGN_REF = re.compile(r'docs/designs/[\w/\-]+\.md')
 
 
 def _resolve_exact(start: pathlib.Path, target: str) -> str | None:
@@ -89,6 +94,27 @@ for p in ROOT.rglob('*.md'):
             why = _resolve_exact(ROOT, m.group(0))
             if why:
                 bad.append(f'{p.relative_to(ROOT)}:{i} 路径失效 -> {m.group(0)}（{why}）')
+
+# 代码 / 工作流文件：docs 路径字符串校验存在性；designs 页路径一律禁止（单向引用）
+for suffix in ('.py', '.yml', '.yaml'):
+    for p in ROOT.rglob('*' + suffix):
+        parts = set(p.parts)
+        if SKIP & parts:
+            # build/release/ 是打包器源码，照扫；其余 build/（PyInstaller 中间产物）跳过
+            if 'build' not in parts or 'release' not in parts:
+                continue
+        if any(part.startswith(VIRTUALENV_PREFIXES) for part in p.parts):
+            continue
+        for i, line in enumerate(p.read_text('utf-8', 'replace').splitlines(), 1):
+            for m in PATHISH.finditer(line):
+                t = m.group(0)
+                if DESIGN_REF.fullmatch(t):
+                    bad.append(f'{p.relative_to(ROOT)}:{i} 代码指向 designs 页 -> {t}'
+                               f'（designs 与代码单向引用：机制页引代码，代码注释自述机制与部位）')
+                    continue
+                why = _resolve_exact(ROOT, t)
+                if why:
+                    bad.append(f'{p.relative_to(ROOT)}:{i} 路径失效 -> {t}（{why}）')
 
 for b in bad:
     print(b)

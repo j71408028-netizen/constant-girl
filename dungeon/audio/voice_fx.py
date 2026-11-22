@@ -407,7 +407,7 @@ def playback_trim(spec) -> float:
 
     零依赖那条路抬不起响度（峰值就是原声），只能表达「比原声轻多少」；
     目标 ≥ 0 时不衰减（留在该引擎的自然上限）。于是两个引擎的**相对**摆幅
-    一致，绝对锚点差一个常数——见 ``docs/Dungeon/script.md``。
+    一致，绝对锚点差一个常数（响度目标按预设声明值对齐）。
     """
     target = loudness_target(spec)
     if target >= 0:

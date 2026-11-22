@@ -1,6 +1,6 @@
 """回放记录的语法：分类、归一与容错解析（纯领域层：无 IO / UI / AI）。
 
-回放文件是一串记录，几种形态（写在哪见 ``docs/designs/dungeon/script.md`` §9.3）：
+回放文件是一串记录，几种形态：
 
 - **步进**（无 ``kind``）：一个逻辑段落的正文与它前后的状态快照；正文存净文本，
   原文带显示层标记时另存 ``display_text``（回放要靠它还原说话人与高亮）；
@@ -472,7 +472,7 @@ def _chapter_fragment(record: ChapterRecord) -> dict:
 
 def _trigger_fragment(record: TriggerRecord) -> dict:
     # 只写规范键：``action`` 已由 scenario_repo._migrate 单向并入 ``action_type``，
-    # 同一语义不再写两份（见 docs/designs/dungeon/script.md §4）
+    # 同一语义不再写两份（规范键定义见 ``dungeon.actions.ACTION_TYPE_KEYS``）
     return {
         "name": record.name,
         "action_type": record.action_type,

@@ -594,8 +594,7 @@ class TriggerHandler:
 
         选项与小游戏在实时是弹窗 / 独立界面，回放不弹窗，改在故事区补一行
         「【选择】…」/「【小游戏】…」。这一行只活在回放显示层：不写进记录，
-        也不参与「回放 → 配置」的反向改写（见 ``docs/designs/dungeon/script.md``
-        §9.3）。
+        也不参与「回放 → 配置」的反向改写。
         """
         action_type = record.action_type
         action_data = record.action_data

@@ -220,9 +220,9 @@ def validate_scenario_config(config, *, scenario_dir: str = None) -> list:
 
     # 结构级检查：章节与触发器之间的关系（依赖、可达性、跳转闭合、同位置动作竞争、
     # 循环依赖）。与上面那些字段级规则共用同一份诊断列表、同一个接入点——保存方案、
-    # 启动副本前、离线批量校验三处自动都覆盖到。判据见
-    # docs/designs/dungeon/script.md §9.1（可达性一律走「乐观」的章节口径，且只报
-    # warning：创作期短接、暂不接入实验性章节都不该拦住进入副本）。
+    # 启动副本前、离线批量校验三处自动都覆盖到。规则与口径见 ``dungeon.graph_lint``：
+    # 可达性一律走「乐观」的章节口径，只报 warning——创作期短接、暂不接入实验性
+    # 章节都不该拦住进入副本。
     for level, path, message in lint_graph(build_graph(config)):
         add(level, path, message)
 
@@ -237,7 +237,7 @@ def validate_scenario_config(config, *, scenario_dir: str = None) -> list:
     # 结局可达性：没有结束章节 = 永远无法正常收尾（旧版「结局」触发器已退场，
     # 运行时直接跳过，不再算结局路径）。作者用 ``ending_policy: "open"`` 明确
     # 声明"本方案就是开放式"时不提示——让 info 永远挂着的做法等于把设计选择
-    # 报成缺陷（见 docs/users/platforms/linux.md 附录A §2.2）。
+    # 报成缺陷。
     ending_policy = schema.normalize_ending_policy(config.get("ending_policy"))
     if not terminating and ending_policy != "open":
         add("info", "", "方案没有任何结局路径（无结束章节）："
@@ -945,7 +945,7 @@ _PRIVATE_NAME_RE = re.compile(r"^(\*|[A-Za-z0-9_]{0,64})$")
 
 
 def _validate_scene(config: dict, chapters, add) -> None:
-    """章节独特地标与常见地标私有名（见 ``docs/designs/dungeon/scene.md`` §9）。
+    """章节独特地标与常见地标私有名。
 
     运行时对写坏的一条是「跳过 / 回落默认 / 当没填处理」，全部不吭声；作者要能
     从诊断里知道哪一条没生效。方案级 ``scene_landmarks`` 与章节级 ``landmarks``

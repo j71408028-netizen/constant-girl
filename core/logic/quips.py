@@ -4,8 +4,8 @@
 副本提示词（换算句 / 在场对比 / 部位对比）与报告引擎共用，留在 core。
 描述（quip）专属的标签与选句机制已迁 ``services/exploration/quips.py``。
 
-``@behavior_hook`` 的 scope ``"logic"`` 是已部署行为包的公开契约，与文件位置无关，
-不得改动（见 ``docs/designs/behaviors/hooks-logic.md``）。
+``@behavior_hook`` 的 scope ``"logic"`` 是已部署行为包的公开契约：行为包按
+字面量 key（``logic.<名称>``）引用钩子，与文件位置无关，不得改名或改语义。
 """
 
 import random

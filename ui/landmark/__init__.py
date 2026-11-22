@@ -107,7 +107,7 @@ class LandmarkCardManager(CardManager):
             self, "地标风格注册地址",
             description=(
                 "注册该地标风格所在的地址。只能选择已申领的地址"
-                "（详见 docs/designs/address-system/authoring.md）。\n"
+                "。\n"
                 "当前风格：" + self._style_display_name(style)
             ),
             initial=current, landmark_style=True)

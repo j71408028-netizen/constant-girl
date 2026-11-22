@@ -185,7 +185,7 @@ data/
 - 提交前跑 `python tests/run_checks.py`（离线，不需要显示器）；改动涉及窗口的再追加 `--smoke`
 - 提交信息用约定式提交：`<type>(<scope>): <subject>`，正文用中文
 
-想读更多：[文档总入口](docs/README.md) 按读者分流；演化公式见[角色演化模型](docs/designs/character/evolution.md)；发版流程见[发布与打包](docs/release.md)。
+想读更多：[文档总入口](docs/README.md) 按读者分流；面向玩家和资源作者的指南从[机制全景](docs/designs/README.md)进入。
 
 ## 许可证与声明
 

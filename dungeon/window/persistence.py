@@ -165,7 +165,7 @@ class DungeonPersistence:
                 pass
 
         char = self.character
-        # 结局传送：副本改写主世界位置的唯一入口（见 docs/designs/dungeon/scene.md §8）。
+        # 结局传送：副本改写主世界位置的唯一入口。
         # 空 / 解不出的地址一律不动位置——那是绝大多数结局的默认行为。
         exit_position = landing_position(effects.get("exit_address"))
         if char is not None:

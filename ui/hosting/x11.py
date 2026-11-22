@@ -116,7 +116,7 @@ def init_x_threads() -> bool:
     必须在 ``tkinter`` / ``customtkinter`` / 副本窗口 GL 栈首次建立连接之前执行。
     调用点放晚了 libX11 不会报错，但那时它已经按单线程模式跑起来，加锁不再生效——
     本函数**无法**检测"已经开过连接"，只能靠调用点自律（各入口文件顶部都写了注释，
-    见 docs/users/platforms/linux.md §3）。
+    见 docs/platforms.md §2.2）。
 
     非 Linux 或 ``GIANTESS_X11=0`` 时返回 False（平台不适用，不是故障）；libX11
     加载不出来时也返回 False，绝不让引导步骤挡住启动。
@@ -543,7 +543,7 @@ def install_x11_error_guard() -> bool:
     - 其它错误码：**照样返回 0（不退出进程），但每次大声记录**。这里不转发给
       Xlib 默认处理器——那个处理器是 ``_XError``，转发等于让进程退出，而段错误
       压测的价值恰在于「跑完并留下证据」。要恢复默认行为就删掉本函数的所有
-      调用点（风险登记见 docs/users/platforms/linux.md 附录A §5）。
+      调用点（压测口径见 docs/dungeon_window.md §7.4）。
 
     重复调用会重新覆盖当前处理器，防止后续 GL/窗口生命周期把它换掉。
     """

@@ -1029,8 +1029,7 @@ class ScenarioEditor(ctk.CTkFrame):
         dialog = AddressTextDialog(
             self, "副本入口地址（主世界）",
             description=("入口是主世界里的一扇门：角色有地址时，进入副本需要与这里选择的"
-                         "地址满足距离上限，只能选择已申领的地址（详见 "
-                         "docs/designs/address-system/authoring.md）；点「消除」表示不做地址准入。"
+                         "地址满足距离上限，只能选择已申领的地址；点「消除」表示不做地址准入。"
                          "它与副本内章节的取景地址无关。"),
             initial=self.entry_address, allow_empty=True)
         if dialog.result is None:

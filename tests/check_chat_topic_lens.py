@@ -1,4 +1,4 @@
-"""话题类型的"存档 → 提示词翻译器"守卫（docs/designs/chat_topic_lens.md）。
+"""话题类型的"存档 → 提示词翻译器"守卫（``services.chat.topic_lens``）。
 
 验证五件事：
 

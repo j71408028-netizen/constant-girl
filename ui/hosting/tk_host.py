@@ -164,7 +164,7 @@ class TkHost(HostPort):
 
         只在**本进程加载过副本窗口栈**（``dungeon.window.ui``）时才装：普通挂件 /
         专业模式从不碰副本窗口，没必要为它们扩大 X 错误处理范围；副本窗口跑在
-        独立子进程里时父进程也不会加载它（见 [宿主边界](../../docs/Dungeon/window_host.md) §7）。
+        独立子进程里时父进程也不会加载它（见 [宿主边界](../../docs/dungeon_window.md) §6.5）。
         实现见 ``ui.hosting.x11.install_x11_error_guard``。
         """
         if not sys.platform.startswith("linux"):

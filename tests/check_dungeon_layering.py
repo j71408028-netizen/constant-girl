@@ -15,7 +15,7 @@
 ``services``，但**不允许** ``tkinter`` / ``customtkinter`` / ``ui.*``：宿主能力（尺寸/DPI、
 显隐、事件泵、弹框、字体、活动窗口登记）一律经 ``dungeon.window.host.HostPort``
 端口取得，Tk 相关实现只存在于 ``ui/hosting/tk_host.py``（L2，见
-docs/Dungeon/window_host.md §3）。
+docs/dungeon_window.md §6.3）。
 
 领域层需要的外部行为一律由调用方注入，典型例子见 ``dungeon/rules.py``：
 ``EvolutionRules(depth_decay=...)`` 由 ``window/base.py`` 传入

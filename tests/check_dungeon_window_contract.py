@@ -2,7 +2,7 @@
 
 用法：``python tests/check_dungeon_window_contract.py``
 
-文档（docs/Dungeon/window.md §5 约束清单）写明的规则，过去只能靠 AI/人记得；
+文档（docs/dungeon_window.md §5 约束清单）写明的规则，过去只能靠 AI/人记得；
 本脚本把其中**机械可查**的几条变成 AST 检查，让误写在真窗口跑起来之前就失败：
 
 **A. 线程纪律**

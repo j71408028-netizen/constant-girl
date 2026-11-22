@@ -360,7 +360,7 @@ BUILTIN_EVOLUTION_ATTRS = ("intrusion", "destruction", "casualty")
 
 # 归属：这一项量是谁的。它是**分组键，不是数值来源**——介入度/破坏性/总伤亡仍然
 # 由 DungeonState 唯一持有，归属只决定它在编辑器里归到哪个角色、提示词怎么解释
-# 它的来处，以及日后组件按归属取用（见 docs/Dungeon/script.md §4）。
+# 它的来处，以及日后组件按归属取用（取值见下方 ``EVOLUTION_OWNERS``）。
 EVOLUTION_OWNERS = ("her", "protagonist", "environment", "other")
 EVOLUTION_OWNER_LABELS = {
     "her": "她",

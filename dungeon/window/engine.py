@@ -816,7 +816,7 @@ class DungeonStoryEngine:
             "action_points_refund": chapter.get("action_points_refund", 0),
             "custom_deltas": dict(chapter.get("custom_deltas") or {}),
             "icon_path": chapter.get("icon_path", ""),
-            # 结局决定她出来后站在哪（见 docs/designs/dungeon/scene.md §8）
+            # 结局决定她出来后站在哪（结局传送是副本改写主世界位置的唯一入口）
             "exit_address": chapter.get("exit_address", ""),
         }
         self.pending_ending = {"name": name, "effects": effects,

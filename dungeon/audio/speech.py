@@ -702,7 +702,7 @@ class SpeechDirector:
         响度：渲染路线的响度**烘进样本**（``voice_fx`` 按预设声明值对齐），所以
         播它时音量恒为 1.0；播放侧近似抬不起响度，只能按
         :func:`voice_fx.playback_trim` 做**衰减**——两条例子的相对摆幅因此一致，
-        绝对锚点差一个常数（见 ``docs/Dungeon/script.md``）。
+        绝对锚点差一个常数（响度目标由 ``voice_fx`` 预设声明）。
         """
         self._close_track()
         # 音量走总线：内容档位（方案 voice.level）→ 最终线性增益。

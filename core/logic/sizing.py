@@ -1,8 +1,8 @@
 """尺寸与常量：部位清单、大小类别、尺寸格式化与单位标签。
 
 自 ``core/logic.py`` 按职责拆出（原文件现为薄壳 ``core/logic/__init__.py``）。
-``@behavior_hook`` 的 scope ``"logic"`` 是已部署行为包的公开契约，与文件位置无关，
-不得改动（见 ``docs/designs/behaviors/hooks-logic.md``）。
+``@behavior_hook`` 的 scope ``"logic"`` 是已部署行为包的公开契约：行为包按
+字面量 key（``logic.<名称>``）引用钩子，与文件位置无关，不得改名或改语义。
 """
 
 from core.behavior_runtime import behavior_hook

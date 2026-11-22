@@ -1,6 +1,6 @@
 """角色聊天服务：上下文组装、非流式 AI 调用、响应解析与属性写回。
 
-协议要点（对应 docs/dev/chat_delivery.md）：
+协议要点（对应 docs/chat_delivery.md）：
 - AI 严格输出 JSON：messages（1~4 条，一次可发多条消息）/ silent_reason /
   ops / identity_update / effect / nick / memory_note；messages 缺失时回退
   读旧协议的 reply；
@@ -13,17 +13,17 @@
 - 消息生命周期：角色回复一律以 status="queued" 入列并按在线档排定
   available_at，由投递调度器（services.chat.delivery）到点提升为
   delivered，玩家读到后再标记 read——AI 已生成 ≠ 已送达 ≠ 玩家已读；
-- 话题状态机（阶段三）：AI 通过协议里的 topic.action
+- 话题状态机（docs/chat_delivery.md §9）：AI 通过协议里的 topic.action
   （continue/start/switch/end）自主开启、切换与结束话题；服务层注入
   当前话题上下文，并施加硬约束（最大轮数、超时收束、容量截断）；
-- 话题类型（阶段三）：开题/切换时按三轴坐标（好感/紧张度/状态）筛选候选
+- 话题类型（docs/chat_delivery.md §9）：开题/切换时按三轴坐标（好感/紧张度/状态）筛选候选
   类型（services.chat.topic_kinds），只把定性状态、类型名与候选 id 给 AI；
   AI 可在候选里选择，非法/太远回退第一个候选，坐标快照存进 Topic.coord；
 - 信息视角（2026-10 调整）：话题类型同时是"存档 → 提示词"的翻译器
   （services.chat.topic_lens）。系统提示词只含最小身份层（public 字段），
   其余存档内容必须由当前类型的视角开放、且装进该视角的字符预算才会出现；
-  每次渲染产出 LensTrace 供自检/预览审计。设计见 docs/designs/chat_topic_lens.md；
-- 离线恢复统一入口 reconcile（阶段四）：打开聊天时合并处理回复积压、
+  每次渲染产出 LensTrace 供自检/预览审计；
+- 离线恢复统一入口 reconcile（docs/chat_delivery.md §10）：打开聊天时合并处理回复积压、
   未消费的经历事件（新闻/位置/演化/结局，见 services.chat.experience_events）
   与主动搭话——一次 AI 决策，或回应、或开题、或沉默；成功后才标记
   已读与消费事件，失败保持原状下次继续；

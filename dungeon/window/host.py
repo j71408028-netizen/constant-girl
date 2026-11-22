@@ -26,7 +26,7 @@
 - ``ui.hosting.tk_host.TkHost`` —— 当前 Tk/CTk 主程序（唯一真实宿主）。
 
 换框架时只需再写一个适配器，window 层一行不用改；具体见
-``docs/Dungeon/window_host.md`` §5.1/§3（L2）。
+``docs/dungeon_window.md`` §6.3。
 """
 
 import sys

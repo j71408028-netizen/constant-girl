@@ -318,7 +318,7 @@ def _install_hang_watchdog() -> bool:
     """按环境变量开启 faulthandler 定时转储：卡死时留下那一刻的线程栈。
 
     本项目真出过「代码里复现不了、只在长时会话里偶发」的挂死，结论是
-    OS/驱动级环境现象（见 ``docs/Dungeon/history/exit_hang_investigation.md``）。
+    OS/驱动级环境现象（见 ``docs/dungeon_window.md`` §6.6）。
     这类问题**唯一有价值的证据就是卡住那一刻的线程栈**，而它平时拿不到
     （DPG 帧循环期间 Python 层看门狗常常拿不到 GIL，``threading.Timer``
     实测根本不触发）。所以这里挂一个可选的原生转储：
