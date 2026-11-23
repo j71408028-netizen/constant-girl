@@ -1,15 +1,17 @@
 {
   "schema": "gg.landmarks/1",
   "id": "chinese_mix",
-  "title": "",
-  "author": "",
+  "title": "中国地标",
+  "author": "XiaoCui",
   "namespace": "",
-  "version": "0.0.0",
+  "version": "2.0.0 beta",
   "content_hash": "sha256:5bbfd65b8271cc17b06ea5cd547356c352bd13c5b9d84765f7d85297ef11989c",
   "updated_at": "2026-11-24T00:02:09",
-  "source": {},
-  "status": "draft",
+  "source": {
+    "kind": "local"
+  },
+  "status": "stable",
   "tags": [],
   "traits": [],
-  "language": ""
+  "language": "zh-CN"
 }

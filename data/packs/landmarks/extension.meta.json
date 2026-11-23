@@ -1,15 +1,17 @@
 {
   "schema": "gg.landmarks/1",
   "id": "extension",
-  "title": "",
-  "author": "",
+  "title": "极大尺度参照物",
+  "author": "XiaoCui",
   "namespace": "",
-  "version": "0.0.0",
+  "version": "2.0.0 beta",
   "content_hash": "sha256:dc48d713a185adbd83ee8a8118dcd12e624ea1b914af98555c55c36b87f5d2cb",
   "updated_at": "2026-11-24T00:02:09",
-  "source": {},
-  "status": "draft",
+  "source": {
+    "kind": "local"
+  },
+  "status": "stable",
   "tags": [],
   "traits": [],
-  "language": ""
+  "language": "zh-CN"
 }

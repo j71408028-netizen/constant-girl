@@ -4,9 +4,9 @@
   "title": "回稳会志",
   "author": "XiaoCui",
   "namespace": "",
-  "version": "1.0",
-  "content_hash": "sha256:b5f8b0299cd46cc5b98af92bec3f4abb1e25c1cce02d92be9c1b0f847a396ae8",
-  "updated_at": "2026-11-20T19:39:37+08:00",
+  "version": "2.0.0 beta",
+  "content_hash": "sha256:ad532887a068bb72d18841a35deb72d412404fe8490322b983cf72e70a67c712",
+  "updated_at": "2026-11-24T01:04:56",
   "source": {
     "kind": "local"
   },

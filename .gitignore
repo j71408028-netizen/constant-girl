@@ -73,5 +73,15 @@ tempCodeRunnerFile.py
 !/data/packs/scenarios/default.meta.json
 # 放行目录内部仍按通用规则过滤（*.bak / *.tmp 见上）
 /data/packs/scenarios/default/config.json.bak
+
+# 地标风格：只有官方两包入库（chinese_mix 是中国地标主体，extension 是极大尺度参照），
+# 其余是各人的自建风格，留在本地
+/data/packs/landmarks/*
+!/data/packs/landmarks/chinese_mix.csv
+!/data/packs/landmarks/chinese_mix.addr.json
+!/data/packs/landmarks/chinese_mix.meta.json
+!/data/packs/landmarks/extension.csv
+!/data/packs/landmarks/extension.meta.json
+
 # 迁移脚本的一次性回滚备份（整目录拷贝）
 /data.rollback-*/
