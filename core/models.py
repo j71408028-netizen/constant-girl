@@ -18,6 +18,10 @@ class Landmark:
     # "inherit" = 继承风格、 "portable" = 不参与地址规则、
     # "exact"/"relative" = 使用 address 字段。
     address_mode: str = ""
+    # 可破坏性："" = 缺省（独特地标可破坏、常见地标本就没有耐久）；
+    # "no" = 不可破坏——耐久恒为 1.0，既不会被标「残破」，也不会因耐久耗尽
+    # 退出候选。这是叙事权限，与地址、措辞无关。
+    destructible: str = ""
 
     def __post_init__(self):
         if self.dimension == "horizontal" and self.horizontal_type is None:
@@ -38,6 +42,32 @@ def is_valid_landmark_size(value) -> bool:
     except (TypeError, ValueError):
         return False
     return math.isfinite(size) and size > 0
+
+
+#: `destructible` 的「不可破坏」取值（空为缺省）。CSV 由人手填，做大小写与
+#: 中英文两种写法的归一，避免「No」「不可破坏」被静默当成缺省。
+_INDESTRUCTIBLE_VALUES = ("no", "false", "0", "off", "否", "不", "不可破坏")
+
+
+def is_indestructible(landmark) -> bool:
+    """地标是否声明为不可破坏（叙事要求它永远完整）。"""
+    value = getattr(landmark, "destructible", "") or ""
+    return str(value).strip().lower() in _INDESTRUCTIBLE_VALUES
+
+
+def durability_of(table, key: str, landmark) -> float:
+    """地标当前耐久：不可破坏的地标恒为 1.0。
+
+    读侧统一走这里，而不是各处直接查表——作者事后把某条改成不可破坏时，
+    旧存档里已经扣到 0.5 以下的记录必须立刻失效，否则它会永远停在「残破
+    且不入选」，既修不回来也进不了报告。
+    """
+    if is_indestructible(landmark):
+        return 1.0
+    try:
+        return float((table or {}).get(key, 1.0))
+    except (TypeError, ValueError):
+        return 1.0
 
 
 @dataclass

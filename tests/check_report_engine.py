@@ -2,9 +2,9 @@
 """报告引擎参数自检：``report.model.*`` 常量钩子的默认与覆盖。
 
 用法：``python tests/check_report_engine.py``
-只覆盖纯公式（突破概率 / 耐久伤害 / 残破阈值 / 无事件兜底），不建窗口、
-不联网、不跑完整报告生成。断言锁公式形状，不锁世界观调参——改默认值
-不应误报，改公式形状必须先改这里的预期。
+只覆盖纯公式（突破概率 / 耐久伤害 / 残破阈值 / 不可破坏的耐久读数 / 无事件
+兜底），不建窗口、不联网、不跑完整报告生成。断言锁公式形状，不锁世界观调参
+——改默认值不应误报，改公式形状必须先改这里的预期。
 """
 
 import os
@@ -58,6 +58,23 @@ check("无事件兜底默认 0.05 / 0.3",
       _close(_RUNTIME.resolve_value("report.model.step_fallback"), 0.05)
       and _close(_RUNTIME.resolve_value("report.model.env_factor_fallback"),
                  0.3))
+
+# ---------------- 1b. 不可破坏：标记与耐久读数 ----------------
+from core.models import Landmark, durability_of, is_indestructible  # noqa: E402
+
+_earth = Landmark("地球", 12742000, "horizontal", "unique", destructible="no")
+_bridge = Landmark("杭州湾跨海大桥", 36000, "horizontal", "unique")
+check("destructible=no 识别为不可破坏，缺省不算",
+      is_indestructible(_earth) and not is_indestructible(_bridge))
+check("不可破坏的地标耐久恒为 1.0（旧存档里扣过的记录一并失效）",
+      durability_of({"landmarks:x/地球": 0.2}, "landmarks:x/地球", _earth) == 1.0)
+check("可破坏的地标按表读数，缺省 1.0",
+      _close(durability_of({"k": 0.4}, "k", _bridge), 0.4)
+      and durability_of({}, "k", _bridge) == 1.0)
+check("写作 no / NO / 否 / 0 都算不可破坏",
+      all(is_indestructible(Landmark("x", 1, "vertical", "unique",
+                                     destructible=v))
+          for v in ("no", "NO", " 否 ", "0")))
 
 # ---------------- 2. 常量覆盖生效 ----------------
 try:

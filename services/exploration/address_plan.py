@@ -18,6 +18,7 @@ S3 之后地址解析本身也搬走了：``AddressIndex`` 一次性把每条地
 from dataclasses import replace
 
 from core.address_model import compose_address_ex, world_of
+from core.models import durability_of
 from services.exploration.address_index import AddressIndex
 
 
@@ -135,8 +136,8 @@ class AddressPlanner:
             if not addr:
                 continue
             if lm.frequency == "unique":
-                # 耐久低于 0.5 的独特地标已不适合作落脚点
-                if durability.get(self.durability_key(lm), 1.0) < 0.5:
+                # 耐久低于 0.5 的独特地标已不适合作落脚点（不可破坏的恒为完好）
+                if durability_of(durability, self.durability_key(lm), lm) < 0.5:
                     continue
             if addr not in seen:
                 seen[addr] = lm.name

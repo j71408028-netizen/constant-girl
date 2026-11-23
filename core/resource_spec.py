@@ -215,6 +215,9 @@ _LANDMARK_FIELDS = (
     FieldSpec("address", "str", "注册地址", default=""),
     FieldSpec("address_mode", "str", "地址参与方式", default="",
               choices=("", "inherit", "portable", "exact", "relative")),
+    FieldSpec("destructible", "str", "可破坏性", default="",
+              choices=("", "no"),
+              note="空 = 可破坏；no = 不可破坏（耐久恒为完好，不参与残破/损毁）"),
 )
 
 _SCENARIO_FIELDS = (

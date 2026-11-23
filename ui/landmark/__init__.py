@@ -7,7 +7,7 @@ import customtkinter as ctk
 
 import services.worlds.address_registry as address_registry
 import ui.ctk.dialogs
-from core.models import Landmark, is_valid_landmark_size
+from core.models import Landmark, is_indestructible, is_valid_landmark_size
 from core.logic import format_size
 from persistence.landmark_repo import LandmarkRepo, DEFAULT_LANDMARK_STYLE
 from services.challenges import (
@@ -248,7 +248,8 @@ class LandmarkCardManager(CardManager):
 
     @staticmethod
     def _freq_text(item):
-        return "独特" if item.frequency == "unique" else "常见"
+        text = "独特" if item.frequency == "unique" else "常见"
+        return f"{text}（无法破坏）" if is_indestructible(item) else text
 
     # ---------- 分组 / 行内容 ----------
     def category_keys(self):
@@ -402,6 +403,7 @@ class LandmarkCardManager(CardManager):
                 frequency=dlg.result["frequency"],
                 horizontal_type=dlg.result.get("horizontal_type"),
                 address=dlg.result.get("address", ""),
+                destructible=dlg.result.get("destructible", ""),
             )
             self.all_items.append(new_item)
             self.save_items(self.all_items)
@@ -416,6 +418,7 @@ class LandmarkCardManager(CardManager):
             item.frequency = dlg.result["frequency"]
             item.horizontal_type = dlg.result.get("horizontal_type")
             item.address = dlg.result.get("address", "")
+            item.destructible = dlg.result.get("destructible", "")
             self.save_items(self.all_items)
 
     def delete_item(self, item):
@@ -448,7 +451,7 @@ class LandmarkDialog(BaseDialog):
         self._grab_deferred()
 
         self._create_widgets()
-        self.geometry("368x360")
+        self.geometry("368x392")
         self._center_dialog(parent)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -502,19 +505,33 @@ class LandmarkDialog(BaseDialog):
         ctk.CTkRadioButton(freq_frame, text="常见", variable=self.frequency_var, value="common",
                            font=self.UI_FONT).pack(side='left', padx=5)
 
+        # 可破坏性：叙事上不允许损坏的地标（如行星、山脉）勾上后不再扣耐久
+        ctk.CTkLabel(self, text="耐久:", font=self.UI_FONT).grid(
+            row=4, column=0, sticky='w', pady=(2, 6), padx=20)
+        self.destructible_var = tk.BooleanVar(
+            value=is_indestructible(self.landmark) if self.landmark else False)
+        self.destructible_check = ctk.CTkCheckBox(
+            self, text="无法破坏", variable=self.destructible_var,
+            font=self.UI_FONT, checkbox_width=18, checkbox_height=18)
+        self.destructible_check.grid(row=4, column=1, sticky='w',
+                                     pady=(2, 6), padx=5)
+        # 常见地标没有耐久，勾了也不生效——直接置灰，免得作者白填
+        self.frequency_var.trace_add("write", self._sync_destructible_state)
+        self._sync_destructible_state()
+
         # 独特地标注册地址（补在风格注册级别之下的剩余级别，可选）
         self.address_var = tk.StringVar(value=self.landmark.address if self.landmark else "")
         addr_hint = "地址(可选):"
         ctk.CTkLabel(self, text=addr_hint, font=self.UI_FONT).grid(
-            row=4, column=0, sticky='w', pady=(4, 6), padx=(20, 5))
+            row=5, column=0, sticky='w', pady=(4, 6), padx=(20, 5))
         addr_entry = ctk.CTkEntry(self, textvariable=self.address_var, width=210, height=28,
                                   font=self.UI_FONT)
-        addr_entry.grid(row=4, column=1, pady=(4, 6), padx=5)
+        addr_entry.grid(row=5, column=1, pady=(4, 6), padx=5)
         ctk.CTkLabel(self, text="风格已注册时填剩余级（如 12-0），未注册时填完整地址（含维度）；"
                                "双击地址框可从注册表已申领的子地址中选择",
                      font=ui_fonts.ui_font(9), text_color=LM_TEXT_SOFT, wraplength=210,
                      justify='left').grid(
-            row=5, column=1, sticky='w', pady=(0, 4), padx=5)
+            row=6, column=1, sticky='w', pady=(0, 4), padx=5)
 
         # 已申领子地址下拉：双击地址框弹出（后台联网刷新，含尺度过滤）
         if self.style_address:
@@ -523,22 +540,27 @@ class LandmarkDialog(BaseDialog):
                 height=220, width=300, button_height=24, justify="left")
             self.size_var.trace_add("write", self._update_address_options)
 
-        # 注册表加载状态（row=6）
+        # 注册表加载状态（row=7）
         self.registry_status_var = tk.StringVar(value="")
         ctk.CTkLabel(self, textvariable=self.registry_status_var,
                      font=ui_fonts.ui_font(9), text_color=LM_TEXT_MUTED,
                      wraplength=210, justify='left', anchor='w').grid(
-            row=6, column=1, sticky='w', pady=(0, 2), padx=5)
+            row=7, column=1, sticky='w', pady=(0, 2), padx=5)
 
         # 确定/取消按钮
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.grid(row=7, column=0, columnspan=2, pady=(8, 15))
+        btn_frame.grid(row=8, column=0, columnspan=2, pady=(8, 15))
         ctk.CTkButton(btn_frame, text="确定", command=self.ok, width=80,
                       height=28, font=self.UI_FONT).pack(side='left', padx=(0,7))
         ctk.CTkButton(btn_frame, text="取消", command=self._on_close, width=80,
                       height=28, font=self.UI_FONT).pack(side='left', padx=7)
 
     # ---------- 已申领子地址下拉（在线注册表） ----------
+
+    def _sync_destructible_state(self, *_args):
+        """常见地标没有耐久：勾选框随之置灰（值保留，切回独特时仍生效）。"""
+        unique = self.frequency_var.get() == "unique"
+        self.destructible_check.configure(state="normal" if unique else "disabled")
 
     def _fetch_registry_async(self):
         if not self.style_address:
@@ -655,6 +677,7 @@ class LandmarkDialog(BaseDialog):
             "frequency": self.frequency_var.get(),
             "horizontal_type": horizontal_type,
             "address": self.address_var.get().strip(),
+            "destructible": "no" if self.destructible_var.get() else "",
         }
         self._on_close()
 

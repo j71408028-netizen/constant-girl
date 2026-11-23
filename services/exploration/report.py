@@ -22,6 +22,7 @@ from core.logic import (
     ALL_PART_NAMES, format_size, get_size_category,
     get_comparisons, compute_casualty, compute_environment_factor,
 )
+from core.models import durability_of, is_indestructible
 from services.character.spatial import SpatialProfile, priors_for_tags
 from services.exploration.quips import (
     comparison_lines, replace_quip_tags, select_quip_with_budget,
@@ -196,11 +197,17 @@ class ReportEngine:
                 lm_addr = self.addresses.landmark_address(lm)
                 if lm_addr:
                     landmark_addresses[lm_key] = lm_addr
-                durability = landmark_durability.get(lm_key, 1.0)
+                durability = durability_of(landmark_durability, lm_key, lm)
                 height_ratio = height / lm.size
-                damage = durability_damage(ratio, height_ratio, curr_destruction)
-                durability -= damage
-                landmark_durability[lm_key] = durability
+                if is_indestructible(lm):
+                    # 叙事上不允许损坏的地标不扣耐久；旧存档里扣过的记录一并归位，
+                    # 否则改标记之后它仍会停在「残破且不入选」。
+                    if lm_key in landmark_durability:
+                        landmark_durability[lm_key] = 1.0
+                else:
+                    durability -= durability_damage(ratio, height_ratio,
+                                                    curr_destruction)
+                    landmark_durability[lm_key] = durability
                 durability_suffix = "（残破的）" if is_worn(durability) else ""
                 compare_text = f"    └─ 约等于{lm.name}{durability_suffix}{suffix}度的{ratio:.2f}倍"
             else:

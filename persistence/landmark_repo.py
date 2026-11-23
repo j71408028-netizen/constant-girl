@@ -54,6 +54,7 @@ def row_to_landmark(row: dict):
         horizontal_type=str(row.get("horizontal_type") or "").strip() or None,
         address=str(row.get("address") or "").strip(),
         address_mode=str(row.get("address_mode") or "").strip(),
+        destructible=str(row.get("destructible") or "").strip(),
     )
 
 
@@ -71,6 +72,7 @@ def _to_row(item) -> dict:
         "horizontal_type": str(data.get("horizontal_type") or ""),
         "address": str(data.get("address") or ""),
         "address_mode": str(data.get("address_mode") or ""),
+        "destructible": str(data.get("destructible") or ""),
     }
 
 

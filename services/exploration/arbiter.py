@@ -28,6 +28,7 @@ from core.address_model import (
     jitter_address_cell, parse_full, relate, world_of,
 )
 from core.behavior_runtime import behavior_const, behavior_hook, get_runtime
+from core.models import durability_of
 from services.character.spatial import SpatialProfile
 
 # 车道（Q4 分层）：同址 > 区域覆盖 > portable（未注册 / 无地址）
@@ -340,7 +341,8 @@ class SelectionArbiter:
             lm = cand["landmark"]
             if lm.frequency != "unique":
                 return True
-            return durability.get(cand_key(cand), 1.0) >= (0.5 if is_engaged else 0.0)
+            return durability_of(durability, cand_key(cand), lm) >= (
+                0.5 if is_engaged else 0.0)
 
         def make_ruling(cand) -> SlotRuling:
             addr = cand_addr(cand)
@@ -462,8 +464,10 @@ class SelectionArbiter:
                         if near_refs
                         and r.cand["landmark"].frequency == "unique"
                         and self.addresses.ref(r.cand["landmark"]) in near_refs]
-                if near and all(durability.get(
-                        self.addresses.durability_key(r.cand["landmark"]), 1.0) < 0.5
+                if near and all(durability_of(
+                        durability,
+                        self.addresses.durability_key(r.cand["landmark"]),
+                        r.cand["landmark"]) < 0.5
                         for r in near):
                     stuck = {"reason": "all_damaged", "position": pos_now,
                              "worlds": content_worlds}
