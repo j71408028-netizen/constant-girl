@@ -248,7 +248,7 @@ class LandmarkCardManager(CardManager):
 
     @staticmethod
     def _freq_text(item):
-        return "精确" if item.frequency == "unique" else "均值"
+        return "独特" if item.frequency == "unique" else "常见"
 
     # ---------- 分组 / 行内容 ----------
     def category_keys(self):
@@ -497,9 +497,9 @@ class LandmarkDialog(BaseDialog):
         self.frequency_var = tk.StringVar(value=self.landmark.frequency if self.landmark else "unique")
         freq_frame = ctk.CTkFrame(self, fg_color="transparent")
         freq_frame.grid(row=3, column=1, sticky='w', pady=4)
-        ctk.CTkRadioButton(freq_frame, text="精确", variable=self.frequency_var, value="unique",
+        ctk.CTkRadioButton(freq_frame, text="独特", variable=self.frequency_var, value="unique",
                            font=self.UI_FONT).pack(side='left', padx=5)
-        ctk.CTkRadioButton(freq_frame, text="均值", variable=self.frequency_var, value="common",
+        ctk.CTkRadioButton(freq_frame, text="常见", variable=self.frequency_var, value="common",
                            font=self.UI_FONT).pack(side='left', padx=5)
 
         # 独特地标注册地址（补在风格注册级别之下的剩余级别，可选）

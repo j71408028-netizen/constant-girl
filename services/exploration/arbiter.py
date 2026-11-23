@@ -404,7 +404,7 @@ class SelectionArbiter:
             pos_now = pos_text
             walk_order = order
         else:
-            # 新角色尚无位置：首个带地址槽位锚定（优先独特地标，避免均值
+            # 新角色尚无位置：首个带地址槽位锚定（优先独特地标，避免常见
             # 地标作为固定落点）；锚定序沿用联合序（档案偏好已参与）。
             usable_addrs = [r for r in order if r.addr]
             if not usable_addrs:

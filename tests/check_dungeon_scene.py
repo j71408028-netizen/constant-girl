@@ -289,7 +289,7 @@ class _FakeCatalog:
 
 _relative = [
     _lm("黑塔", 468, "-HD-9"),                      # 独特：相对后缀，父进程解析
-    _cm("均值楼", 60),                              # 常见、无显式地址：按风格注册地址参与
+    _cm("常见楼", 60),                              # 常见、无显式地址：按风格注册地址参与
     _lm("便携塔", 50, _CELL, address_mode="portable"),
     _lm("谜之塔", 300, "-ZZ-1"),                    # 风格未注册，解析不出
 ]
@@ -310,7 +310,7 @@ check("导出：解析失败的地标照样进载荷，只是不参与过滤",
       _exported[3].name == "谜之塔" and _exported[3].address == ""
       and _exported[3].size == 300.0)
 check("导出后的地标能按私有名筛出来",
-      _names(scene.ambient_landmarks(_exported, "HD")) == ["均值楼"],
+      _names(scene.ambient_landmarks(_exported, "HD")) == ["常见楼"],
       _names(scene.ambient_landmarks(_exported, "HD")))
 
 _payload = serialize_launch({"merged_landmarks": _exported})
@@ -327,7 +327,7 @@ check("载荷：还原成 Landmark 且地址保留",
       _restored["merged_landmarks"])
 check("载荷：还原后的地址仍能按私有名过滤",
       _names(scene.ambient_landmarks(_restored["merged_landmarks"], "HD"))
-      == ["均值楼"])
+      == ["常见楼"])
 
 # ---------------- 7. 展示：当前地点 ----------------
 from core.models import CharacterSnapshot  # noqa: E402

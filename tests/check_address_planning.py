@@ -106,7 +106,7 @@ _planner = AddressPlanner(_catalog)
 
 check("独特地标空地址继承风格注册地址",
       _planner.landmark_address(_unique) == resolve_full_address(_STYLE, ""))
-check("均值地标空地址默认 portable",
+check("常见地标空地址默认 portable",
       _planner.landmark_address(_common) == "")
 
 _rel_unique = Landmark("Rel", 100, "vertical", "unique", address="B-1")
@@ -123,7 +123,7 @@ _portable_catalog = FakeCatalog([_portable], {"S": _STYLE}, styles=["S"])
 check("显式 portable 不参与地址",
       AddressPlanner(_portable_catalog).landmark_address(_portable) == "")
 
-# ---------------- 2. 均值地标显式地址不再无条件绕过 ----------------
+# ---------------- 2. 常见地标显式地址不再无条件绕过 ----------------
 _far_common = Landmark("FarCommon", 100, "vertical", "common",
                        address="1e5_1e3_1e2@W-A-B-1")
 _far_common._style = "S"
@@ -131,7 +131,7 @@ _catalog = FakeCatalog([_far_common], {"S": _STYLE}, styles=["S"])
 _plan = _arbiter(_catalog).arbitrate(
     [_cand(_far_common)], "1e5_1e3_1e2@W-A-C", height=1.0,
     durability={}, skip_base_prob=0.0)
-check("均值地标显式地址参与距离筛选",
+check("常见地标显式地址参与距离筛选",
       _plan["engaged"] and not _plan["comparisons"]
       and _plan["stuck"]["reason"] == "no_reachable")
 
@@ -141,7 +141,7 @@ _catalog = FakeCatalog([_portable_common], {"S": _STYLE}, styles=["S"])
 _plan = _arbiter(_catalog).arbitrate(
     [_cand(_portable_common)], "1e5_1e3_1e2@W-A-C", height=1.0,
     durability={}, skip_base_prob=0.0)
-check("均值地标空地址仍 portable",
+check("常见地标空地址仍 portable",
       not _plan["engaged"] and _plan["comparisons"])
 
 # ---------------- 3. 世界集合来自所有地址内容 ----------------
