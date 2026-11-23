@@ -1,12 +1,15 @@
 {
   "schema": "gg.landmarks/1",
   "id": "extension",
+  "title": "",
   "author": "",
   "namespace": "",
   "version": "0.0.0",
-  "content_hash": "sha256:68b53a19ecc94952cfae883a470ec269d7524ebc4e92a8c298eaf33b71d11429",
-  "updated_at": "2026-10-31T00:28:23",
+  "content_hash": "sha256:dc48d713a185adbd83ee8a8118dcd12e624ea1b914af98555c55c36b87f5d2cb",
+  "updated_at": "2026-11-24T00:02:09",
   "source": {},
   "status": "draft",
-  "tags": []
+  "tags": [],
+  "traits": [],
+  "language": ""
 }

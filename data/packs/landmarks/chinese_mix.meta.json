@@ -1,12 +1,15 @@
 {
   "schema": "gg.landmarks/1",
   "id": "chinese_mix",
+  "title": "",
   "author": "",
   "namespace": "",
   "version": "0.0.0",
-  "content_hash": "sha256:8a928b0e5773ab74c4a9f84f84ba93d98a382d92e9e32d20c79984fe5eedea6c",
-  "updated_at": "2026-10-31T00:28:23",
+  "content_hash": "sha256:5bbfd65b8271cc17b06ea5cd547356c352bd13c5b9d84765f7d85297ef11989c",
+  "updated_at": "2026-11-24T00:02:09",
   "source": {},
   "status": "draft",
-  "tags": []
+  "tags": [],
+  "traits": [],
+  "language": ""
 }
