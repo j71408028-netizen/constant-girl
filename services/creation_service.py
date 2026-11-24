@@ -1,5 +1,6 @@
 import hashlib
 import random
+import re
 from typing import Optional, Dict, Tuple
 
 from core.models import BodyPreset, ModelTuning, Personality
@@ -31,12 +32,28 @@ class CreationService:
             self._name_data_cache[self.material_table] = (surnames, weights, names, nicks)
         return self._name_data_cache[self.material_table]
 
+    #: 昵称表里可在掷出时替换的占位符：{sur} → 姓，{given} → 名。
+    _NICK_PLACEHOLDER_RE = re.compile(r"\{sur\}|\{given\}")
+
+    @classmethod
+    def resolve_nick_placeholders(cls, nick: str, surname: str, given: str) -> str:
+        """把昵称表里的 ``{sur}`` / ``{given}`` 换成当前掷出的姓 / 名。
+
+        单次扫描替换，未知花括号原样保留；姓或名为空时对应占位符替换成空串。
+        创建参数面板掷昵称时走这里，保证填入的已经是渲染后的文本。
+        """
+        if not nick:
+            return nick
+        values = {"{sur}": surname, "{given}": given}
+        return cls._NICK_PLACEHOLDER_RE.sub(lambda m: values[m.group(0)], nick)
+
     def generate_random_name_nick(self) -> Tuple[str, str]:
         surnames, weights, names, nicks = self._load_name_data()
         surname = random.choices(surnames, weights=weights, k=1)[0] if surnames and weights else "王"
         given = random.choice(names) if names else "静"
         name = surname + given
         nick = random.choice(nicks) if nicks else ""
+        nick = self.resolve_nick_placeholders(nick, surname, given)
         return name, nick
 
     @staticmethod

@@ -358,6 +358,7 @@ class CreationParamsPanel(ctk.CTkFrame):
         self.random_btn.grid(row=0, column=2, padx=(6, 0))
 
     def random_fill_name_nick(self):
+        # 服务层按本次掷出的姓/名渲染好昵称里的 {sur}/{given}，这里直接填入。
         name, nick = self.context.creation_service.generate_random_name_nick()
         self.name_var.set(name)
         self.nick_entry.delete(0, "end")

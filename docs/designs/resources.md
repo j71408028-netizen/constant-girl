@@ -159,10 +159,12 @@ data/packs/minigames/<id>/manifest.json
 
 | 成员 | 关键列 | 说明 |
 |---|---|---|
-| `names.csv` 姓名 | `surname, ppm, name, nick` | 三列各自收集：哪格空着就不贡献那条。`ppm` 是姓的抽样权重（缺省 1，非数字也按 1） |
+| `names.csv` 姓名 | `surname, ppm, name, nick` | 三列各自收集：哪格空着就不贡献那条。`ppm` 是姓的抽样权重（缺省 1，非数字也按 1）。`nick` 可写 `{sur}` / `{given}`，掷昵称时替换为本次抽到的姓 / 名 |
 | `presets.csv` 身材 | `name` + 15 个 `*_ratio` 比例列 | 比例列必须全部填、取值在 0 与 2 之间（越界按该字段默认值补，空着则整行跳过）；`weight` 可选，缺省 1 |
 | `personalities.csv` 性格 | `name` + `init_intrusion, depth_intrusion, init_destruction, depth_destruction, sensitivity, gravity, skip_base_prob, description` | init / depth 决定角色进入时的介入度、破坏性与每单位步进深入多少；数值列缺一格整行跳过（`gravity` 例外，旧表没有按 0） |
 | `news.csv` 新闻 | `size_category, memorial, intrusion, destruction, text, substitute_1, substitute_2` | 表头顺序即索引优先级顺序 |
+
+**昵称占位符**：`nick` 列里的 `{sur}` 指本次抽到的姓、`{given}` 指本次抽到的名（即 `name` 列的值）。创建参数面板掷姓名昵称时，服务层用同一轮的姓/名做单次替换再填入输入框；不认识的占位符原样保留。例：抽到「王」+「静」，`{sur}家小{given}` → `王家小静`。
 
 **为什么只能整组换**：四张表共用一套角色状态坐标系——新闻表的索引列（尺寸档、介入度、
 破坏性）正是其他三张表产出的状态，所以单表混搭会让索引对不上内容。资源设置里也只占一个
