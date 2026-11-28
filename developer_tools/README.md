@@ -32,6 +32,7 @@
 | `archive_preview.py` | 角色档案导出 | ⏸ **HTML 档案模板暂不开放**——当前只服务核心开发者调模板，尚不作为资源开发者的扩写点 |
 | `evolution_dump.py` | 演化模型 | ✅ 可加载行为包（`--pack` / `--world`）——不用建世界包、不用开局，直接看行为包对演化的覆盖效果；不指定包时只反映核心演化模型自身的改动 |
 | `behavior_hooks_report.py` | 行为包钩子 | ✅ 写行为包前先看一眼：按 scope 列出全部可覆盖目标（细度 / 层级 / 签名 / 常量默认值），`--json` 给机器可读目录；`evolution_dump.py --list-hooks` 同一入口 |
+| `nickname_report.py` | 昵称表抽取碰撞 | ✅ 改完姓名表的权重 / 槽位后，看反复抽取会不会撞名：行级与文本级有效池、生日曲线（理论 + 蒙特卡洛）、归一化与序列相似度口径的近似重复，`--json` 机器可读。口径与 `NameRepo` / `CreationService` 一致，`--group` 换表 |
 
 ## 命名：`<领域>_<输出>.py`
 
@@ -55,6 +56,7 @@
 | `lens_preview.py` | 聊天话题视角 | 简略报告 | 改完 `services/chat/topic_kinds.py`（类型定义）或 `topic_lens.py`（字段目录）后，对真实存档逐类型打印"此刻给 AI 的信息"，附取用/挡掉账本；`--kind X --full` 可看整份系统提示词，`--out` 另存到 `_out/lens_preview/` |
 | `chat_session_preview.py` | 聊天会话 | 打开预览（控制台） | 在控制台里跟角色**实际聊天**，每轮打印视角账本（取用/挡掉/预算）、话题变化、属性与原始 JSON；`/topic` 锁定类型、`/attitude` 验证隐藏介绍门槛、`/reroll` 同前提重掷。默认在 `_out/` 沙盒里聊，**不写 `data/`** |
 | `evolution_dump.py` | 演化模型 | 详细产物 | 演化模型二阶退化模拟（**角点 + 默认性格表**，可 `--pack` / `--world` 加载行为包），出 PNG 与 `report.md`；需要 matplotlib |
+| `nickname_report.py` | 昵称表抽取碰撞 | 简略报告 | 用与 `NameRepo` / `CreationService` 相同的口径（按 `nick_weight` 加权有放回抽行 + `substitute_N` 填槽），测算反复抽取时重复 / 近似重复的统计学情况：行级 / 文本级 / 归一化有效池、抽 k 次至少一次重复的生日曲线（泊松近似 + 蒙特卡洛，种子可复现）、去符号归一化与序列相似度 ≥ 阈值的近似对。缺省只打 stdout，不落盘；`--group` 换取材表、`--min-sim` 调近似阈值、`--json` 机器可读。衡量的是"改权重能否降低撞名率"，不是判定门禁 |
 
 ## 产物统一写 `_out/`（整目录不入库）
 

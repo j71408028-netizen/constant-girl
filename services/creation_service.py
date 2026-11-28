@@ -1,16 +1,42 @@
 import hashlib
 import random
 import re
-from typing import Optional, Dict, Tuple
+from collections import deque
+from typing import Deque, Optional, Dict, Tuple
 
 from core.models import BodyPreset, ModelTuning, Personality
 from persistence.name_repo import NameRepo, render_nick
 from persistence.material_tables import DEFAULT_MATERIAL_TABLE
-from core.behavior_runtime import behavior_hook
+from core.behavior_runtime import (
+    CONTRACT_DATA, LAYER_INFRA, behavior_const, behavior_hook, get_runtime)
 from persistence.static_table import weighted_choice
+
+#: 近距防重窗口：最近多少次掷名之间不重复**同一行**。0 = 关闭。
+#: 数值细度目标，行为包用 ``CreationService.nick.anti_repeat_window`` 覆盖；
+#: 覆盖成 0 即回到纯按权重的旧行为。
+NICK_ANTI_REPEAT_WINDOW = behavior_const(
+    "CreationService", "nick.anti_repeat_window", 20,
+    layer=LAYER_INFRA, contract=CONTRACT_DATA)
+
+
+def nick_anti_repeat_window() -> int:
+    """读取近距防重窗口的有效值；坏值按关闭处理。"""
+    try:
+        value = int(get_runtime().resolve_value(
+            "CreationService.nick.anti_repeat_window"))
+    except (TypeError, ValueError):
+        return 0
+    return max(0, value)
 
 
 class CreationService:
+    #: 最近掷出的行在当次载入列表里的下标，跨实例共享——掷名面板反复开关
+    #: 不会把窗口清零。按行而不是按渲染文本记：同一行换了槽位内容仍算重复；
+    #: 也不按模板文本记：表里有 55 行模板都是 ``{1}{2}``，按文本会把它们
+    #: 当成同一行互相挡掉。换取材表即清空。
+    _recent_nicks: Deque[int] = deque()
+    _recent_nicks_group: str = ""
+
     def __init__(self, name_repo: Optional[NameRepo] = None,
                  material_table: str = DEFAULT_MATERIAL_TABLE):
         self._name_repo = name_repo or NameRepo()
@@ -47,12 +73,46 @@ class CreationService:
         values = {"{sur}": surname, "{given}": given}
         return cls._NICK_PLACEHOLDER_RE.sub(lambda m: values[m.group(0)], nick)
 
+    @classmethod
+    def reset_nick_window(cls) -> None:
+        """清空近距防重窗口（切表、测试或「重新开始」时用）。"""
+        cls._recent_nicks.clear()
+        cls._recent_nicks_group = ""
+
+    def _pick_nick(self, nicks):
+        """按权重抽一行昵称，跳过最近掷过的行。
+
+        「掷到窗口内的行就重抽」等价于先把这些行从池子里剔掉再重新归一：
+        条件分布一致，但不用重试循环，也绝不会掷空。窗口大于表内行数时
+        池子会空，此时退回整池——退化的只是防重本身，不是抽取。
+        """
+        if not nicks:
+            return weighted_choice(nicks)
+        window = nick_anti_repeat_window()
+        cls = type(self)
+        if cls._recent_nicks_group != self.material_table:
+            cls.reset_nick_window()
+            cls._recent_nicks_group = self.material_table
+        if window <= 0:
+            cls._recent_nicks.clear()
+            return weighted_choice(nicks)
+        while len(cls._recent_nicks) > window:
+            cls._recent_nicks.popleft()
+        blocked = set(cls._recent_nicks)
+        pool = [n for i, n in enumerate(nicks) if i not in blocked]
+        pick = weighted_choice(pool or nicks)
+        index_of = {id(n): i for i, n in enumerate(nicks)}
+        cls._recent_nicks.append(index_of.get(id(pick), -1))
+        while len(cls._recent_nicks) > window:
+            cls._recent_nicks.popleft()
+        return pick
+
     def generate_random_name_nick(self) -> Tuple[str, str]:
         surnames, weights, names, nicks = self._load_name_data()
         surname = random.choices(surnames, weights=weights, k=1)[0] if surnames and weights else "王"
         given = random.choice(names) if names else "静"
         name = surname + given
-        pick = weighted_choice(nicks)
+        pick = self._pick_nick(nicks)
         nick = render_nick(pick)
         nick = self.resolve_nick_placeholders(nick, surname, given)
         return name, nick

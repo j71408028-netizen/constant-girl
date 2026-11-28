@@ -5,8 +5,11 @@
 纯逻辑，不建窗口、不联网；只读 data/，临时表写到系统临时目录。
 
 行为锁：
-- 姓名表每一行昵称带自己的权重，按权重抽取；
+- 姓名表每一行昵称带自己的权重，按权重抽取；抽取配比按桶计：
+  粗制 : 人名系列三类 : 垃圾 : 精制 = 50 : 20 : 15 : 15；
 - ``{1}`` / ``{2}`` 由同行 substitute_N 轮换，缺候选的行整行跳过；
+- 掷名有近距防重窗口：最近 N 次（默认 20）不重复同一**行**，按行下标而非
+  渲染文本或模板文本记账，可取 0 关闭，可由行为包覆盖；
 - 候选切分认中英文逗号，重复候选按一份算；``{sur}`` 由创建期单独替换；
 - ``nick_note`` 是说明列：随行读入、不进渲染、不影响权重，缺列按空读；
 - 随机性交给 rng：同一 seed 可复现，权重差距在足够多的抽样里看得出来；
@@ -21,11 +24,13 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from core.behavior_runtime import get_runtime  # noqa: E402
 from core.resource_spec import spec_of  # noqa: E402
 from persistence import material_tables  # noqa: E402
 from persistence.name_repo import NameRepo, NickEntry, render_nick  # noqa: E402
 from persistence.static_table import weighted_choice  # noqa: E402
-from services.creation_service import CreationService  # noqa: E402
+from services.creation_service import (  # noqa: E402
+    NICK_ANTI_REPEAT_WINDOW, CreationService)
 
 failures = []
 total = 0
@@ -87,17 +92,30 @@ check("拼出来的候选确实进了池子",
 
 total_weight = sum(n.weight for n in nicks)
 check("每条昵称都有注释", all(n.note for n in nicks))
-_tier_w = {}
+_NAME_SERIES = ("人名（非直接引用）", "运营账号", "事业")
+_NAME_POOLS = ("纯名池", "×机构", "×头衔", "×事业尾", "×甜", "×尾巴", "窄口")
+
+
+def _bucket(note):
+    """抽取配比的桶：人名系列三类与其池行（家族池/纯名池/窄口）归「人名」，
+    其余按注释首段三档归桶。注释本身不改，桶只是配比口径。"""
+    parts = note.split("｜")
+    if any(k in note for k in _NAME_POOLS) or (len(parts) > 1 and parts[1] in _NAME_SERIES):
+        return "人名"
+    return parts[0]
+
+
+check("注释标出三档",
+      {n.note.split("｜", 1)[0] for n in nicks} == {"精制", "粗制", "垃圾"})
+_bucket_w = {}
 for n in nicks:
-    tier = n.note.split("｜", 1)[0]
-    _tier_w[tier] = _tier_w.get(tier, 0.0) + n.weight
-check("注释标出三档", set(_tier_w) == {"精制", "粗制", "垃圾"}, str(_tier_w))
-check("三档权重总量守恒",
-      abs(_tier_w["精制"] - 531) < 0.05
-      and abs(_tier_w["粗制"] - 645) < 0.05
-      and abs(_tier_w["垃圾"] - 500) < 0.05, str(_tier_w))
-check("垃圾档权重约三成", 0.29 <= _tier_w["垃圾"] / total_weight <= 0.31,
-      f"{_tier_w['垃圾']:.0f}/{total_weight:.0f}")
+    _bucket_w[_bucket(n.note)] = _bucket_w.get(_bucket(n.note), 0.0) + n.weight
+check("四桶权重 500:200:150:150（总 1000）",
+      abs(_bucket_w["粗制"] - 500) < 0.05 and abs(_bucket_w["人名"] - 200) < 0.05
+      and abs(_bucket_w["垃圾"] - 150) < 0.05 and abs(_bucket_w["精制"] - 150) < 0.05,
+      str(_bucket_w))
+check("垃圾桶权重约一成半", 0.14 <= _bucket_w["垃圾"] / total_weight <= 0.16,
+      f"{_bucket_w['垃圾']:.0f}/{total_weight:.0f}")
 
 # ---------------- 2. 表结构：逐行权重与槽位 ----------------
 
@@ -188,6 +206,65 @@ check("槽位与占位符一次掷出即渲染完成",
 
 name, nick = roll(["{sur}{given}"])
 check("兼容直接传字符串的旧调用方", name == "王静" and nick == "王静")
+
+# ---------------- 4.5 掷名的近距防重窗口 ----------------
+
+def roll_many(entries, count):
+    """在同一张表上连续掷 count 次；起手清窗口，避免上一段留下旧下标。"""
+    CreationService.reset_nick_window()
+    service = CreationService(name_repo=FakeNameRepo(entries))
+    return [service.generate_random_name_nick()[1] for _ in range(count)]
+
+
+def use_window(value):
+    """把窗口常量临时覆盖成 value（先复位，避免告警）；None = 用默认值。"""
+    _runtime = get_runtime()
+    _runtime.reset()
+    if value is not None:
+        _runtime.override("CreationService.nick.anti_repeat_window", value)
+
+
+check("防重窗口默认 20 条", NICK_ANTI_REPEAT_WINDOW == 20,
+      str(NICK_ANTI_REPEAT_WINDOW))
+
+use_window(2)
+_seq = roll_many([NickEntry("甲行", 1), NickEntry("乙行", 1), NickEntry("丙行", 1)], 60)
+check("窗口内不重复同一行",
+      not [i for i in range(len(_seq)) if _seq[i] in _seq[max(0, i - 2):i]],
+      str(_seq[:9]))
+check("窗口会强迫走遍整张表", len(set(_seq)) == 3, str(sorted(set(_seq))))
+
+use_window(1)
+_twins = roll_many([NickEntry("{1}", 1, {1: ("阿一", "阿二")}),
+                    NickEntry("{1}", 1, {1: ("贝一", "贝二")})], 40)
+_sides = [text[0] for text in _twins]
+check("按行不按模板文本：同模板的两行仍能交替",
+      _sides.count("阿") == 20 and _sides.count("贝") == 20, "".join(_sides))
+check("按行不按渲染文本：换槽位内容不放行同一行",
+      all(a != b for a, b in zip(_sides, _sides[1:])), "".join(_sides))
+
+use_window(30)
+_seq = roll_many([NickEntry("甲行", 1), NickEntry("乙行", 1)], 40)
+check("窗口大于表内行数时退回整池，不掷空",
+      len(_seq) == 40 and all(_seq), str(_seq[:4]))
+
+use_window(0)
+_seq = roll_many([NickEntry("甲行", 1), NickEntry("乙行", 1)], 40)
+check("覆盖成 0 即关闭：一条不记", not CreationService._recent_nicks and all(_seq),
+      str(list(CreationService._recent_nicks)))
+
+use_window(None)
+CreationService.reset_nick_window()
+CreationService(name_repo=FakeNameRepo([NickEntry("甲行", 1)])).generate_random_name_nick()
+check("默认窗口会记账", len(CreationService._recent_nicks) == 1,
+      str(list(CreationService._recent_nicks)))
+CreationService(name_repo=FakeNameRepo([NickEntry("甲行", 1)]),
+                material_table="switch-away").generate_random_name_nick()
+check("换取材表即清空旧窗口",
+      list(CreationService._recent_nicks) == [0]
+      and CreationService._recent_nicks_group == "switch-away",
+      f"{list(CreationService._recent_nicks)} / {CreationService._recent_nicks_group}")
+CreationService.reset_nick_window()
 
 # ---------------- 5. 内置表的配比与合并模板 ----------------
 
