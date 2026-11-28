@@ -4,7 +4,7 @@ import re
 from typing import Optional, Dict, Tuple
 
 from core.models import BodyPreset, ModelTuning, Personality
-from persistence.name_repo import NameRepo
+from persistence.name_repo import NameRepo, render_nick
 from persistence.material_tables import DEFAULT_MATERIAL_TABLE
 from core.behavior_runtime import behavior_hook
 from persistence.static_table import weighted_choice
@@ -52,7 +52,8 @@ class CreationService:
         surname = random.choices(surnames, weights=weights, k=1)[0] if surnames and weights else "王"
         given = random.choice(names) if names else "静"
         name = surname + given
-        nick = random.choice(nicks) if nicks else ""
+        pick = weighted_choice(nicks)
+        nick = render_nick(pick)
         nick = self.resolve_nick_placeholders(nick, surname, given)
         return name, nick
 

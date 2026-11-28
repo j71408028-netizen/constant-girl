@@ -55,8 +55,6 @@
 | `lens_preview.py` | 聊天话题视角 | 简略报告 | 改完 `services/chat/topic_kinds.py`（类型定义）或 `topic_lens.py`（字段目录）后，对真实存档逐类型打印"此刻给 AI 的信息"，附取用/挡掉账本；`--kind X --full` 可看整份系统提示词，`--out` 另存到 `_out/lens_preview/` |
 | `chat_session_preview.py` | 聊天会话 | 打开预览（控制台） | 在控制台里跟角色**实际聊天**，每轮打印视角账本（取用/挡掉/预算）、话题变化、属性与原始 JSON；`/topic` 锁定类型、`/attitude` 验证隐藏介绍门槛、`/reroll` 同前提重掷。默认在 `_out/` 沙盒里聊，**不写 `data/`** |
 | `evolution_dump.py` | 演化模型 | 详细产物 | 演化模型二阶退化模拟（**角点 + 默认性格表**，可 `--pack` / `--world` 加载行为包），出 PNG 与 `report.md`；需要 matplotlib |
-| `materials_symbols_report.py` | 昵称素材的符号池 | 简略报告 | 按码位范围判哪些符号可用（默认彩色 emoji 整组不收、单色可用），`--audit` 扫 CSV 列出越界字符与条目、`--check "字串"` 判一条、`--list` 打范围与清单、`--md` 生成 `nick_categories_forms.md`「符号池」那一段。判据只有一份，在 `data/static/materials/default/nick_categories_forms.md` |
-| `materials_form_report.py` | 昵称素材的三形态 | 简略报告 | 按「去掉会不会丢句意」判纯中文 / 混合 / 纯外文。混合认句首句中的外文、**句末成词的外文**（`Moon`、`Capybara`，单字母 `k`、`ξ` 不算）、带值的单位（`0.1°`、`+12dB`、`.zip`）与颜文字；句末单字母、句末数字、中段符号、装饰连写都算尾注。`--by-col` 逐列、`--check "字串"` 判一条并打出七项证据；末行核「带符号的条目」是否落在验收区间（混合 20–40%、纯中文 10–25%） |
 
 ## 产物统一写 `_out/`（整目录不入库）
 

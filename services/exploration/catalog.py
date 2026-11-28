@@ -87,7 +87,7 @@ class ExplorationCatalog:
         self.name_repo = NameRepo(world_state=world_state)
         self.creation_service = CreationService(
             name_repo=self.name_repo,
-            material_table=self.material_table
+            material_table=self.material_table,
         )
         self.news_service = NewsService(group=self.material_table,
                                         world_state=world_state)

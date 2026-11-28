@@ -22,7 +22,8 @@
 
 - 地标风格是**一个 CSV 文件**：`data/packs/landmarks/chinese_mix.csv`；
 - 描述风格是**一个目录**：`data/packs/quips/events/`（里面一张正文表、一份配置）；
-- 取材表也是**一个目录**，但里面是四张各管一件事的表：`data/static/materials/default/`。
+- 取材表也是**一个目录**，里面是四张各管一件事的表：`data/static/materials/default/`
+  （姓名、身材、性格、新闻，共用角色状态坐标系）。
 
 一份资源最多由三个部件组成：主文件（必需）、配置 JSON（只有目录型容器才有，可选）、
 兄弟信封 `<id>.meta.json`（可选；挑战包这种整包加密的类型必需）。三者都放在同一层——
@@ -39,7 +40,7 @@
 |---|---|---|---|---|---|---|---|---|
 | `landmarks` | 地标风格 | `csv` | `<id>.csv` | `packs` | 不限 | 多选 | `selected_styles` | — |
 | `quips` | 描述风格 | `csv_dir` | `<id>/quips.csv`（+`config.json`） | `packs` | 不限 | 多选 | `selected_quip_styles` | realistic / fantasy / anime / scifi |
-| `materials` | 取材表 | `csv_bundle` | `<id>/names.csv`（四成员之首） | `static` | 1 | 单选 | `material_table` | realistic / fantasy / anime / scifi |
+| `materials` | 取材表 | `csv_bundle` | `<id>/names.csv`（五成员之首） | `static` | 1 | 单选 | `material_table` | realistic / fantasy / anime / scifi |
 | `scenarios` | 副本方案 | `json_dir` | `<id>/config.json` | `packs` | 不限 | 多选 | — | longform / gameplay / multi_ending（多选） |
 | `challenges` | 挑战包 | `opaque` | `<id>.chal` | `packs` | 不限 | 多选 | — | — |
 | `behaviors` | 行为包 | `py_package` | `<id>/*.py` | `static` | 1 | 单选 | — | — |
@@ -153,22 +154,31 @@ data/packs/minigames/<id>/manifest.json
 > 现状：同步面板还没有，六态判定目前只有自检在用；资源中心顶部的「在线资源 / 社区」
 > 两个页签也是占位。
 
-## 7. 取材表：四张表共用一套坐标系
+## 7. 取材表：四张表，共用一套坐标系
 
 一个目录四张 CSV，顺序即界面展示顺序，四张都可以缺席：
 
 | 成员 | 关键列 | 说明 |
 |---|---|---|
-| `names.csv` 姓名 | `surname, ppm, name, nick` | 三列各自收集：哪格空着就不贡献那条。`ppm` 是姓的抽样权重（缺省 1，非数字也按 1）。`nick` 可写 `{sur}` / `{given}`，掷昵称时替换为本次抽到的姓 / 名 |
+| `names.csv` 姓名 | `surname, ppm, name, nick, nick_weight, substitute_1, substitute_2, substitute_3` | 三列各自收集：哪格空着就不贡献那条。`ppm` 是姓的抽样权重（缺省 1，非数字也按 1）。`nick` 可写 `{sur}` / `{given}`，掷昵称时替换为本次抽到的姓 / 名；`nick_weight` 是这一行的抽取权重（缺省 1，非正数不入场） |
 | `presets.csv` 身材 | `name` + 15 个 `*_ratio` 比例列 | 比例列必须全部填、取值在 0 与 2 之间（越界按该字段默认值补，空着则整行跳过）；`weight` 可选，缺省 1 |
 | `personalities.csv` 性格 | `name` + `init_intrusion, depth_intrusion, init_destruction, depth_destruction, sensitivity, gravity, skip_base_prob, description` | init / depth 决定角色进入时的介入度、破坏性与每单位步进深入多少；数值列缺一格整行跳过（`gravity` 例外，旧表没有按 0） |
 | `news.csv` 新闻 | `size_category, memorial, intrusion, destruction, text, substitute_1, substitute_2` | 表头顺序即索引优先级顺序 |
 
-**昵称占位符**：`nick` 列里的 `{sur}` 指本次抽到的姓、`{given}` 指本次抽到的名（即 `name` 列的值）。创建参数面板掷姓名昵称时，服务层用同一轮的姓/名做单次替换再填入输入框；不认识的占位符原样保留。例：抽到「王」+「静」，`{sur}家小{given}` → `王家小静`。
+**昵称占位符与轮换槽位**：`nick` 列里的 `{sur}` 指本次抽到的姓、`{given}` 指本次抽到的名
+（即 `name` 列的值）；`{1}` / `{2}` 则从本行的 `substitute_1` / `substitute_2` 里轮换取词。
+候选按逗号分隔（中英文逗号都认，重复按一份算），缺候选的行整行跳过。掷昵称时先填数字
+槽位、再用同一轮的姓/名单次替换占位符，不认识的占位符原样保留。例：抽到「王」+「静」，
+`{sur}家的{1}` 配候选「猫,狗」→ `王家的猫` 或 `王家的狗`。
 
-**为什么只能整组换**：四张表共用一套角色状态坐标系——新闻表的索引列（尺寸档、介入度、
-破坏性）正是其他三张表产出的状态，所以单表混搭会让索引对不上内容。资源设置里也只占一个
-键（`material_table`），切换就是整组切换。
+**昵称权重写在每行**：精修昵称一行一条、权重 1；「随手打的」那批写成轮换模板行，
+权重合起来约 20%（内置表 335 / 1676）。掷昵称按 `nick_weight` 加权抽行，
+抽到模板行再填槽。顺序是先抽行、后渲染，所以模板能产出的串不受条目数限制，
+也不用按状态实时调概率——想改配比直接改表里的权重。
+
+**为什么四张表只能整组换**：姓名 / 身材 / 性格 / 新闻共用一套角色状态坐标系——新闻表的
+索引列（尺寸档、介入度、破坏性）正是其他三张表产出的状态，所以单表混搭会让索引对不上
+内容。资源设置里也只占一个键（`material_table`），切换就是整组切换。
 
 **缺席会回落**，所以只覆盖一两张表是可行的：组内缺哪个成员，就依次往下找
 `data/static/materials/<组>/` → 非 `default` 组再找 `.../default/`；全都没有就按空表处理，
@@ -177,7 +187,7 @@ data/packs/minigames/<id>/manifest.json
 **新闻怎么取一条**：按表头顺序逐层收窄——`size_category` 必须精确命中（不中直接放弃）；
 `memorial` 对不上就忽略这个条件；`intrusion` / `destruction` 把状态值四舍五入到 0～4 的
 整数格、取最近值。`text` 里的 `{name}` / `{nick}` 和 `substitute_1/2`（逗号分隔、随机取一）
-是渲染用的，不参与索引。
+是渲染用的，不参与索引。碎片表不走这套索引，只按权重抽行、按槽位填词。
 
 ## 8. 描述语料：`quips.csv` 与 `config.json`
 
@@ -300,11 +310,11 @@ data/packs/minigames/<id>/manifest.json
 `destruction`（必填，整数）、`text`（必填）、`style`、`step`（数值）、`summary`。
 `config.json` 见 §8。
 
-**取材表 `materials`**（四成员，均可缺席）
+**取材表 `materials`**（五成员，均可缺席）
 
 | 成员 | 列 |
 |---|---|
-| `names.csv` | `surname, ppm, name, nick` |
+| `names.csv` | `surname, ppm, name, nick, nick_weight, substitute_1, substitute_2, substitute_3` |
 | `presets.csv` | `name` + `height_ratio, leg_ratio, foot_length_ratio, arm_span_ratio, index_finger_ratio, palm_length_ratio, chest_width_ratio, thigh_diameter_ratio, forearm_diameter_ratio, index_finger_diameter_ratio, fingerprint_width_ratio, finger_gap_ratio, knee_height_ratio, ankle_height_ratio, stride_ratio`（`weight` 可选） |
 | `personalities.csv` | `name, init_intrusion, depth_intrusion, init_destruction, depth_destruction, sensitivity, gravity, skip_base_prob, description`（`weight` 可选） |
 | `news.csv` | `size_category, memorial, intrusion, destruction, text, substitute_1, substitute_2` |
@@ -360,7 +370,8 @@ data/packs/minigames/<id>/manifest.json
    （`opaque`）必须外挂信封。
 4. **改名不算内容改过**：`content_hash` 只算载荷；所以显示名可以随便改，`set_title` 是
    改名的唯一实现。
-5. **整组才是「一份」**：取材表四张表共用坐标系，不能单表混搭；缺席回落不等于可以乱配。
+5. **整组才是「一份」**：取材表前四张共用坐标系，不能单表混搭；碎片表不进坐标系，
+   但同样随组切换。缺席回落不等于可以乱配。
 6. **校验只报不修**：`validate_resource` 给诊断，不改文件、不决定是否阻断；读侧遇到坏条目
    一律跳过并打印，不让一条坏数据拖垮整类资源。
 7. **守卫**：`python tests/run_checks.py check_resource_spec check_resource_settings check_resource_display`；

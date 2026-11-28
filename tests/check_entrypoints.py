@@ -56,7 +56,8 @@ BUILD_DIR = ROOT / "build"
 #: ``developer_tools/`` 是不进任何门禁的预览 / 体检集合，让它拖垮正式自检没有意义。
 #: （脚本本体已入库；只有它的产物目录 ``_out/`` 在 .gitignore 里。）
 EXCLUDED_DIRS = {
-    "__pycache__", ".git", ".idea", ".workbuddy", "data", "dist", "build", "developer_tools",
+    "__pycache__", ".git", ".idea", ".workbuddy", ".temp",
+    "data", "dist", "build", "developer_tools",
 }
 
 #: 虚拟环境目录：禁止按名字枚举。构建脚本按平台命名（``.venv`` / ``.venv-build`` /
