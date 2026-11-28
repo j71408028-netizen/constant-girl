@@ -5,8 +5,10 @@
 纯逻辑，不建窗口、不联网；只读 data/，临时表写到系统临时目录。
 
 行为锁：
-- 姓名表每一行昵称带自己的权重，按权重抽取；抽取配比按桶计：
-  粗制 : 人名系列三类 : 垃圾 : 精制 = 50 : 20 : 15 : 15；
+- 姓名表每一行昵称带自己的权重，按权重抽取；权重合计 1000（归一化单位）。
+  各桶配比是编辑口径、不是行为契约，这里不锁：桶口径与目标校验见
+  ``developer_tools/nickname_buckets.py``；
+- 注释首段是配额桶（精制 / 粗制 / 人名 / 垃圾），逐行标、不从族推导；
 - ``{1}`` / ``{2}`` 由同行 substitute_N 轮换，缺候选的行整行跳过；
 - 掷名有近距防重窗口：最近 N 次（默认 20）不重复同一**行**，按行下标而非
   渲染文本或模板文本记账，可取 0 关闭，可由行为包覆盖；
@@ -92,30 +94,13 @@ check("拼出来的候选确实进了池子",
 
 total_weight = sum(n.weight for n in nicks)
 check("每条昵称都有注释", all(n.note for n in nicks))
-_NAME_SERIES = ("人名（非直接引用）", "运营账号", "事业")
-_NAME_POOLS = ("纯名池", "×机构", "×头衔", "×事业尾", "×甜", "×尾巴", "窄口")
-
-
-def _bucket(note):
-    """抽取配比的桶：人名系列三类与其池行（家族池/纯名池/窄口）归「人名」，
-    其余按注释首段三档归桶。注释本身不改，桶只是配比口径。"""
-    parts = note.split("｜")
-    if any(k in note for k in _NAME_POOLS) or (len(parts) > 1 and parts[1] in _NAME_SERIES):
-        return "人名"
-    return parts[0]
-
-
-check("注释标出三档",
-      {n.note.split("｜", 1)[0] for n in nicks} == {"精制", "粗制", "垃圾"})
-_bucket_w = {}
-for n in nicks:
-    _bucket_w[_bucket(n.note)] = _bucket_w.get(_bucket(n.note), 0.0) + n.weight
-check("四桶权重 500:200:150:150（总 1000）",
-      abs(_bucket_w["粗制"] - 500) < 0.05 and abs(_bucket_w["人名"] - 200) < 0.05
-      and abs(_bucket_w["垃圾"] - 150) < 0.05 and abs(_bucket_w["精制"] - 150) < 0.05,
-      str(_bucket_w))
-check("垃圾桶权重约一成半", 0.14 <= _bucket_w["垃圾"] / total_weight <= 0.16,
-      f"{_bucket_w['垃圾']:.0f}/{total_weight:.0f}")
+check("注释首段标出配额桶（精制 / 粗制 / 人名 / 垃圾）",
+      {n.note.split("｜", 1)[0] for n in nicks} == {"精制", "粗制", "人名", "垃圾"})
+# 配比口径不在这里锁。桶是「档 + 族」的派生视图（见
+# developer_tools/nickname_buckets.py），改配比属于编辑决策，不该连带改自检；
+# 这里只守归一化单位：权重合计 1000，四舍五入到 4 位小数后应精确命中。
+check("权重合计 1000（归一化单位，不锁各桶配比）",
+      abs(total_weight - 1000) < 0.05, f"{total_weight:.4f}")
 
 # ---------------- 2. 表结构：逐行权重与槽位 ----------------
 
