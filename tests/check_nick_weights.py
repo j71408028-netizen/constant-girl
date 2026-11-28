@@ -84,7 +84,9 @@ check("带槽位的行都有候选",
           for n in nicks if n.substitutes))
 
 rng = random.Random(7)
-rendered = [n.render(rng) for n in nicks]
+# 多轮采样：候选数量一变，randrange 的位消耗就挪走后续整条随机序列，
+# 单轮全表扫描对「候选进了池子」这类存在性检查是种子敏感的脆断
+rendered = [n.render(rng) for _ in range(40) for n in nicks]
 check("渲染后不留数字槽位",
       not any("{" in s and any(c.isdigit() for c in s) for s in rendered))
 check("渲染结果无首尾空白",
