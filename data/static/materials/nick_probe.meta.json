@@ -1,0 +1,17 @@
+{
+  "schema": "gg.materials/1",
+  "id": "nick_probe",
+  "title": "昵称试验（前20行）",
+  "author": "",
+  "namespace": "",
+  "version": "2.0.0 beta",
+  "content_hash": "sha256:f799f4e3ca415459691f6f1e1b19b4b8fcc4101298aabbbc48da3af4235c1b5b",
+  "updated_at": "2026-11-25T04:02:18",
+  "source": {
+    "kind": "local"
+  },
+  "status": "draft",
+  "tags": [],
+  "traits": [],
+  "language": "zh-CN"
+}
