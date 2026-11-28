@@ -160,7 +160,7 @@ data/packs/minigames/<id>/manifest.json
 
 | 成员 | 关键列 | 说明 |
 |---|---|---|
-| `names.csv` 姓名 | `surname, ppm, name, nick, nick_weight, substitute_1, substitute_2, substitute_3` | 三列各自收集：哪格空着就不贡献那条。`ppm` 是姓的抽样权重（缺省 1，非数字也按 1）。`nick` 可写 `{sur}` / `{given}`，掷昵称时替换为本次抽到的姓 / 名；`nick_weight` 是这一行的抽取权重（缺省 1，非正数不入场） |
+| `names.csv` 姓名 | `surname, ppm, name, nick, nick_note, nick_weight, substitute_1, substitute_2, substitute_3` | 三列各自收集：哪格空着就不贡献那条。`ppm` 是姓的抽样权重（缺省 1，非数字也按 1）。`nick` 可写 `{sur}` / `{given}`，掷昵称时替换为本次抽到的姓 / 名；`nick_note` 是这一行的说明（不参与抽取）；`nick_weight` 是这一行的抽取权重（缺省 1，非正数不入场） |
 | `presets.csv` 身材 | `name` + 15 个 `*_ratio` 比例列 | 比例列必须全部填、取值在 0 与 2 之间（越界按该字段默认值补，空着则整行跳过）；`weight` 可选，缺省 1 |
 | `personalities.csv` 性格 | `name` + `init_intrusion, depth_intrusion, init_destruction, depth_destruction, sensitivity, gravity, skip_base_prob, description` | init / depth 决定角色进入时的介入度、破坏性与每单位步进深入多少；数值列缺一格整行跳过（`gravity` 例外，旧表没有按 0） |
 | `news.csv` 新闻 | `size_category, memorial, intrusion, destruction, text, substitute_1, substitute_2` | 表头顺序即索引优先级顺序 |
@@ -175,6 +175,12 @@ data/packs/minigames/<id>/manifest.json
 权重合起来约 20%（内置表 335 / 1676）。掷昵称按 `nick_weight` 加权抽行，
 抽到模板行再填槽。顺序是先抽行、后渲染，所以模板能产出的串不受条目数限制，
 也不用按状态实时调概率——想改配比直接改表里的权重。
+
+**`nick_note` 是给人看的列**：一行一句，写清这一行是什么——原句、哪个家族池、
+覆盖了哪些原条目、为什么保留。它不参与抽取、不进渲染，旧表没有这列就按空注释读。
+条目合并成池行之后，一条 `{1}{2}` 会摊开几十个昵称，光看 `nick` 已经看不出它替换了
+哪些句子，来源与用法就落在这列上；读取侧只把它原样带在 `NickEntry.note` 里，
+需要查表的人（自检、取材工具）直接取，不必再解析。
 
 **为什么四张表只能整组换**：姓名 / 身材 / 性格 / 新闻共用一套角色状态坐标系——新闻表的
 索引列（尺寸档、介入度、破坏性）正是其他三张表产出的状态，所以单表混搭会让索引对不上
@@ -310,11 +316,11 @@ data/packs/minigames/<id>/manifest.json
 `destruction`（必填，整数）、`text`（必填）、`style`、`step`（数值）、`summary`。
 `config.json` 见 §8。
 
-**取材表 `materials`**（五成员，均可缺席）
+**取材表 `materials`**（四成员，均可缺席）
 
 | 成员 | 列 |
 |---|---|
-| `names.csv` | `surname, ppm, name, nick, nick_weight, substitute_1, substitute_2, substitute_3` |
+| `names.csv` | `surname, ppm, name, nick, nick_note, nick_weight, substitute_1, substitute_2, substitute_3` |
 | `presets.csv` | `name` + `height_ratio, leg_ratio, foot_length_ratio, arm_span_ratio, index_finger_ratio, palm_length_ratio, chest_width_ratio, thigh_diameter_ratio, forearm_diameter_ratio, index_finger_diameter_ratio, fingerprint_width_ratio, finger_gap_ratio, knee_height_ratio, ankle_height_ratio, stride_ratio`（`weight` 可选） |
 | `personalities.csv` | `name, init_intrusion, depth_intrusion, init_destruction, depth_destruction, sensitivity, gravity, skip_base_prob, description`（`weight` 可选） |
 | `news.csv` | `size_category, memorial, intrusion, destruction, text, substitute_1, substitute_2` |

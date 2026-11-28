@@ -298,11 +298,12 @@ _QUIP_FIELDS = _csv_fields(
 
 # 取材表的四个成员。姓名 / 身材 / 性格三张表产出角色状态，新闻表的索引列正是
 # 这些状态变量（尺寸等级来自身高，介入度与破坏性来自性格演化），所以它们共用
-# 一套坐标系，只能整组替换。昵称的权重与轮换槽位也写在姓名表里，不另立成员。
+# 一套坐标系，只能整组替换。昵称的权重、轮换槽位与注释也写在姓名表里，不另立成员。
 
 _NAME_FIELDS = _csv_fields(
     ("surname", "str", "姓"), ("ppm", "number", "权重"),
     ("name", "str", "名"), ("nick", "str", "昵称"),
+    ("nick_note", "str", "昵称注释"),
     ("nick_weight", "number", "昵称权重"),
     ("substitute_1", "str", "候选1"), ("substitute_2", "str", "候选2"),
     ("substitute_3", "str", "候选3"),
@@ -348,7 +349,7 @@ _NEWS_FIELDS = _csv_fields(
 #: 四项都不强制存在：组内至少有一份 CSV 即成立，缺的成员读取时回落到内置组。
 MATERIAL_MEMBERS: Tuple[MemberSpec, ...] = (
     MemberSpec("names", "姓名表", fields=_NAME_FIELDS,
-               note="surname 与 name 为空的行会被跳过"),
+               note="surname 与 name 为空的行会被跳过；nick_note 只作说明，不参与抽取"),
     MemberSpec("presets", "身材表", fields=_PRESET_FIELDS,
                note="列即字段，weight 不进字段顺序"),
     MemberSpec("personalities", "性格表", fields=_PERSONALITY_FIELDS,

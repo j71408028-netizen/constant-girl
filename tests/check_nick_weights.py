@@ -8,6 +8,7 @@
 - 姓名表每一行昵称带自己的权重，按权重抽取；
 - ``{1}`` / ``{2}`` 由同行 substitute_N 轮换，缺候选的行整行跳过；
 - 候选切分认中英文逗号，重复候选按一份算；``{sur}`` 由创建期单独替换；
+- ``nick_note`` 是说明列：随行读入、不进渲染、不影响权重，缺列按空读；
 - 随机性交给 rng：同一 seed 可复现，权重差距在足够多的抽样里看得出来；
 - 内容在表里：模块里不留碎片常量，取材表不再声明 nick_fragments 成员。
 """
@@ -85,10 +86,18 @@ check("拼出来的候选确实进了池子",
       any("啊啊啊啊" in s or "今天天气真好" in s or "困困ing" in s for s in rendered))
 
 total_weight = sum(n.weight for n in nicks)
-_junk_texts = {"{1}", "{1}...", "{1}{2}", "{1}_{2}"}
-junk_weight = sum(n.weight for n in nicks if n.text in _junk_texts)
-check("模板占比在 18~22%", 0.18 <= junk_weight / total_weight <= 0.22,
-      f"{junk_weight}/{total_weight}")
+check("每条昵称都有注释", all(n.note for n in nicks))
+_tier_w = {}
+for n in nicks:
+    tier = n.note.split("｜", 1)[0]
+    _tier_w[tier] = _tier_w.get(tier, 0.0) + n.weight
+check("注释标出三档", set(_tier_w) == {"精制", "粗制", "垃圾"}, str(_tier_w))
+check("三档权重总量守恒",
+      abs(_tier_w["精制"] - 531) < 0.05
+      and abs(_tier_w["粗制"] - 645) < 0.05
+      and abs(_tier_w["垃圾"] - 500) < 0.05, str(_tier_w))
+check("垃圾档权重约三成", 0.29 <= _tier_w["垃圾"] / total_weight <= 0.31,
+      f"{_tier_w['垃圾']:.0f}/{total_weight:.0f}")
 
 # ---------------- 2. 表结构：逐行权重与槽位 ----------------
 
@@ -119,6 +128,30 @@ check("双槽按位组合出多种串",
       variants == {"甲一", "甲二", "乙一", "乙二"}, str(sorted(variants)))
 check("单遍替换：{sur} 留给创建期",
       "{sur}的猫" in {local[1].render(local_rng) for _ in range(20)})
+check("旧表没有注释列时按空注释读", all(n.note == "" for n in local))
+
+# ---------------- 2.5 昵称注释列：只说明，不参与抽取 ----------------
+
+path, _ = write_names([
+    ["", "", "", "{1}撞南墙", "家族池：真小名×尾巴（5 名 × 32 尾）", "4", "阿梨,阿棠", ""],
+    ["", "", "", "固定昵称", "原样保留：{sur} 绑定句", "1", "", ""],
+], header=["surname", "ppm", "name", "nick", "nick_note", "nick_weight",
+           "substitute_1", "substitute_2"], directory=tempfile.mkdtemp())
+_, _, _, noted = load_path(path)
+check("昵称注释随行读入",
+      [n.note for n in noted] == ["家族池：真小名×尾巴（5 名 × 32 尾）",
+                                 "原样保留：{sur} 绑定句"],
+      str([n.note for n in noted]))
+check("注释不影响权重", [n.weight for n in noted] == [4.0, 1.0],
+      str([n.weight for n in noted]))
+check("注释不进渲染文本",
+      all("家族池" not in n.render(local_rng) for n in noted))
+check("注释不改变槽位替换",
+      {noted[0].render(local_rng) for _ in range(40)} == {"阿梨撞南墙", "阿棠撞南墙"})
+
+_names_member = spec_of("materials").member("names")
+check("姓名表声明了昵称注释列", "nick_note" in _names_member.field_keys())
+check("昵称注释列不强制存在", "nick_note" not in _names_member.required_keys())
 
 # ---------------- 3. 按权重抽取 ----------------
 
@@ -159,14 +192,39 @@ check("兼容直接传字符串的旧调用方", name == "王静" and nick == "�
 # ---------------- 5. 内置表的配比与合并模板 ----------------
 
 _builtin = NameRepo().load("default")[3]
-_junk_keys = {"{1}", "{1}...", "{1}{2}", "{1}_{2}"}
-_junk_w = sum(e.weight for e in _builtin if e.text in _junk_keys)
-_refined_w = sum(e.weight for e in _builtin if e.text not in _junk_keys)
-_ratio = _junk_w / (_junk_w + _refined_w)
-check("内置表垃圾权重约两成", 0.18 <= _ratio <= 0.22,
-      f"{_junk_w:.0f}/{_junk_w + _refined_w:.0f}={_ratio:.3f}")
-check("精修权重守恒（合并不改配比基数）",
-      abs(_refined_w - 1341) < 1e-6, f"{_refined_w:.0f}")
+_pooled = [e for e in _builtin if "×" in e.note or "纯名池" in e.note or "窄口" in e.note]
+check("家族池已落进内置表", len(_pooled) >= 40, f"{len(_pooled)} 行")
+check("池行注释写明家族与覆盖数",
+      all(("×" in e.note or "窄口" in e.note or "纯名池" in e.note)
+          and e.substitutes for e in _pooled))
+_combos = 0
+for e in _builtin:
+    variants = 1
+    for values in e.substitutes.values():
+        variants *= max(1, len(values))
+    _combos += variants
+check("内置表组合数超过 3000", _combos > 3000, f"{_combos}")
+check("姓与名的库存没被替换行带走",
+      len(NameRepo().load("default")[0]) == 448
+      and len(NameRepo().load("default")[2]) == 670)
+
+# 语义绑定、句末标点、实义外文的尾饰都不进通用池。
+_kept_tail = (
+    "摆烂の浮云 ☁", "风铃♫", "拒绝营业的云☁", "绒耳Rabbit.☁",
+    "小圆别跑！", "间歇性摆烂中…", "你说的都对.",
+    "泛黄速写本.zip", "今年不宜动土.txt", "深夜网抑云VIP", "枫林Pilot",
+    "盐渍琥珀·Nori", "推子推到+12dB",
+)
+for _text in _kept_tail:
+    check(f"不进池尾饰 {_text} 原样保留",
+          any(e.text == _text and not e.substitutes and "尾饰不进通用池" in e.note
+              for e in _builtin))
+check("不进池尾饰不出现在任何池候选里",
+      not any(part in value
+              for e in _builtin for values in e.substitutes.values()
+              for value in values for part in _kept_tail))
+check("纯表音尾饰仍按形式池化",
+      not any(e.text == "发呆ing" and not e.substitutes for e in _builtin))
 
 # 合并模板的产出必须覆盖原来的每一条
 _merged = {

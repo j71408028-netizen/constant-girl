@@ -26,11 +26,16 @@ def _candidates(cell: str) -> Tuple[str, ...]:
 
 @dataclass(frozen=True)
 class NickEntry:
-    """姓名表里的一个昵称：一行一条，可带 ``{1}`` 轮换槽位与自己的权重。"""
+    """姓名表里的一个昵称：一行一条，可带 ``{1}`` 轮换槽位与自己的权重。
+
+    ``note`` 是 ``nick_note`` 列的原样文本，只用来在表里说明这一行是什么
+    （原句、家族池、保留原因），不参与渲染，也不影响抽取权重。
+    """
 
     text: str
     weight: float = 1.0
     substitutes: Dict[int, Tuple[str, ...]] = field(default_factory=dict)
+    note: str = ""
 
     def render(self, rng: random.Random = random) -> str:
         """填一次槽。单遍替换，候选里再出现花括号也不会被二次展开。"""
@@ -66,7 +71,8 @@ class NameRepo:
         """加载姓名表，返回 (surnames, weights, names, nicks)。
 
         nick 按 ``nick_weight`` 抽取（缺省 1、非正数不入场），``{1}`` 一类槽位
-        由同行的 ``substitute_N`` 轮换取词；缺候选的行整行跳过。
+        由同行的 ``substitute_N`` 轮换取词；缺候选的行整行跳过。``nick_note``
+        是纯说明列，缺这列（旧表）按空注释处理。
         """
         csv_path = self.resolve(group)
         surnames: List[str] = []
@@ -107,7 +113,8 @@ class NameRepo:
                             break
                         slots[index] = values
                     else:
-                        nicks.append(NickEntry(nick, nick_weight, slots))
+                        note = (row.get('nick_note') or '').strip()
+                        nicks.append(NickEntry(nick, nick_weight, slots, note))
         except Exception as e:
             print(f"加载姓名表 {group or DEFAULT_MATERIAL_TABLE} 失败: {e}")
         return surnames, weights, names, nicks

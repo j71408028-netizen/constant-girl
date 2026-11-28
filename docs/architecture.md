@@ -196,8 +196,9 @@ data/static/behaviors/imperial_units/imperial_units.py:45
 内含 `names.csv` / `presets.csv` / `personalities.csv` / `news.csv` 四个成员。
 四张表共用一套角色状态坐标系——新闻表的索引列正是身材表算出的尺寸等级与
 性格表演化的介入度/破坏性——所以只能整组替换，资源设置里也只占一个键
-（`material_table`）。昵称的权重与轮换槽位都写在 `names.csv` 里：一行一条，
-`nick_weight` 决定抽中频次，`{1}` / `{2}` 由同行的 `substitute_N` 换词。
+（`material_table`）。昵称的权重、轮换槽位与注释都写在 `names.csv` 里：一行一条，
+`nick_weight` 决定抽中频次，`{1}` / `{2}` 由同行的 `substitute_N` 换词，
+`nick_note` 只记这一行是什么（原句、家族池、保留原因），不参与抽取。
 成员可缺席：缺哪个就落到内置 `default` 组里的同名文件
 （`persistence/material_tables.py`），这样只覆盖一两张表不必复制整套，
 以后新增成员类型也不必迁移存量组。
